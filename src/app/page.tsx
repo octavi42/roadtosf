@@ -62,7 +62,9 @@ export default function HomePage() {
   const [phase, setPhase] = useState<Phase>("api-keys");
   const [apiKeys, setApiKeys] = useState<ApiKeys | null>(null);
   const [isMuted, setIsMuted] = useState(false);
-  const [backgroundSrc] = useState<string | null>(null);
+  const [backgroundSrc] = useState<string | null>(
+    "/intro-v2/01-departure-board.png",
+  );
   const [choiceMade, setChoiceMade] = useState<string | null>(null);
 
   // Dialogue state
@@ -129,9 +131,10 @@ export default function HomePage() {
     setCurrentLineIndex((prev) => {
       const next = prev + 1;
       if (next >= dialogueLines.length) {
-        // All lines done — show choices after a short pause
+        // All lines done — DialogueSubtitle has already faded out by the time
+        // onComplete fires, so show choices immediately with no extra delay.
         onCompleteCalledRef.current = true;
-        setTimeout(() => setShowChoices(true), 600);
+        setShowChoices(true);
         return prev;
       }
       return next;
