@@ -7,11 +7,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const STYLE_REF = path.join(ROOT, "references", "style-ref.png");
 const SILICON_DIR = path.join(ROOT, "references", "silicon-mania");
-const FACE_REF_FILES = [
-  "Screenshot 2026-04-24 at 5.19.53 PM.png",
-  "Screenshot 2026-04-24 at 5.19.59 PM.png",
-  "Screenshot 2026-04-24 at 5.24.37 PM.png",
-];
+const FACE_REF_FILES = fs
+  .readdirSync(SILICON_DIR)
+  .filter((f) => /\.(png|jpe?g|webp)$/i.test(f))
+  .sort();
 
 const QUALITY = process.env.QUALITY ?? "medium";
 const SIZE = process.env.SIZE ?? "1536x1024";
@@ -160,9 +159,14 @@ async function main() {
     );
   };
 
-  const results = await Promise.allSettled(SHOTS.map(runOne));
+  const filter = process.env.SHOT;
+  const targets = filter ? SHOTS.filter((s) => s.id.includes(filter)) : SHOTS;
+  if (filter && targets.length === 0) {
+    throw new Error(`SHOT="${filter}" matched no shots. Available: ${SHOTS.map((s) => s.id).join(", ")}`);
+  }
+  const results = await Promise.allSettled(targets.map(runOne));
   const failed = results
-    .map((r, i) => (r.status === "rejected" ? { shot: SHOTS[i].id, reason: r.reason } : null))
+    .map((r, i) => (r.status === "rejected" ? { shot: targets[i].id, reason: r.reason } : null))
     .filter(Boolean);
 
   if (failed.length > 0) {
@@ -171,7 +175,7 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`[intro] all ${SHOTS.length} shots written to ${OUT_DIR}`);
+  console.log(`[intro] all ${targets.length} shots written to ${OUT_DIR}`);
 }
 
 main().catch((err) => {

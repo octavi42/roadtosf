@@ -7,6 +7,7 @@ import MuteButton from "@/components/MuteButton";
 import ChoicePanel from "@/components/ChoicePanel";
 import TextInputPanel from "@/components/TextInputPanel";
 import DialogueSubtitle from "@/components/DialogueSubtitle";
+import DialogueSpeaker from "@/components/DialogueSpeaker";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -41,6 +42,18 @@ const STUB_DIALOGUE: DialogueLine[] = [
   {
     speaker: "Maya · Co-founder & CTO",
     text: "If we don't move now, Brock's team will eat our lunch before we even launch.",
+  },
+  {
+    speaker: "Brock · Rival Founder",
+    text: "Heard you two are still debating wireframes. Cute.",
+  },
+  {
+    speaker: "Brock · Rival Founder",
+    text: "We closed our Series A last week. Try to keep up.",
+  },
+  {
+    speaker: "Priya · Angel Investor",
+    text: "I've seen this movie before. It doesn't end the way you think.",
   },
   {
     speaker: "Maya · Co-founder & CTO",
@@ -153,13 +166,19 @@ export default function HomePage() {
 
   const dialogueSlot =
     phase === "scene" && currentLine ? (
-      <DialogueSubtitle
-        key={`${currentLineIndex}-${currentLine.text}`}
-        text={currentLine.text}
-        speaker={currentLine.speaker}
-        wordInterval={110}
-        onComplete={handleLineComplete}
-      />
+      <div className="w-full max-w-2xl mx-auto px-2 select-none">
+        <DialogueSpeaker
+          speaker={showChoices ? undefined : currentLine.speaker}
+        />
+        {!showChoices && (
+          <DialogueSubtitle
+            key={`${currentLineIndex}-${currentLine.text}`}
+            text={currentLine.text}
+            wordInterval={110}
+            onComplete={handleLineComplete}
+          />
+        )}
+      </div>
     ) : null;
 
   const bottomPanel = (() => {

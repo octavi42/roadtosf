@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 
 export interface DialogueSubtitleProps {
   text: string;
-  speaker?: string;
   wordInterval?: number;
   onComplete?: () => void;
   instant?: boolean;
@@ -14,7 +13,6 @@ type AnimPhase = "in" | "hold" | "out" | "done";
 
 export default function DialogueSubtitle({
   text,
-  speaker,
   wordInterval = 110,
   onComplete,
   instant = false,
@@ -60,23 +58,12 @@ export default function DialogueSubtitle({
 
   return (
     <div
-      className="w-full max-w-2xl mx-auto px-2 select-none"
       style={{
         opacity: animPhase === "out" ? 0 : 1,
         transition: animPhase === "out" ? "opacity 0.5s ease" : "none",
       }}
       onTransitionEnd={handleTransitionEnd}
     >
-      {/* Speaker label */}
-      {speaker && (
-        <p
-          className="text-white/40 text-xs uppercase font-medium mb-2"
-          style={{ letterSpacing: "0.18em" }}
-        >
-          {speaker}
-        </p>
-      )}
-
       {/* Subtitle line */}
       <p
         className="text-white text-lg leading-snug font-normal"
