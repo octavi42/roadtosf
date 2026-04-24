@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "distill:style": "node --env-file=.env.local scripts/distill-style.mjs",
-    "generate:portraits": "node --env-file=.env.local scripts/generate-portraits.mjs"
+    "generate:portraits": "node --env-file=.env.local scripts/generate-portraits.mjs",
+    "generate:intro": "node --env-file=.env.local scripts/generate-intro.mjs"
   },
   "dependencies": {
     "@elevenlabs/elevenlabs-js": "^2.44.0",

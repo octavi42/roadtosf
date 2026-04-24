@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { GameShell } from "@/components/GameShell";
 import ApiKeysPanel from "@/components/ApiKeysPanel";
 import MuteButton from "@/components/MuteButton";
@@ -37,6 +37,20 @@ const STUB_CHOICES = [
 export default function HomePage() {
   const [phase, setPhase] = useState<Phase>("api-keys");
   const [apiKeys, setApiKeys] = useState<ApiKeys | null>(null);
+
+  // In development, skip the ApiKeysPanel if keys are already in .env.local
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+    fetch("/api/dev-keys")
+      .then((r) => r.json())
+      .then((data: { skip: boolean }) => {
+        if (data.skip) setPhase("intro");
+      })
+      .catch(() => {
+        // silently fall through — ApiKeysPanel will show as normal
+      });
+  }, []);
+
   const [isMuted, setIsMuted] = useState(false);
   const [backgroundSrc, setBackgroundSrc] = useState<string | null>(null);
   const [choiceMade, setChoiceMade] = useState<string | null>(null);
