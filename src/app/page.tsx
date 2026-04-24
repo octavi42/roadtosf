@@ -13,12 +13,7 @@ import DialogueSpeaker from "@/components/DialogueSpeaker";
 // Types
 // ---------------------------------------------------------------------------
 
-type Phase =
-  | "api-keys" // Player enters API keys
-  | "intro" // Cinematic intro / conversational onboarding
-  | "generating" // Story arc being generated (LLM call #1)
-  | "scene" // Active game scene
-  | "ending"; // Final ending + share card
+type Phase = "api-keys" | "intro" | "generating" | "scene" | "ending";
 
 interface ApiKeys {
   openaiKey: string;
@@ -30,42 +25,213 @@ interface DialogueLine {
   text: string;
 }
 
+interface Choice {
+  id: string;
+  label: string;
+  hype: number;
+  integrity: number;
+}
+
+interface SceneData {
+  id: number;
+  title: string;
+  dialogue: DialogueLine[];
+  choices: Choice[];
+}
+
+type EndingKey = "ipo" | "indicted" | "ai-wrapper" | "acquihire" | "ghosted";
+
 // ---------------------------------------------------------------------------
-// Stub data — replaced by real LLM output later
+// Prescripted story — Wagr (Venmo for sports bets between friends)
 // ---------------------------------------------------------------------------
 
-const STUB_DIALOGUE: DialogueLine[] = [
+const SCENES: SceneData[] = [
   {
-    speaker: "Maya · Co-founder & CTO",
-    text: "We have to pivot. The market shifted overnight.",
+    id: 1,
+    title: "Scene 1 · The Pivot",
+    dialogue: [
+      {
+        speaker: "Maya · Co-founder & CTO",
+        text: "We need to talk before the pitch. I've been thinking — Wagr needs to pivot to AI.",
+      },
+      {
+        speaker: "Maya · Co-founder & CTO",
+        text: "Everyone on Sand Hill is asking about AI agents. Peer-to-peer betting is a tough sell right now.",
+      },
+      {
+        speaker: "Maya · Co-founder & CTO",
+        text: "We wrap Wagr in an AI layer — 'your AI friend who handles all your bets' — and suddenly we're a platform play.",
+      },
+      {
+        speaker: "Maya · Co-founder & CTO",
+        text: "I can have a demo ready by Thursday. But I need you to back me on this. Right now.",
+      },
+    ],
+    choices: [
+      { id: "a", label: "No, ship the original", hype: -1, integrity: 1 },
+      { id: "b", label: "Yes, pivot to AI", hype: 1, integrity: -1 },
+    ],
   },
   {
-    speaker: "Maya · Co-founder & CTO",
-    text: "If we don't move now, Brock's team will eat our lunch before we even launch.",
+    id: 2,
+    title: "Scene 2 · The Scoop",
+    dialogue: [
+      {
+        speaker: "Journalist · TechCrunch",
+        text: "I heard from three sources that Wagr's payment processor dropped you over regulatory concerns. Care to comment?",
+      },
+      {
+        speaker: "Journalist · TechCrunch",
+        text: "I'm running this either way. The question is whether your version of the story is in it.",
+      },
+      {
+        speaker: "Journalist · TechCrunch",
+        text: "Off the record — I actually think what you're building is interesting. But my editor wants blood.",
+      },
+      {
+        speaker: "Journalist · TechCrunch",
+        text: "Give me something. Anything. A leak, a number, a name. I'll make it worth your while.",
+      },
+    ],
+    choices: [
+      {
+        id: "a",
+        label: "That's not true. No comment.",
+        hype: -1,
+        integrity: 1,
+      },
+      { id: "b", label: "Send her the details", hype: 1, integrity: -1 },
+    ],
   },
   {
-    speaker: "Brock · Rival Founder",
-    text: "Heard you two are still debating wireframes. Cute.",
+    id: 3,
+    title: "Scene 3 · The Term Sheet",
+    dialogue: [
+      {
+        speaker: "VC · Founders Fund",
+        text: "Tell me something that's true that almost nobody agrees with you on.",
+      },
+      {
+        speaker: "VC · Founders Fund",
+        text: "We want to lead your seed. Three million, fifteen percent, standard pro-rata.",
+      },
+      {
+        speaker: "VC · Founders Fund",
+        text: "One condition. Maya steps back to an advisory role. We want you running point, solo.",
+      },
+      {
+        speaker: "VC · Founders Fund",
+        text: "This offer expires when I leave this table. The Caltrain back to the city is in eleven minutes.",
+      },
+    ],
+    choices: [
+      { id: "a", label: "Take it", hype: 1, integrity: -1 },
+      { id: "b", label: "Walk away", hype: -1, integrity: 1 },
+    ],
   },
   {
-    speaker: "Brock · Rival Founder",
-    text: "We closed our Series A last week. Try to keep up.",
+    id: 4,
+    title: "Scene 4 · Trust Crisis",
+    dialogue: [
+      {
+        speaker: "Maya · Co-founder & CTO",
+        text: "I saw the term sheet. The one with my name in the advisory clause.",
+      },
+      {
+        speaker: "Maya · Co-founder & CTO",
+        text: "You were going to tell me when, exactly?",
+      },
+      {
+        speaker: "Hater · Twitter / X",
+        text: "Wagr founder just pushed out his CTO for VC money. Classic. Thread incoming 🧵",
+      },
+      {
+        speaker: "Maya · Co-founder & CTO",
+        text: "I built the entire backend. I have thirty percent. Whatever you're about to say — think carefully.",
+      },
+    ],
+    choices: [
+      { id: "a", label: "Lie. You never saw it.", hype: 0, integrity: -2 },
+      { id: "b", label: "Level with her", hype: 0, integrity: 2 },
+    ],
   },
   {
-    speaker: "Priya · Angel Investor",
-    text: "I've seen this movie before. It doesn't end the way you think.",
-  },
-  {
-    speaker: "Maya · Co-founder & CTO",
-    text: "I need you to back me on this. Right now.",
+    id: 5,
+    title: "Scene 5 · Demo Day",
+    dialogue: [
+      {
+        speaker: "Mentor · YC Partner",
+        text: "You're on in ten minutes. Five hundred people in that room, half of them writing checks.",
+      },
+      {
+        speaker: "Mentor · YC Partner",
+        text: "The number they remember is the one you say on stage. It lives forever.",
+      },
+      {
+        speaker: "Mentor · YC Partner",
+        text: "Your actual MRR is eighty thousand. That's real. That's respectable.",
+      },
+      {
+        speaker: "Mentor · YC Partner",
+        text: "But I've seen founders say ten million ARR with a straight face and walk out with a term sheet. Your call.",
+      },
+    ],
+    choices: [
+      { id: "a", label: "Understated truth", hype: -1, integrity: 2 },
+      { id: "b", label: "Full hype. $10M ARR.", hype: 2, integrity: -2 },
+    ],
   },
 ];
 
-const STUB_CHOICES = [
-  { id: "a", label: "No, ship the original" },
-  { id: "b", label: "Yes, pivot now" },
-  { id: "c", label: "Give me 24 hours" },
-];
+// ---------------------------------------------------------------------------
+// Stat helpers
+// ---------------------------------------------------------------------------
+
+function classifyEnding(hype: number, integrity: number): EndingKey {
+  const magnitude = Math.abs(hype) + Math.abs(integrity);
+  if (magnitude < 3) return "ghosted";
+  if (hype >= 2 && integrity >= 2) return "ipo";
+  if (hype >= 2 && integrity < 0) return "indicted";
+  if (hype < 0 && integrity >= 2) return "ai-wrapper";
+  if (hype < 0 && integrity < 0) return "acquihire";
+  return "ghosted";
+}
+
+const ENDING_COPY: Record<
+  EndingKey,
+  { label: string; subtitle: string; color: string }
+> = {
+  ipo: {
+    label: "IPO",
+    subtitle:
+      "Wagr rang the bell at NYSE on a Tuesday. You cried. Maya didn't come. The Bloomberg headline called you 'the unlikely conscience of fintech.' You framed it.",
+    color: "text-emerald-400",
+  },
+  indicted: {
+    label: "INDICTED",
+    subtitle:
+      "The SEC opened an inquiry in November. You're on your third podcast apology tour. Wagr pivoted to compliance software. It still has twelve employees.",
+    color: "text-red-400",
+  },
+  "ai-wrapper": {
+    label: "AI-WRAPPER PIVOT",
+    subtitle:
+      "You quietly rebranded to WagrAI, laid off four people, and wrote a Substack post called 'Why We're Going Back to Basics.' It got three thousand likes.",
+    color: "text-sky-400",
+  },
+  acquihire: {
+    label: "ACQUI-HIRED",
+    subtitle:
+      "DraftKings bought the team for parts. You got a director title and a non-compete. Maya took her thirty percent and started something new without you.",
+    color: "text-amber-400",
+  },
+  ghosted: {
+    label: "GHOSTED",
+    subtitle:
+      "Wagr never quite registered. The algorithm didn't notice. The co-working space lease expired. You still have the hoodie.",
+    color: "text-white/60",
+  },
+};
 
 // ---------------------------------------------------------------------------
 // Page
@@ -73,17 +239,19 @@ const STUB_CHOICES = [
 
 export default function HomePage() {
   const [phase, setPhase] = useState<Phase>("api-keys");
-  const [apiKeys, setApiKeys] = useState<ApiKeys | null>(null);
   const [isMuted, setIsMuted] = useState(false);
-  const [backgroundSrc] = useState<string | null>(
-    "/intro-v2/01-departure-board.png",
-  );
-  const [choiceMade, setChoiceMade] = useState<string | null>(null);
 
-  // Dialogue state
-  const [dialogueLines, setDialogueLines] = useState<DialogueLine[]>([]);
+  // Story state
+  const [sceneIndex, setSceneIndex] = useState(0);
+  const [choiceHistory, setChoiceHistory] = useState<string[]>([]);
+  const [hype, setHype] = useState(0);
+  const [integrity, setIntegrity] = useState(0);
+  const [ending, setEnding] = useState<EndingKey | null>(null);
+
+  // Dialogue playback state
   const [currentLineIndex, setCurrentLineIndex] = useState(0);
   const [showChoices, setShowChoices] = useState(false);
+  const [choiceMade, setChoiceMade] = useState<string | null>(null);
   const onCompleteCalledRef = useRef(false);
 
   // -------------------------------------------------------------------------
@@ -97,30 +265,26 @@ export default function HomePage() {
       .then((data: { skip: boolean }) => {
         if (data.skip) setPhase("intro");
       })
-      .catch(() => {
-        // fall through — ApiKeysPanel shows normally
-      });
+      .catch(() => {});
   }, []);
 
   // -------------------------------------------------------------------------
-  // Scene init — load dialogue lines, reset state
+  // Reset dialogue state whenever scene changes
   // -------------------------------------------------------------------------
 
   useEffect(() => {
     if (phase !== "scene") return;
-    setDialogueLines(STUB_DIALOGUE);
     setCurrentLineIndex(0);
     setShowChoices(false);
     setChoiceMade(null);
     onCompleteCalledRef.current = false;
-  }, [phase]);
+  }, [phase, sceneIndex]);
 
   // -------------------------------------------------------------------------
   // Handlers
   // -------------------------------------------------------------------------
 
-  const handleKeysConfirmed = useCallback((keys: ApiKeys) => {
-    setApiKeys(keys);
+  const handleKeysConfirmed = useCallback((_keys: ApiKeys) => {
     setPhase("intro");
   }, []);
 
@@ -128,31 +292,67 @@ export default function HomePage() {
     setIsMuted((prev) => !prev);
   }, []);
 
-  const handleChoice = useCallback((id: string) => {
-    setChoiceMade(id);
-    console.log("[choice]", id);
-  }, []);
-
-  const handleTextSubmit = useCallback((text: string) => {
-    console.log("[text-input]", text);
-  }, []);
-
   // Called when each dialogue line finishes animating
   const handleLineComplete = useCallback(() => {
     if (onCompleteCalledRef.current) return;
 
     setCurrentLineIndex((prev) => {
+      const scene = SCENES[sceneIndex];
       const next = prev + 1;
-      if (next >= dialogueLines.length) {
-        // All lines done — DialogueSubtitle has already faded out by the time
-        // onComplete fires, so show choices immediately with no extra delay.
+      if (next >= scene.dialogue.length) {
         onCompleteCalledRef.current = true;
         setShowChoices(true);
         return prev;
       }
       return next;
     });
-  }, [dialogueLines.length]);
+  }, [sceneIndex]);
+
+  // Called when the player picks a choice
+  const handleChoice = useCallback(
+    (choiceId: string) => {
+      const scene = SCENES[sceneIndex];
+      const choice = scene.choices.find((c) => c.id === choiceId);
+
+      // Apply stat deltas
+      const dHype = choice?.hype ?? 0;
+      const dIntegrity = choice?.integrity ?? 0;
+      const nextHype = hype + dHype;
+      const nextIntegrity = integrity + dIntegrity;
+
+      setHype(nextHype);
+      setIntegrity(nextIntegrity);
+      setChoiceHistory((prev) => [...prev, `scene${scene.id}:${choiceId}`]);
+      setChoiceMade(choiceId);
+
+      // Brief pause so the selected button state is visible, then advance
+      setTimeout(() => {
+        const nextSceneIndex = sceneIndex + 1;
+        if (nextSceneIndex >= SCENES.length) {
+          // All scenes done — classify ending
+          setEnding(classifyEnding(nextHype, nextIntegrity));
+          setPhase("ending");
+        } else {
+          setSceneIndex(nextSceneIndex);
+          // Reset for next scene (useEffect will also fire but belt+suspenders)
+          setCurrentLineIndex(0);
+          setShowChoices(false);
+          setChoiceMade(null);
+          onCompleteCalledRef.current = false;
+        }
+      }, 600);
+    },
+    [sceneIndex, hype, integrity],
+  );
+
+  const handleTextSubmit = useCallback(
+    (text: string) => {
+      console.log("[counter-offer]", text);
+      // Scene 3 counter-offer: classify as "walk" for now (integrity boost)
+      handleChoice("b");
+    },
+    [handleChoice],
+  );
 
   // -------------------------------------------------------------------------
   // Derived slots
@@ -162,7 +362,8 @@ export default function HomePage() {
     <MuteButton isMuted={isMuted} onToggle={handleMuteToggle} />
   );
 
-  const currentLine = dialogueLines[currentLineIndex] ?? null;
+  const currentScene = SCENES[sceneIndex] ?? null;
+  const currentLine = currentScene?.dialogue[currentLineIndex] ?? null;
 
   const dialogueSlot =
     phase === "scene" && currentLine ? (
@@ -172,7 +373,7 @@ export default function HomePage() {
         />
         {!showChoices && (
           <DialogueSubtitle
-            key={`${currentLineIndex}-${currentLine.text}`}
+            key={`scene${sceneIndex}-line${currentLineIndex}`}
             text={currentLine.text}
             wordInterval={110}
             onComplete={handleLineComplete}
@@ -183,6 +384,24 @@ export default function HomePage() {
 
   const bottomPanel = (() => {
     if (phase !== "scene" || !showChoices) return null;
+
+    // Scene 3 gets an extra free-text counter-offer option
+    if (currentScene?.id === 3 && !isMuted) {
+      return (
+        <div className="flex flex-col gap-3">
+          <ChoicePanel
+            choices={currentScene.choices}
+            onChoice={handleChoice}
+            disabled={choiceMade !== null}
+          />
+          <TextInputPanel
+            placeholder="Counter-offer… (e.g. Keep Maya, drop the clause)"
+            onSubmit={handleTextSubmit}
+            disabled={choiceMade !== null}
+          />
+        </div>
+      );
+    }
 
     if (isMuted) {
       return (
@@ -196,8 +415,7 @@ export default function HomePage() {
 
     return (
       <ChoicePanel
-        choices={STUB_CHOICES}
-        timeoutSeconds={15}
+        choices={currentScene?.choices ?? []}
         onChoice={handleChoice}
         disabled={choiceMade !== null}
       />
@@ -225,15 +443,16 @@ export default function HomePage() {
               departs in 6 hours.
             </h1>
             <p className="text-white/50 text-sm leading-relaxed">
-              Tell me about your startup. What are you building, and who are
-              you?
+              You&apos;re the founder of{" "}
+              <span className="text-white font-medium">Wagr</span> — Venmo for
+              sports bets between friends. Ex-Stripe. First-time founder. Your
+              co-founder is already texting.
             </p>
-            {/* TODO: wire ElevenLabs voice agent (mentor archetype) here */}
             <button
               onClick={() => setPhase("generating")}
               className="mt-2 w-full bg-white text-black font-semibold rounded-lg py-3 hover:bg-white/90 transition-colors text-sm"
             >
-              Skip to demo scene →
+              Board the flight →
             </button>
           </div>
         );
@@ -259,39 +478,62 @@ export default function HomePage() {
               onClick={() => setPhase("scene")}
               className="mt-4 text-white/30 hover:text-white/60 text-xs underline transition-colors"
             >
-              Skip (dev)
+              Enter →
             </button>
           </div>
         );
 
       case "scene":
-        // Scene label pinned top-left — dialogue + choices live at the bottom
         return (
           <div className="absolute top-16 left-6">
             <p
               className="text-white/30 text-xs font-semibold tracking-widest uppercase"
               style={{ letterSpacing: "0.18em" }}
             >
-              Scene 1 · The Pivot
+              {currentScene?.title ?? ""}
             </p>
           </div>
         );
 
-      case "ending":
+      case "ending": {
+        const e = ending ? ENDING_COPY[ending] : null;
         return (
-          <div className="backdrop-panel animate-fade-slide-up rounded-2xl p-8 max-w-md w-full text-center flex flex-col gap-4">
-            <p className="text-amber-400 text-xs font-semibold tracking-widest uppercase">
+          <div className="backdrop-panel animate-fade-slide-up rounded-2xl p-8 max-w-md w-full text-center flex flex-col gap-5">
+            <p className="text-white/40 text-xs font-semibold tracking-widest uppercase">
               Your ending
             </p>
-            <h2 className="text-white text-3xl font-bold tracking-tight">
-              GHOSTED
+            <h2
+              className={`text-3xl font-bold tracking-tight ${e?.color ?? "text-white"}`}
+            >
+              {e?.label ?? "UNKNOWN"}
             </h2>
             <p className="text-white/60 text-sm leading-relaxed">
-              You never quite registered. The algorithm didn&apos;t notice.
-              Neither did anyone else.
+              {e?.subtitle}
             </p>
+            <div className="border-t border-white/10 pt-4 flex flex-col gap-1 text-xs text-white/30">
+              <span>
+                Hype {hype > 0 ? "+" : ""}
+                {hype} · Integrity {integrity > 0 ? "+" : ""}
+                {integrity}
+              </span>
+              <span>{choiceHistory.length} choices made</span>
+            </div>
+            <button
+              onClick={() => {
+                setSceneIndex(0);
+                setChoiceHistory([]);
+                setHype(0);
+                setIntegrity(0);
+                setEnding(null);
+                setPhase("intro");
+              }}
+              className="mt-2 w-full border border-white/20 text-white/70 font-medium rounded-lg py-3 hover:bg-white/5 transition-colors text-sm"
+            >
+              Play again →
+            </button>
           </div>
         );
+      }
     }
   })();
 
@@ -304,7 +546,7 @@ export default function HomePage() {
       {phase === "api-keys" && <ApiKeysPanel onConfirm={handleKeysConfirmed} />}
 
       <GameShell
-        backgroundSrc={backgroundSrc}
+        backgroundSrc="/intro-v2/01-departure-board.png"
         muteButton={muteButton}
         dialogueSlot={dialogueSlot}
         bottomPanel={bottomPanel}
