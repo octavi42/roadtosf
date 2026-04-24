@@ -6,7 +6,11 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const STYLE_REF = path.join(ROOT, "references", "style-ref.png");
-const OUT_DIR = path.join(ROOT, "public", "portraits");
+const QUALITY = process.env.QUALITY ?? "medium";
+const OUT_DIR =
+  QUALITY === "medium"
+    ? path.join(ROOT, "public", "portraits")
+    : path.join(ROOT, "public", `portraits-${QUALITY}`);
 
 const ARCHETYPES = [
   {
@@ -67,36 +71,43 @@ async function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  console.log(`[portrait] quality=${QUALITY} out=${OUT_DIR}`);
 
-  for (const arch of ARCHETYPES) {
+  const runOne = async (arch) => {
     const outPath = path.join(OUT_DIR, `${arch.id}.png`);
-    console.log(`[portrait] ${arch.id} (${arch.name}) -> ${outPath}`);
-
     const styleFile = await toFile(
       fs.createReadStream(STYLE_REF),
       "style-ref.png",
       { type: "image/png" },
     );
-
     const t0 = Date.now();
     const response = await openai.images.edit({
       model: "gpt-image-2",
       image: styleFile,
       prompt: buildPrompt(arch),
       size: "1024x1024",
-      quality: "high",
+      quality: QUALITY,
       output_format: "png",
     });
     const dt = ((Date.now() - t0) / 1000).toFixed(1);
-
     const b64 = response.data?.[0]?.b64_json;
     if (!b64) throw new Error(`No image data returned for ${arch.id}`);
-
     fs.writeFileSync(outPath, Buffer.from(b64, "base64"));
-    console.log(`[portrait]   done (${dt}s)`);
+    console.log(`[portrait] ${arch.id} (${arch.name}) done in ${dt}s -> ${outPath}`);
+  };
+
+  const results = await Promise.allSettled(ARCHETYPES.map(runOne));
+  const failed = results
+    .map((r, i) => (r.status === "rejected" ? { arch: ARCHETYPES[i].id, reason: r.reason } : null))
+    .filter(Boolean);
+
+  if (failed.length > 0) {
+    console.error(`[portrait] ${failed.length} failed:`);
+    failed.forEach((f) => console.error(`  - ${f.arch}: ${f.reason}`));
+    process.exit(1);
   }
 
-  console.log(`[portrait] all 5 portraits written to ${OUT_DIR}`);
+  console.log(`[portrait] all ${ARCHETYPES.length} portraits written to ${OUT_DIR}`);
 }
 
 main().catch((err) => {

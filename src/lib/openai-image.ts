@@ -4,13 +4,24 @@ import { ARCHETYPES } from "./archetypes";
 import path from "path";
 import fs from "fs";
 
-// Only instantiate on the server
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
 export type ImageQuality = "low" | "medium" | "high";
 export type ImageFormat = "jpeg" | "png" | "webp";
+
+// Locked presets — never change per call. Define the fixed "look" of every image.
+const PRESETS = {
+  model: "gpt-image-2" as const,
+  size: "1024x1024" as const,
+  defaultQuality: "medium" as ImageQuality,
+  defaultFormat: "jpeg" as ImageFormat,
+  styleRefPath: path.join(process.cwd(), "references", "style-ref.png"),
+  portraitsDir: path.join(process.cwd(), "public", "portraits"),
+  stylePrefix:
+    "Silicon Mania animated series style — flat 2D cel-shaded illustration, thick outlines, saturated palette, exaggerated caricature proportions, Silicon Valley tech satire, cinematic composition with moody lighting.",
+};
 
 export interface GenerateSceneImageOptions {
   scenePrompt: string;
@@ -28,73 +39,62 @@ export interface GenerateHeroImageOptions {
 export interface ImageResult {
   b64Json: string;
   format: ImageFormat;
-  dataUrl: string; // convenience: `data:image/jpeg;base64,...`
+  dataUrl: string;
+}
+
+async function loadRef(p: string, name: string, type: string) {
+  return toFile(fs.createReadStream(p), name, { type });
+}
+
+function mustExist(p: string, label: string) {
+  if (!fs.existsSync(p)) {
+    throw new Error(`${label} not found at ${p} — run the reference pipeline first.`);
+  }
 }
 
 /**
- * Generate a scene image using gpt-image-2 edit endpoint.
- * Passes the archetype's locked reference portrait to maintain
- * character consistency across all scenes.
+ * Scene generator — double-anchored on style-ref + archetype portrait.
+ * Presets are locked; only scenePrompt and archetype vary per call.
  */
 export async function generateSceneImage(
   opts: GenerateSceneImageOptions,
 ): Promise<ImageResult> {
-  const { scenePrompt, archetype, quality = "medium", format = "jpeg" } = opts;
+  const {
+    scenePrompt,
+    archetype,
+    quality = PRESETS.defaultQuality,
+    format = PRESETS.defaultFormat,
+  } = opts;
 
   const archetypeDef = ARCHETYPES[archetype];
+  const portraitPath = path.join(PRESETS.portraitsDir, `${archetype}.png`);
 
-  // Build the full prompt with archetype visual style appended
+  mustExist(PRESETS.styleRefPath, "style-ref.png");
+  mustExist(portraitPath, `portrait for ${archetype}`);
+
+  const [styleFile, portraitFile] = await Promise.all([
+    loadRef(PRESETS.styleRefPath, "style-ref.png", "image/png"),
+    loadRef(portraitPath, `${archetype}.png`, "image/png"),
+  ]);
+
   const fullPrompt = [
-    scenePrompt,
-    `The character is ${archetypeDef.name}, ${archetypeDef.title}.`,
-    `Visual style: ${archetypeDef.imageStyle}.`,
-    "Cinematic composition. Silicon Valley tech satire aesthetic. Rich, moody lighting.",
-    "Semi-realistic digital illustration style. High detail.",
+    PRESETS.stylePrefix,
+    `Character: ${archetypeDef.name}, ${archetypeDef.title}. ${archetypeDef.imageStyle}.`,
+    `Scene: ${scenePrompt}`,
+    "Match the art style of the first reference image exactly. Use the second reference image for the character's face and identity.",
   ].join(" ");
 
-  // Load the reference portrait from the public directory
-  const portraitPath = path.join(
-    process.cwd(),
-    "public",
-    "portraits",
-    `${archetype}.png`,
-  );
-  const portraitExists = fs.existsSync(portraitPath);
+  const response = await openai.images.edit({
+    model: PRESETS.model,
+    image: [styleFile, portraitFile],
+    prompt: fullPrompt,
+    quality,
+    output_format: format,
+    size: PRESETS.size,
+  });
 
-  let response:
-    | Awaited<ReturnType<typeof openai.images.edit>>
-    | Awaited<ReturnType<typeof openai.images.generate>>;
-
-  if (portraitExists) {
-    // Use edit endpoint with reference portrait for character consistency
-    const portraitFile = await toFile(
-      fs.createReadStream(portraitPath),
-      `${archetype}.png`,
-      { type: "image/png" },
-    );
-
-    response = await openai.images.edit({
-      model: "gpt-image-2",
-      image: portraitFile,
-      prompt: fullPrompt,
-      quality,
-      output_format: format,
-      size: "1024x1024",
-    });
-  } else {
-    // Fallback: generate without reference (no portrait seeded yet)
-    response = await openai.images.generate({
-      model: "gpt-image-2",
-      prompt: fullPrompt,
-      quality,
-      output_format: format,
-      size: "1024x1024",
-    });
-  }
-
-  const b64Json = (response.data ?? [])[0]?.b64_json;
-  if (!b64Json)
-    throw new Error("No image data returned from OpenAI images API");
+  const b64Json = response.data?.[0]?.b64_json;
+  if (!b64Json) throw new Error("No image data returned from OpenAI images API");
   return {
     b64Json,
     format,
@@ -103,33 +103,47 @@ export async function generateSceneImage(
 }
 
 /**
- * Generate the final share card hero image using gpt-image-2 generate endpoint.
- * This is a full text-to-image call — no reference portrait needed.
+ * Run multiple scene generations in parallel.
+ * Returns per-item results so one failure doesn't nuke the batch.
+ */
+export async function generateScenesParallel(
+  scenes: GenerateSceneImageOptions[],
+): Promise<PromiseSettledResult<ImageResult>[]> {
+  return Promise.allSettled(scenes.map((s) => generateSceneImage(s)));
+}
+
+/**
+ * Hero / share-card generator — style-ref anchored, no character portrait.
  */
 export async function generateHeroImage(
   opts: GenerateHeroImageOptions,
 ): Promise<ImageResult> {
-  const { prompt, quality = "high", format = "png" } = opts;
+  const {
+    prompt,
+    quality = "high",
+    format = "png",
+  } = opts;
+
+  mustExist(PRESETS.styleRefPath, "style-ref.png");
+  const styleFile = await loadRef(PRESETS.styleRefPath, "style-ref.png", "image/png");
 
   const fullPrompt = [
+    PRESETS.stylePrefix,
     prompt,
-    "Cinematic, highly detailed digital illustration.",
-    "Silicon Valley tech satire aesthetic.",
-    "Bold, viral, shareable composition.",
-    "Rich colors, dramatic lighting.",
+    "Bold, viral, shareable composition. Match the art style of the reference image exactly.",
   ].join(" ");
 
-  const response = await openai.images.generate({
-    model: "gpt-image-2",
+  const response = await openai.images.edit({
+    model: PRESETS.model,
+    image: styleFile,
     prompt: fullPrompt,
     quality,
     output_format: format,
-    size: "1024x1024",
+    size: PRESETS.size,
   });
 
-  const b64Json = (response.data ?? [])[0]?.b64_json;
-  if (!b64Json)
-    throw new Error("No image data returned from OpenAI images API");
+  const b64Json = response.data?.[0]?.b64_json;
+  if (!b64Json) throw new Error("No image data returned from OpenAI images API");
   return {
     b64Json,
     format,
