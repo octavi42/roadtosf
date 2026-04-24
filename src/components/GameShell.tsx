@@ -11,7 +11,15 @@ export interface GameShellProps {
   muteButton?: ReactNode;
   /** Main scene content rendered centred in the viewport. */
   children?: ReactNode;
-  /** Controls / input bar anchored to the bottom of the screen. */
+  /**
+   * Dialogue subtitle — always pinned at a fixed position above the choices.
+   * Position never shifts whether choices are visible or not.
+   */
+  dialogueSlot?: ReactNode;
+  /**
+   * Choice buttons / text input — rendered directly below the dialogue slot.
+   * When null the space collapses but dialogueSlot stays at the same y position.
+   */
   bottomPanel?: ReactNode;
 }
 
@@ -23,10 +31,10 @@ export function GameShell({
   backgroundSrc,
   muteButton,
   children,
+  dialogueSlot,
   bottomPanel,
 }: GameShellProps) {
   return (
-    // Root: fills the viewport, clips everything, black base colour.
     <div className="fixed inset-0 overflow-hidden bg-black">
       {/* ------------------------------------------------------------------ */}
       {/* Layer 0 — background                                                */}
@@ -37,7 +45,6 @@ export function GameShell({
         aria-hidden="true"
       >
         {backgroundSrc ? (
-          /* Generated scene image */
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={backgroundSrc}
@@ -45,7 +52,6 @@ export function GameShell({
             className="absolute inset-0 h-full w-full object-cover"
           />
         ) : (
-          /* Placeholder: deep-space gradient before image loads */
           <div
             className="absolute inset-0"
             style={{
@@ -55,12 +61,12 @@ export function GameShell({
           />
         )}
 
-        {/* Dark vignette — ensures text stays legible over any image */}
+        {/* Vignette — heavier at the bottom so subtitle text is always legible */}
         <div
           className="absolute inset-0"
           style={{
             background:
-              "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.10) 50%, rgba(0,0,0,0.40) 100%)",
+              "linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.55) 28%, rgba(0,0,0,0.08) 55%, rgba(0,0,0,0.35) 100%)",
           }}
         />
       </div>
@@ -74,7 +80,6 @@ export function GameShell({
       >
         {/* Top bar -------------------------------------------------------- */}
         <header className="flex items-center justify-between px-6 pt-5 pb-3">
-          {/* Game title — HUD label style */}
           <span
             className="tracking-widest text-white/80"
             style={{
@@ -86,18 +91,30 @@ export function GameShell({
           >
             ROAD TO SF
           </span>
-
-          {/* Mute button slot */}
           <div>{muteButton}</div>
         </header>
 
-        {/* Main / children ------------------------------------------------ */}
+        {/* Main — fills the viewport centre, scene-label / intro cards live here */}
         <main className="flex flex-1 items-center justify-center px-4">
           {children}
         </main>
 
-        {/* Bottom panel slot ---------------------------------------------- */}
-        <footer className="w-full px-4 pb-6">{bottomPanel}</footer>
+        {/* ---------------------------------------------------------------- */}
+        {/* Fixed bottom block                                               */}
+        {/*                                                                  */}
+        {/* dialogueSlot is ALWAYS rendered at the same y-position.          */}
+        {/* bottomPanel slides in below it; when absent the outer padding     */}
+        {/* holds the dialogue in place so it never jumps.                   */}
+        {/* ---------------------------------------------------------------- */}
+        <div className="w-full flex flex-col gap-3 px-6 pb-8 pt-2">
+          {/* Dialogue subtitle — fixed anchor point */}
+          <div className="min-h-[4.5rem] flex items-end">
+            {dialogueSlot ?? null}
+          </div>
+
+          {/* Choice / text-input panel — only occupies space when present */}
+          {bottomPanel && <div>{bottomPanel}</div>}
+        </div>
       </div>
     </div>
   );

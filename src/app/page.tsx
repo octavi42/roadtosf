@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { GameShell } from "@/components/GameShell";
 import ApiKeysPanel from "@/components/ApiKeysPanel";
 import MuteButton from "@/components/MuteButton";
 import ChoicePanel from "@/components/ChoicePanel";
 import TextInputPanel from "@/components/TextInputPanel";
+import DialogueSubtitle from "@/components/DialogueSubtitle";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -23,11 +24,34 @@ interface ApiKeys {
   elevenlabsKey: string;
 }
 
-// Stub choices for layout preview — will be replaced by real scene data
+interface DialogueLine {
+  speaker: string;
+  text: string;
+}
+
+// ---------------------------------------------------------------------------
+// Stub data — replaced by real LLM output later
+// ---------------------------------------------------------------------------
+
+const STUB_DIALOGUE: DialogueLine[] = [
+  {
+    speaker: "Maya · Co-founder & CTO",
+    text: "We have to pivot. The market shifted overnight.",
+  },
+  {
+    speaker: "Maya · Co-founder & CTO",
+    text: "If we don't move now, Brock's team will eat our lunch before we even launch.",
+  },
+  {
+    speaker: "Maya · Co-founder & CTO",
+    text: "I need you to back me on this. Right now.",
+  },
+];
+
 const STUB_CHOICES = [
   { id: "a", label: "No, ship the original" },
   { id: "b", label: "Yes, pivot now" },
-  { id: "timeout", label: "…" },
+  { id: "c", label: "Give me 24 hours" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -37,8 +61,20 @@ const STUB_CHOICES = [
 export default function HomePage() {
   const [phase, setPhase] = useState<Phase>("api-keys");
   const [apiKeys, setApiKeys] = useState<ApiKeys | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [backgroundSrc] = useState<string | null>(null);
+  const [choiceMade, setChoiceMade] = useState<string | null>(null);
 
-  // In development, skip the ApiKeysPanel if keys are already in .env.local
+  // Dialogue state
+  const [dialogueLines, setDialogueLines] = useState<DialogueLine[]>([]);
+  const [currentLineIndex, setCurrentLineIndex] = useState(0);
+  const [showChoices, setShowChoices] = useState(false);
+  const onCompleteCalledRef = useRef(false);
+
+  // -------------------------------------------------------------------------
+  // Dev: skip API key panel when .env.local keys are present
+  // -------------------------------------------------------------------------
+
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
     fetch("/api/dev-keys")
@@ -47,20 +83,29 @@ export default function HomePage() {
         if (data.skip) setPhase("intro");
       })
       .catch(() => {
-        // silently fall through — ApiKeysPanel will show as normal
+        // fall through — ApiKeysPanel shows normally
       });
   }, []);
 
-  const [isMuted, setIsMuted] = useState(false);
-  const [backgroundSrc, setBackgroundSrc] = useState<string | null>(null);
-  const [choiceMade, setChoiceMade] = useState<string | null>(null);
+  // -------------------------------------------------------------------------
+  // Scene init — load dialogue lines, reset state
+  // -------------------------------------------------------------------------
+
+  useEffect(() => {
+    if (phase !== "scene") return;
+    setDialogueLines(STUB_DIALOGUE);
+    setCurrentLineIndex(0);
+    setShowChoices(false);
+    setChoiceMade(null);
+    onCompleteCalledRef.current = false;
+  }, [phase]);
 
   // -------------------------------------------------------------------------
   // Handlers
   // -------------------------------------------------------------------------
 
   const handleKeysConfirmed = useCallback((keys: ApiKeys) => {
-    setApiKeys(keys); // stored for passing to API calls
+    setApiKeys(keys);
     setPhase("intro");
   }, []);
 
@@ -70,48 +115,70 @@ export default function HomePage() {
 
   const handleChoice = useCallback((id: string) => {
     setChoiceMade(id);
-    // TODO: apply stat delta, advance to next scene
     console.log("[choice]", id);
   }, []);
 
   const handleTextSubmit = useCallback((text: string) => {
-    // TODO: send to LLM for Scene 3 counter-offer classification
     console.log("[text-input]", text);
   }, []);
 
+  // Called when each dialogue line finishes animating
+  const handleLineComplete = useCallback(() => {
+    if (onCompleteCalledRef.current) return;
+
+    setCurrentLineIndex((prev) => {
+      const next = prev + 1;
+      if (next >= dialogueLines.length) {
+        // All lines done — show choices after a short pause
+        onCompleteCalledRef.current = true;
+        setTimeout(() => setShowChoices(true), 600);
+        return prev;
+      }
+      return next;
+    });
+  }, [dialogueLines.length]);
+
   // -------------------------------------------------------------------------
-  // Derived UI slots
+  // Derived slots
   // -------------------------------------------------------------------------
 
   const muteButton = (
     <MuteButton isMuted={isMuted} onToggle={handleMuteToggle} />
   );
 
-  // Bottom panel: show choice buttons or text input depending on mute + phase
+  const currentLine = dialogueLines[currentLineIndex] ?? null;
+
+  const dialogueSlot =
+    phase === "scene" && currentLine ? (
+      <DialogueSubtitle
+        key={`${currentLineIndex}-${currentLine.text}`}
+        text={currentLine.text}
+        speaker={currentLine.speaker}
+        wordInterval={110}
+        onComplete={handleLineComplete}
+      />
+    ) : null;
+
   const bottomPanel = (() => {
-    if (phase !== "scene") return null;
+    if (phase !== "scene" || !showChoices) return null;
 
     if (isMuted) {
       return (
-        <div className="px-4 pb-6">
-          <TextInputPanel
-            placeholder="Type your response…"
-            onSubmit={handleTextSubmit}
-            disabled={choiceMade !== null}
-          />
-        </div>
+        <TextInputPanel
+          placeholder="Type your response…"
+          onSubmit={handleTextSubmit}
+          disabled={choiceMade !== null}
+        />
       );
     }
 
     return (
-      <div className="px-4 pb-6">
-        <ChoicePanel
-          choices={STUB_CHOICES}
-          timeoutSeconds={15}
-          onChoice={handleChoice}
-          disabled={choiceMade !== null}
-        />
-      </div>
+      <ChoicePanel
+        choices={STUB_CHOICES}
+        timeoutSeconds={15}
+        onChoice={handleChoice}
+        disabled={choiceMade !== null}
+      />
     );
   })();
 
@@ -122,7 +189,6 @@ export default function HomePage() {
   const centerContent = (() => {
     switch (phase) {
       case "api-keys":
-        // ApiKeysPanel renders itself as a fixed overlay — center slot is empty
         return null;
 
       case "intro":
@@ -167,13 +233,8 @@ export default function HomePage() {
               <br />
               Your co-founder is already texting.
             </p>
-            {/* TODO: trigger story arc generation, then transition to "scene" */}
             <button
-              onClick={() => {
-                setBackgroundSrc(null); // will be set to generated image URL
-                setPhase("scene");
-                setChoiceMade(null);
-              }}
+              onClick={() => setPhase("scene")}
               className="mt-4 text-white/30 hover:text-white/60 text-xs underline transition-colors"
             >
               Skip (dev)
@@ -182,24 +243,15 @@ export default function HomePage() {
         );
 
       case "scene":
+        // Scene label pinned top-left — dialogue + choices live at the bottom
         return (
-          <div className="backdrop-panel animate-fade-slide-up rounded-2xl px-6 py-5 max-w-lg w-full flex flex-col gap-3">
-            {/* Scene label */}
-            <p className="text-amber-400 text-xs font-semibold tracking-widest uppercase">
+          <div className="absolute top-16 left-6">
+            <p
+              className="text-white/30 text-xs font-semibold tracking-widest uppercase"
+              style={{ letterSpacing: "0.18em" }}
+            >
               Scene 1 · The Pivot
             </p>
-            {/* Dialogue stub */}
-            <p className="text-white text-base leading-relaxed">
-              &ldquo;We have to pivot. The market shifted overnight and if we
-              don&apos;t move now, Brock&apos;s team will eat our lunch before
-              we even launch.&rdquo;
-            </p>
-            <p className="text-white/40 text-xs">— Maya, Co-founder & CTO</p>
-            {choiceMade && (
-              <p className="text-white/50 text-xs mt-1 italic">
-                You chose: <span className="text-white/70">{choiceMade}</span>
-              </p>
-            )}
           </div>
         );
 
@@ -227,12 +279,12 @@ export default function HomePage() {
 
   return (
     <>
-      {/* API keys overlay — rendered outside GameShell so it sits above everything */}
       {phase === "api-keys" && <ApiKeysPanel onConfirm={handleKeysConfirmed} />}
 
       <GameShell
         backgroundSrc={backgroundSrc}
         muteButton={muteButton}
+        dialogueSlot={dialogueSlot}
         bottomPanel={bottomPanel}
       >
         {centerContent}
