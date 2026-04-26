@@ -3,9 +3,9 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import type { EndingKey, StoryArc } from "./types";
 
 export type Phase =
+  | "welcome"
   | "api-keys"
-  | "intro"
-  | "generating"
+  | "onboarding"
   | "scene"
   | "ending";
 
@@ -52,12 +52,12 @@ interface SessionState {
   setHasHydrated: (value: boolean) => void;
 
   setPlaythroughId: (id: string | undefined) => void;
+  welcomeStarted: () => void;
   keysConfirmed: () => void;
   introSubmitted: (
     transcript: string,
     extracted?: Partial<Omit<IntroData, "transcript">>,
   ) => void;
-  enterScenes: () => void;
   arcReady: (arc: StoryArc) => void;
   advanceLine: (totalLines: number) => void;
   chooseOption: (
@@ -95,7 +95,7 @@ function classifyEnding(hype: number, integrity: number): EndingKey {
 export const useSessionStore = create<SessionState>()(
   persist(
     (set) => ({
-      phase: "api-keys",
+      phase: "welcome",
       intro: INITIAL_INTRO,
       arc: undefined,
       progress: INITIAL_PROGRESS,
@@ -108,17 +108,24 @@ export const useSessionStore = create<SessionState>()(
 
       setPlaythroughId: (id) => set({ playthroughId: id }),
 
+      welcomeStarted: () =>
+        set((state) => {
+          if (state.phase !== "welcome") return state;
+          return { phase: "api-keys" };
+        }),
+
       keysConfirmed: () =>
         set((state) => {
           if (state.phase !== "api-keys") return state;
-          return { phase: "intro" };
+          return { phase: "onboarding" };
         }),
 
       introSubmitted: (transcript, extracted) =>
         set((state) => {
-          if (state.phase !== "intro") return state;
+          if (state.phase !== "onboarding") return state;
           return {
-            phase: "generating",
+            phase: "scene",
+            progress: INITIAL_PROGRESS,
             intro: {
               ...state.intro,
               transcript,
@@ -126,12 +133,6 @@ export const useSessionStore = create<SessionState>()(
               flavorTags: extracted?.flavorTags ?? state.intro.flavorTags,
             },
           };
-        }),
-
-      enterScenes: () =>
-        set((state) => {
-          if (state.phase !== "generating") return state;
-          return { phase: "scene", progress: INITIAL_PROGRESS };
         }),
 
       arcReady: (arc) => set({ arc }),
@@ -194,7 +195,7 @@ export const useSessionStore = create<SessionState>()(
 
       reset: () =>
         set({
-          phase: "intro",
+          phase: "onboarding",
           intro: INITIAL_INTRO,
           arc: undefined,
           progress: INITIAL_PROGRESS,
@@ -206,9 +207,13 @@ export const useSessionStore = create<SessionState>()(
     }),
     {
       name: "roadtosf-session",
-      storage: createJSONStorage(() =>
-        typeof window === "undefined" ? undefined! : sessionStorage,
-      ),
+      // TEMP: persistence disabled while iterating on the welcome screen.
+      // Restore by swapping storage back to sessionStorage and removing the noop.
+      storage: createJSONStorage(() => ({
+        getItem: () => null,
+        setItem: () => {},
+        removeItem: () => {},
+      })),
       skipHydration: true,
       partialize: (state) => ({
         phase: state.phase,

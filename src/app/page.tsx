@@ -9,6 +9,7 @@ import ChoicePanel from "@/components/ChoicePanel";
 import TextInputPanel from "@/components/TextInputPanel";
 import DialogueSubtitle from "@/components/DialogueSubtitle";
 import DialogueSpeaker from "@/components/DialogueSpeaker";
+import OnboardingPanel from "@/components/OnboardingPanel";
 import { useSessionStore } from "@/lib/session";
 import type { EndingKey } from "@/lib/types";
 
@@ -39,6 +40,25 @@ interface SceneData {
   dialogue: DialogueLine[];
   choices: Choice[];
 }
+
+// ---------------------------------------------------------------------------
+// Welcome narration — host explains the game over a static SF backdrop
+// ---------------------------------------------------------------------------
+
+const WELCOME_LINES = [
+  "Welcome. You've just landed in San Francisco.",
+  "Five scenes. Five timed choices. Twelve endings.",
+  "What happens next is up to you.",
+];
+
+const WELCOME_BACKGROUND = "/intro-v2/05-sfo-arrival.png";
+
+const ONBOARDING_LINES = [
+  "Now then.",
+  "Tell me about your startup.",
+];
+
+const ONBOARDING_BACKGROUND = "/intro-v2/03-airport-bar.png";
 
 // ---------------------------------------------------------------------------
 // Prescripted story — Wagr (Venmo for sports bets between friends)
@@ -236,9 +256,9 @@ export default function HomePage() {
 
   const {
     setPlaythroughId,
+    welcomeStarted,
     keysConfirmed,
     introSubmitted,
-    enterScenes,
     advanceLine,
     chooseOption,
     advanceScene,
@@ -246,15 +266,49 @@ export default function HomePage() {
   } = useSessionStore(
     useShallow((s) => ({
       setPlaythroughId: s.setPlaythroughId,
+      welcomeStarted: s.welcomeStarted,
       keysConfirmed: s.keysConfirmed,
       introSubmitted: s.introSubmitted,
-      enterScenes: s.enterScenes,
       advanceLine: s.advanceLine,
       chooseOption: s.chooseOption,
       advanceScene: s.advanceScene,
       reset: s.reset,
     })),
   );
+
+  const [welcomeLineIndex, setWelcomeLineIndex] = useState(0);
+  const [welcomeDone, setWelcomeDone] = useState(false);
+  const welcomeCompleteRef = useRef(false);
+
+  const handleWelcomeLineComplete = useCallback(() => {
+    if (welcomeCompleteRef.current) return;
+    setWelcomeLineIndex((prev) => {
+      const next = prev + 1;
+      if (next >= WELCOME_LINES.length) {
+        welcomeCompleteRef.current = true;
+        setWelcomeDone(true);
+        return prev;
+      }
+      return next;
+    });
+  }, []);
+
+  const [onboardingLineIndex, setOnboardingLineIndex] = useState(0);
+  const [onboardingNarrationDone, setOnboardingNarrationDone] = useState(false);
+  const onboardingNarrationCompleteRef = useRef(false);
+
+  const handleOnboardingLineComplete = useCallback(() => {
+    if (onboardingNarrationCompleteRef.current) return;
+    setOnboardingLineIndex((prev) => {
+      const next = prev + 1;
+      if (next >= ONBOARDING_LINES.length) {
+        onboardingNarrationCompleteRef.current = true;
+        setOnboardingNarrationDone(true);
+        return prev;
+      }
+      return next;
+    });
+  }, []);
 
   // -------------------------------------------------------------------------
   // Dev: skip API key panel when .env.local keys are present
@@ -324,27 +378,26 @@ export default function HomePage() {
     setIsMuted((prev) => !prev);
   }, []);
 
-  const handleIntroSubmit = useCallback(() => {
-    const startupName = "Wagr";
-    const startupDescription = "Venmo for sports bets between friends";
-    setPlaythroughId(undefined);
-    introSubmitted("", { startupName, startupDescription });
-    fetch("/api/playthroughs", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        startupName,
-        startupDescription,
-        flavorTags: [],
-        introTranscript: "",
-      }),
-    })
-      .then((r) => r.json())
-      .then((data: { id?: string }) => {
-        if (data.id) setPlaythroughId(data.id);
+  const handleOnboardingSubmit = useCallback(
+    (transcript: string) => {
+      setPlaythroughId(undefined);
+      introSubmitted(transcript);
+      fetch("/api/playthroughs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          flavorTags: [],
+          introTranscript: transcript,
+        }),
       })
-      .catch((err) => console.error("createPlaythrough failed", err));
-  }, [introSubmitted, setPlaythroughId]);
+        .then((r) => r.json())
+        .then((data: { id?: string }) => {
+          if (data.id) setPlaythroughId(data.id);
+        })
+        .catch((err) => console.error("createPlaythrough failed", err));
+    },
+    [introSubmitted, setPlaythroughId],
+  );
 
   const handleLineComplete = useCallback(() => {
     const scene = SCENES[sceneIndex];
@@ -411,24 +464,71 @@ export default function HomePage() {
   const currentScene = SCENES[sceneIndex] ?? null;
   const currentLine = currentScene?.dialogue[currentLineIndex] ?? null;
 
-  const dialogueSlot =
-    phase === "scene" && currentLine ? (
-      <div className="w-full max-w-2xl mx-auto px-2 select-none">
-        <DialogueSpeaker
-          speaker={showChoices ? undefined : currentLine.speaker}
-        />
-        {!showChoices && (
+  const dialogueSlot = (() => {
+    if (phase === "welcome" && !welcomeDone) {
+      return (
+        <div className="w-full max-w-2xl mx-auto px-2 select-none">
+          <DialogueSpeaker speaker={undefined} />
           <DialogueSubtitle
-            key={`scene${sceneIndex}-line${currentLineIndex}`}
-            text={currentLine.text}
-            wordInterval={110}
-            onComplete={handleLineComplete}
+            key={`welcome-line${welcomeLineIndex}`}
+            text={WELCOME_LINES[welcomeLineIndex]}
+            wordInterval={100}
+            onComplete={handleWelcomeLineComplete}
           />
-        )}
-      </div>
-    ) : null;
+        </div>
+      );
+    }
+
+    if (phase === "onboarding" && !onboardingNarrationDone) {
+      return (
+        <div className="w-full max-w-2xl mx-auto px-2 select-none">
+          <DialogueSpeaker speaker={undefined} />
+          <DialogueSubtitle
+            key={`onboarding-line${onboardingLineIndex}`}
+            text={ONBOARDING_LINES[onboardingLineIndex]}
+            wordInterval={110}
+            onComplete={handleOnboardingLineComplete}
+          />
+        </div>
+      );
+    }
+
+    if (phase === "scene" && currentLine) {
+      return (
+        <div className="w-full max-w-2xl mx-auto px-2 select-none">
+          <DialogueSpeaker
+            speaker={showChoices ? undefined : currentLine.speaker}
+          />
+          {!showChoices && (
+            <DialogueSubtitle
+              key={`scene${sceneIndex}-line${currentLineIndex}`}
+              text={currentLine.text}
+              wordInterval={110}
+              onComplete={handleLineComplete}
+            />
+          )}
+        </div>
+      );
+    }
+
+    return null;
+  })();
 
   const bottomPanel = (() => {
+    if (phase === "welcome") {
+      if (!welcomeDone) return null;
+      return (
+        <div className="w-full max-w-md mx-auto animate-fade-slide-up">
+          <button
+            onClick={() => welcomeStarted()}
+            className="w-full bg-white text-black font-semibold rounded-lg py-3 hover:bg-white/90 transition-colors text-sm"
+          >
+            Start →
+          </button>
+        </div>
+      );
+    }
+
     if (phase !== "scene" || !showChoices) return null;
 
     // Scene 3 gets an extra free-text counter-offer option
@@ -474,59 +574,16 @@ export default function HomePage() {
 
   const centerContent = (() => {
     switch (phase) {
+      case "welcome":
+        return null;
+
       case "api-keys":
         return null;
 
-      case "intro":
+      case "onboarding":
+        if (!onboardingNarrationDone) return null;
         return (
-          <div className="backdrop-panel animate-fade-slide-up rounded-2xl p-8 max-w-md w-full text-center flex flex-col gap-4">
-            <p className="text-amber-400 text-xs font-semibold tracking-widest uppercase">
-              SFO → Your Future
-            </p>
-            <h1 className="text-white text-2xl font-semibold leading-snug">
-              Your flight to SFO
-              <br />
-              departs in 6 hours.
-            </h1>
-            <p className="text-white/50 text-sm leading-relaxed">
-              You&apos;re the founder of{" "}
-              <span className="text-white font-medium">Wagr</span> — Venmo for
-              sports bets between friends. Ex-Stripe. First-time founder. Your
-              co-founder is already texting.
-            </p>
-            <button
-              onClick={handleIntroSubmit}
-              className="mt-2 w-full bg-white text-black font-semibold rounded-lg py-3 hover:bg-white/90 transition-colors text-sm"
-            >
-              Board the flight →
-            </button>
-          </div>
-        );
-
-      case "generating":
-        return (
-          <div className="backdrop-panel animate-fade-slide-up rounded-2xl p-8 max-w-sm w-full text-center flex flex-col gap-3">
-            <div className="flex justify-center gap-1.5 mb-2">
-              {[0, 1, 2].map((i) => (
-                <span
-                  key={i}
-                  className="w-2 h-2 rounded-full bg-white/40 animate-pulse"
-                  style={{ animationDelay: `${i * 0.2}s` }}
-                />
-              ))}
-            </div>
-            <p className="text-white/60 text-sm leading-relaxed">
-              You just landed at SFO.
-              <br />
-              Your co-founder is already texting.
-            </p>
-            <button
-              onClick={() => enterScenes()}
-              className="mt-4 text-white/30 hover:text-white/60 text-xs underline transition-colors"
-            >
-              Enter →
-            </button>
-          </div>
+          <OnboardingPanel onSubmit={handleOnboardingSubmit} />
         );
 
       case "scene":
@@ -584,10 +641,20 @@ export default function HomePage() {
 
   return (
     <>
-      {phase === "api-keys" && <ApiKeysPanel onConfirm={handleKeysConfirmed} />}
+      {phase === "api-keys" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/40 backdrop-blur-sm">
+          <ApiKeysPanel onConfirm={handleKeysConfirmed} />
+        </div>
+      )}
 
       <GameShell
-        backgroundSrc="/intro-v2/01-departure-board.png"
+        backgroundSrc={
+          phase === "welcome"
+            ? WELCOME_BACKGROUND
+            : phase === "onboarding"
+              ? ONBOARDING_BACKGROUND
+              : "/intro-v2/01-departure-board.png"
+        }
         muteButton={muteButton}
         dialogueSlot={dialogueSlot}
         bottomPanel={bottomPanel}
