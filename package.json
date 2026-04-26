@@ -9,11 +9,13 @@
     "lint": "eslint",
     "distill:style": "node --env-file=.env.local scripts/distill-style.mjs",
     "generate:portraits": "node --env-file=.env.local scripts/generate-portraits.mjs",
-    "generate:intro": "node --env-file=.env.local scripts/generate-intro.mjs"
+    "generate:intro": "node --env-file=.env.local scripts/generate-intro.mjs",
+    "db:migrate": "node --env-file=.env.local scripts/migrate.mjs"
   },
   "dependencies": {
     "@elevenlabs/elevenlabs-js": "^2.44.0",
     "@elevenlabs/react": "^1.2.1",
+    "@neondatabase/serverless": "^1.1.0",
     "next": "16.2.4",
     "openai": "^6.34.0",
     "react": "19.2.4",
