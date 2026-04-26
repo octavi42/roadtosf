@@ -10,11 +10,14 @@ export default function MuteButton({ isMuted, onToggle }: MuteButtonProps) {
     <button
       onClick={onToggle}
       className={[
-        "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all",
-        isMuted
-          ? "border-amber-500/40 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
-          : "border-white/20 bg-white/5 text-white/70 hover:bg-white/10",
+        "comic-outline-sm comic-press flex items-center gap-1.5 px-3 py-1.5",
+        "rounded-full font-display text-[var(--color-ink)] uppercase",
+        "text-xs font-bold tracking-wide comic-tilt-r",
       ].join(" ")}
+      style={{
+        background: isMuted ? "var(--color-mustard)" : "var(--color-mint)",
+        letterSpacing: "0.08em",
+      }}
       aria-label={isMuted ? "Switch to voice mode" : "Switch to text mode"}
     >
       {isMuted ? (
@@ -25,7 +28,10 @@ export default function MuteButton({ isMuted, onToggle }: MuteButtonProps) {
       ) : (
         <>
           <span aria-hidden="true">🎙</span>
-          <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+          <span
+            className="w-1.5 h-1.5 rounded-full animate-pulse"
+            style={{ background: "var(--color-cable)" }}
+          />
           <span>Voice</span>
         </>
       )}

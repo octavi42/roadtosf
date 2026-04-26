@@ -1,14 +1,161 @@
 @import "tailwindcss";
 
+/* ----------------------------------------------------------------------------
+ * Cartoonish SF — Comic-book design tokens
+ *
+ * Display fonts are chunky bitmap-flavored (Pixelify Sans → Chicago vibe;
+ * VT323 → terminal/pixel) for the "old Apple" feel. Body stays on Geist for
+ * legibility during 15-second timed scenes.
+ * --------------------------------------------------------------------------*/
+
+@theme {
+    --font-display: var(--font-pixelify), "Chicago", "Geneva", system-ui,
+        sans-serif;
+    --font-pixel: var(--font-vt323), "Chicago", "Monaco", monospace;
+    --font-sans: var(--font-geist-sans), "Geist Sans", system-ui, sans-serif;
+
+    /* Comic SF palette */
+    --color-fog: #f4ede2; /* warm fog paper */
+    --color-fog-soft: #ebe2d3;
+    --color-ink: #1b1b1f; /* comic outline black */
+    --color-sunset: #ff8a7a; /* SF golden hour */
+    --color-sunset-deep: #e85a4f;
+    --color-cable: #c8102e; /* cable car red */
+    --color-mustard: #ffc857; /* taxi yellow */
+    --color-karl: #4a90a4; /* Karl the Fog blue */
+    --color-bay: #2e5266;
+    --color-mint: #8ad9b1; /* AI emerald */
+}
+
 :root {
-    --game-font: "Geist Sans", Arial, sans-serif;
+    --game-font: var(--font-pixelify), "Chicago", "Geneva", Arial, sans-serif;
+    --ink-shadow: 4px 4px 0 var(--color-ink);
+    --ink-shadow-sm: 2px 2px 0 var(--color-ink);
 }
 
 html,
 body {
     height: 100%;
     overflow: hidden;
-    background: #000;
+    background: var(--color-fog);
+    color: var(--color-ink);
+}
+
+/* Halftone dot pattern overlay — adds a subtle paper-print texture */
+.halftone {
+    background-image: radial-gradient(
+        circle at 1px 1px,
+        rgba(27, 27, 31, 0.18) 1px,
+        transparent 0
+    );
+    background-size: 6px 6px;
+}
+
+.halftone-strong {
+    background-image: radial-gradient(
+        circle at 1px 1px,
+        rgba(27, 27, 31, 0.32) 1.2px,
+        transparent 0
+    );
+    background-size: 5px 5px;
+}
+
+/* Paper grain — slightly warmer noise on light surfaces */
+.paper-grain {
+    background-color: var(--color-fog);
+    background-image:
+        radial-gradient(
+            circle at 25% 30%,
+            rgba(232, 90, 79, 0.06),
+            transparent 40%
+        ),
+        radial-gradient(
+            circle at 75% 70%,
+            rgba(74, 144, 164, 0.08),
+            transparent 45%
+        );
+}
+
+/* ----------------------------------------------------------------------------
+ * Comic outline + drop-shadow utilities
+ * --------------------------------------------------------------------------*/
+
+.comic-outline {
+    border: 3px solid var(--color-ink);
+    box-shadow: var(--ink-shadow);
+}
+
+.comic-outline-sm {
+    border: 2px solid var(--color-ink);
+    box-shadow: var(--ink-shadow-sm);
+}
+
+.comic-press {
+    transition: transform 90ms ease, box-shadow 90ms ease;
+}
+.comic-press:hover:not(:disabled) {
+    transform: translate(-1px, -1px);
+    box-shadow: 5px 5px 0 var(--color-ink);
+}
+.comic-press:active:not(:disabled),
+.comic-press[data-pressed="true"] {
+    transform: translate(4px, 4px);
+    box-shadow: 0 0 0 var(--color-ink);
+}
+
+/* Hand-placed slight tilt — used sparingly so it feels intentional */
+.comic-tilt-l {
+    transform: rotate(-1.2deg);
+}
+.comic-tilt-r {
+    transform: rotate(1deg);
+}
+
+/* ----------------------------------------------------------------------------
+ * Speech bubble — comic-style with tail
+ * --------------------------------------------------------------------------*/
+
+.speech-bubble {
+    position: relative;
+    background: var(--color-fog);
+    border: 3px solid var(--color-ink);
+    border-radius: 18px;
+    box-shadow: var(--ink-shadow);
+    color: var(--color-ink);
+}
+
+.speech-bubble::before,
+.speech-bubble::after {
+    content: "";
+    position: absolute;
+    bottom: -22px;
+    left: 48px;
+    width: 0;
+    height: 0;
+    border-style: solid;
+}
+
+/* Outer (black) tail */
+.speech-bubble::before {
+    border-width: 22px 18px 0 0;
+    border-color: var(--color-ink) transparent transparent transparent;
+}
+
+/* Inner (paper) tail — sits on top to give the outline an inner fill */
+.speech-bubble::after {
+    border-width: 17px 13px 0 0;
+    border-color: var(--color-fog) transparent transparent transparent;
+    bottom: -14px;
+    left: 51px;
+}
+
+/* ----------------------------------------------------------------------------
+ * Legacy frosted panel — kept around in case any view still uses it
+ * --------------------------------------------------------------------------*/
+.backdrop-panel {
+    backdrop-filter: blur(16px) saturate(1.4);
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .text-shadow-glow {
@@ -17,11 +164,9 @@ body {
         0 2px 8px rgba(0, 0, 0, 0.9);
 }
 
-.backdrop-panel {
-    backdrop-filter: blur(16px) saturate(1.4);
-    background: rgba(0, 0, 0, 0.55);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-}
+/* ----------------------------------------------------------------------------
+ * Animations
+ * --------------------------------------------------------------------------*/
 
 @keyframes fadeSlideUp {
     from {
@@ -36,13 +181,37 @@ body {
 
 @keyframes pulseGlow {
     0% {
-        box-shadow: 0 0 0px rgba(255, 255, 255, 0);
+        box-shadow: var(--ink-shadow);
     }
     50% {
-        box-shadow: 0 0 18px rgba(255, 255, 255, 0.25);
+        box-shadow: 6px 6px 0 var(--color-sunset);
     }
     100% {
-        box-shadow: 0 0 0px rgba(255, 255, 255, 0);
+        box-shadow: var(--ink-shadow);
+    }
+}
+
+@keyframes wobble {
+    0%,
+    100% {
+        transform: rotate(-1deg);
+    }
+    50% {
+        transform: rotate(1deg);
+    }
+}
+
+@keyframes bounceIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.85) translateY(14px);
+    }
+    60% {
+        opacity: 1;
+        transform: scale(1.04) translateY(-2px);
+    }
+    100% {
+        transform: scale(1) translateY(0);
     }
 }
 
@@ -51,5 +220,13 @@ body {
 }
 
 .animate-pulse-glow {
-    animation: pulseGlow 2s ease-in-out infinite;
+    animation: pulseGlow 1.2s ease-in-out infinite;
+}
+
+.animate-wobble {
+    animation: wobble 2.6s ease-in-out infinite;
+}
+
+.animate-bounce-in {
+    animation: bounceIn 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }

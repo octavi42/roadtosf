@@ -184,37 +184,37 @@ const SCENES: SceneData[] = [
 
 const ENDING_COPY: Record<
   EndingKey,
-  { label: string; subtitle: string; color: string }
+  { label: string; subtitle: string; bg: string }
 > = {
   ipo: {
     label: "IPO",
     subtitle:
       "Wagr rang the bell at NYSE on a Tuesday. You cried. Maya didn't come. The Bloomberg headline called you 'the unlikely conscience of fintech.' You framed it.",
-    color: "text-emerald-400",
+    bg: "var(--color-mint)",
   },
   indicted: {
     label: "INDICTED",
     subtitle:
       "The SEC opened an inquiry in November. You're on your third podcast apology tour. Wagr pivoted to compliance software. It still has twelve employees.",
-    color: "text-red-400",
+    bg: "var(--color-cable)",
   },
   "ai-wrapper": {
     label: "AI-WRAPPER PIVOT",
     subtitle:
       "You quietly rebranded to WagrAI, laid off four people, and wrote a Substack post called 'Why We're Going Back to Basics.' It got three thousand likes.",
-    color: "text-sky-400",
+    bg: "var(--color-karl)",
   },
   acquihire: {
     label: "ACQUI-HIRED",
     subtitle:
       "DraftKings bought the team for parts. You got a director title and a non-compete. Maya took her thirty percent and started something new without you.",
-    color: "text-amber-400",
+    bg: "var(--color-mustard)",
   },
   ghosted: {
     label: "GHOSTED",
     subtitle:
       "Wagr never quite registered. The algorithm didn't notice. The co-working space lease expired. You still have the hoodie.",
-    color: "text-white/60",
+    bg: "var(--color-fog-soft)",
   },
 };
 
@@ -479,24 +479,44 @@ export default function HomePage() {
 
       case "intro":
         return (
-          <div className="backdrop-panel animate-fade-slide-up rounded-2xl p-8 max-w-md w-full text-center flex flex-col gap-4">
-            <p className="text-amber-400 text-xs font-semibold tracking-widest uppercase">
+          <div
+            className="comic-outline animate-bounce-in rounded-2xl p-8 max-w-md w-full text-center flex flex-col gap-4"
+            style={{ background: "var(--color-fog)" }}
+          >
+            <p
+              className="font-display uppercase font-bold inline-block self-center comic-outline-sm comic-tilt-l rounded-md px-3 py-1"
+              style={{
+                background: "var(--color-mustard)",
+                color: "var(--color-ink)",
+                fontSize: "0.78rem",
+                letterSpacing: "0.18em",
+              }}
+            >
               SFO → Your Future
             </p>
-            <h1 className="text-white text-2xl font-semibold leading-snug">
+            <h1
+              className="font-display text-[var(--color-ink)] text-3xl font-bold leading-tight"
+              style={{ letterSpacing: "0.01em" }}
+            >
               Your flight to SFO
               <br />
               departs in 6 hours.
             </h1>
-            <p className="text-white/50 text-sm leading-relaxed">
+            <p className="font-sans text-[var(--color-ink)]/70 text-sm leading-relaxed">
               You&apos;re the founder of{" "}
-              <span className="text-white font-medium">Wagr</span> — Venmo for
-              sports bets between friends. Ex-Stripe. First-time founder. Your
-              co-founder is already texting.
+              <span className="font-display font-bold text-[var(--color-cable)]">
+                Wagr
+              </span>{" "}
+              — Venmo for sports bets between friends. Ex-Stripe. First-time
+              founder. Your co-founder is already texting.
             </p>
             <button
               onClick={handleIntroSubmit}
-              className="mt-2 w-full bg-white text-black font-semibold rounded-lg py-3 hover:bg-white/90 transition-colors text-sm"
+              className="comic-outline comic-press font-display uppercase font-bold mt-2 w-full rounded-xl py-3 text-base text-[var(--color-ink)]"
+              style={{
+                background: "var(--color-sunset)",
+                letterSpacing: "0.08em",
+              }}
             >
               Board the flight →
             </button>
@@ -505,24 +525,32 @@ export default function HomePage() {
 
       case "generating":
         return (
-          <div className="backdrop-panel animate-fade-slide-up rounded-2xl p-8 max-w-sm w-full text-center flex flex-col gap-3">
-            <div className="flex justify-center gap-1.5 mb-2">
+          <div
+            className="comic-outline animate-bounce-in rounded-2xl p-8 max-w-sm w-full text-center flex flex-col gap-3"
+            style={{ background: "var(--color-fog)" }}
+          >
+            <div className="flex justify-center gap-2 mb-2">
               {[0, 1, 2].map((i) => (
                 <span
                   key={i}
-                  className="w-2 h-2 rounded-full bg-white/40 animate-pulse"
-                  style={{ animationDelay: `${i * 0.2}s` }}
+                  className="w-3 h-3 rounded-full animate-pulse"
+                  style={{
+                    background: "var(--color-cable)",
+                    border: "2px solid var(--color-ink)",
+                    animationDelay: `${i * 0.2}s`,
+                  }}
                 />
               ))}
             </div>
-            <p className="text-white/60 text-sm leading-relaxed">
+            <p className="font-display text-[var(--color-ink)] text-lg leading-snug font-bold">
               You just landed at SFO.
-              <br />
+            </p>
+            <p className="font-sans text-[var(--color-ink)]/70 text-sm leading-relaxed">
               Your co-founder is already texting.
             </p>
             <button
               onClick={() => enterScenes()}
-              className="mt-4 text-white/30 hover:text-white/60 text-xs underline transition-colors"
+              className="font-pixel mt-4 text-[var(--color-ink)]/60 hover:text-[var(--color-cable)] text-base underline transition-colors"
             >
               Enter →
             </button>
@@ -532,31 +560,54 @@ export default function HomePage() {
       case "scene":
         return (
           <div className="absolute top-16 left-6">
-            <p
-              className="text-white/30 text-xs font-semibold tracking-widest uppercase"
-              style={{ letterSpacing: "0.18em" }}
+            <span
+              className="comic-outline-sm comic-tilt-l font-display uppercase font-bold inline-block px-3 py-1 rounded-md"
+              style={{
+                background: "var(--color-fog)",
+                color: "var(--color-ink)",
+                fontSize: "0.78rem",
+                letterSpacing: "0.16em",
+              }}
             >
               {currentScene?.title ?? ""}
-            </p>
+            </span>
           </div>
         );
 
       case "ending": {
         const e = ending ? ENDING_COPY[ending.key] : null;
         return (
-          <div className="backdrop-panel animate-fade-slide-up rounded-2xl p-8 max-w-md w-full text-center flex flex-col gap-5">
-            <p className="text-white/40 text-xs font-semibold tracking-widest uppercase">
+          <div
+            className="comic-outline animate-bounce-in rounded-2xl p-8 max-w-md w-full text-center flex flex-col gap-5"
+            style={{ background: "var(--color-fog)" }}
+          >
+            <p
+              className="font-display uppercase font-bold inline-block self-center comic-outline-sm comic-tilt-r rounded-md px-3 py-1"
+              style={{
+                background: "var(--color-mustard)",
+                color: "var(--color-ink)",
+                fontSize: "0.78rem",
+                letterSpacing: "0.18em",
+              }}
+            >
               Your ending
             </p>
             <h2
-              className={`text-3xl font-bold tracking-tight ${e?.color ?? "text-white"}`}
+              className="comic-outline font-display text-3xl font-bold tracking-tight rounded-xl py-4 px-3 text-[var(--color-ink)]"
+              style={{
+                background: e?.bg ?? "var(--color-fog-soft)",
+                letterSpacing: "0.04em",
+              }}
             >
               {e?.label ?? "UNKNOWN"}
             </h2>
-            <p className="text-white/60 text-sm leading-relaxed">
+            <p className="font-sans text-[var(--color-ink)]/80 text-sm leading-relaxed">
               {e?.subtitle}
             </p>
-            <div className="border-t border-white/10 pt-4 flex flex-col gap-1 text-xs text-white/30">
+            <div
+              className="font-pixel pt-4 flex flex-col gap-1 text-base text-[var(--color-ink)]/60"
+              style={{ borderTop: "2px dashed var(--color-ink)" }}
+            >
               <span>
                 Hype {hype > 0 ? "+" : ""}
                 {hype} · Integrity {integrity > 0 ? "+" : ""}
@@ -566,7 +617,11 @@ export default function HomePage() {
             </div>
             <button
               onClick={() => reset()}
-              className="mt-2 w-full border border-white/20 text-white/70 font-medium rounded-lg py-3 hover:bg-white/5 transition-colors text-sm"
+              className="comic-outline comic-press font-display uppercase font-bold mt-2 w-full rounded-xl py-3 text-base text-[var(--color-ink)]"
+              style={{
+                background: "var(--color-mint)",
+                letterSpacing: "0.08em",
+              }}
             >
               Play again →
             </button>
