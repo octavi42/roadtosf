@@ -3,7 +3,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { GameShell } from "@/components/GameShell";
-import MuteButton from "@/components/MuteButton";
 import ChoicePanel from "@/components/ChoicePanel";
 import TextInputPanel from "@/components/TextInputPanel";
 import DialogueSubtitle from "@/components/DialogueSubtitle";
@@ -199,37 +198,37 @@ const SCENES: SceneData[] = [
 
 const ENDING_COPY: Record<
   EndingKey,
-  { label: string; subtitle: string; color: string }
+  { label: string; subtitle: string; bg: string }
 > = {
   ipo: {
     label: "IPO",
     subtitle:
       "Wagr rang the bell at NYSE on a Tuesday. You cried. Maya didn't come. The Bloomberg headline called you 'the unlikely conscience of fintech.' You framed it.",
-    color: "text-emerald-400",
+    bg: "var(--color-mint)",
   },
   indicted: {
     label: "INDICTED",
     subtitle:
       "The SEC opened an inquiry in November. You're on your third podcast apology tour. Wagr pivoted to compliance software. It still has twelve employees.",
-    color: "text-red-400",
+    bg: "var(--color-cable)",
   },
   "ai-wrapper": {
     label: "AI-WRAPPER PIVOT",
     subtitle:
       "You quietly rebranded to WagrAI, laid off four people, and wrote a Substack post called 'Why We're Going Back to Basics.' It got three thousand likes.",
-    color: "text-sky-400",
+    bg: "var(--color-karl)",
   },
   acquihire: {
     label: "ACQUI-HIRED",
     subtitle:
       "DraftKings bought the team for parts. You got a director title and a non-compete. Maya took her thirty percent and started something new without you.",
-    color: "text-amber-400",
+    bg: "var(--color-mustard)",
   },
   ghosted: {
     label: "GHOSTED",
     subtitle:
       "Wagr never quite registered. The algorithm didn't notice. The co-working space lease expired. You still have the hoodie.",
-    color: "text-white/60",
+    bg: "var(--color-fog-soft)",
   },
 };
 
@@ -238,8 +237,6 @@ const ENDING_COPY: Record<
 // ---------------------------------------------------------------------------
 
 export default function HomePage() {
-  const [isMuted, setIsMuted] = useState(false);
-
   const phase = useSessionStore((s) => s.phase);
   const hasHydrated = useSessionStore((s) => s.hasHydrated);
   const { sceneIndex, currentLineIndex, showChoices, choiceMade } =
@@ -347,10 +344,6 @@ export default function HomePage() {
   // Handlers
   // -------------------------------------------------------------------------
 
-  const handleMuteToggle = useCallback(() => {
-    setIsMuted((prev) => !prev);
-  }, []);
-
   const handleOnboardingSubmit = useCallback(
     (transcript: string) => {
       setPlaythroughId(undefined);
@@ -445,10 +438,6 @@ export default function HomePage() {
   // Derived slots
   // -------------------------------------------------------------------------
 
-  const muteButton = (
-    <MuteButton isMuted={isMuted} onToggle={handleMuteToggle} />
-  );
-
   const currentScene = SCENES[sceneIndex] ?? null;
   const currentLine = currentScene?.dialogue[currentLineIndex] ?? null;
 
@@ -506,10 +495,14 @@ export default function HomePage() {
     if (phase === "welcome") {
       if (!welcomeDone) return null;
       return (
-        <div className="w-full max-w-md mx-auto animate-fade-slide-up">
+        <div className="w-full max-w-md mx-auto animate-bounce-in">
           <button
             onClick={() => welcomeStarted()}
-            className="w-full bg-white text-black font-semibold rounded-lg py-3 hover:bg-white/90 transition-colors text-sm"
+            className="comic-outline comic-press font-sans font-semibold w-full rounded-xl py-3 text-base text-[var(--color-ink)]"
+            style={{
+              background: "var(--color-sunset)",
+              letterSpacing: "-0.005em",
+            }}
           >
             Start →
           </button>
@@ -520,7 +513,7 @@ export default function HomePage() {
     if (phase !== "scene" || !showChoices) return null;
 
     // Scene 3 gets an extra free-text counter-offer option
-    if (currentScene?.id === 3 && !isMuted) {
+    if (currentScene?.id === 3) {
       return (
         <div className="flex flex-col gap-3">
           <ChoicePanel
@@ -534,16 +527,6 @@ export default function HomePage() {
             disabled={choiceMade !== null}
           />
         </div>
-      );
-    }
-
-    if (isMuted) {
-      return (
-        <TextInputPanel
-          placeholder="Type your response…"
-          onSubmit={handleTextSubmit}
-          disabled={choiceMade !== null}
-        />
       );
     }
 
@@ -577,31 +560,54 @@ export default function HomePage() {
       case "scene":
         return (
           <div className="absolute top-16 left-6">
-            <p
-              className="text-white/30 text-xs font-semibold tracking-widest uppercase"
-              style={{ letterSpacing: "0.18em" }}
+            <span
+              className="comic-outline-sm font-display uppercase font-bold inline-block px-3 py-1 rounded-md"
+              style={{
+                background: "var(--color-fog)",
+                color: "var(--color-ink)",
+                fontSize: "0.78rem",
+                letterSpacing: "0.16em",
+              }}
             >
               {currentScene?.title ?? ""}
-            </p>
+            </span>
           </div>
         );
 
       case "ending": {
         const e = ending ? ENDING_COPY[ending.key] : null;
         return (
-          <div className="backdrop-panel animate-fade-slide-up rounded-2xl p-8 max-w-md w-full text-center flex flex-col gap-5">
-            <p className="text-white/40 text-xs font-semibold tracking-widest uppercase">
+          <div
+            className="comic-outline animate-bounce-in rounded-2xl p-8 max-w-md w-full text-center flex flex-col gap-5"
+            style={{ background: "var(--color-fog)" }}
+          >
+            <p
+              className="font-display uppercase font-bold inline-block self-center comic-outline-sm rounded-md px-3 py-1"
+              style={{
+                background: "var(--color-mustard)",
+                color: "var(--color-ink)",
+                fontSize: "0.78rem",
+                letterSpacing: "0.18em",
+              }}
+            >
               Your ending
             </p>
             <h2
-              className={`text-3xl font-bold tracking-tight ${e?.color ?? "text-white"}`}
+              className="comic-outline font-sans text-3xl font-bold rounded-xl py-4 px-3 text-[var(--color-ink)]"
+              style={{
+                background: e?.bg ?? "var(--color-fog-soft)",
+                letterSpacing: "-0.01em",
+              }}
             >
               {e?.label ?? "UNKNOWN"}
             </h2>
-            <p className="text-white/60 text-sm leading-relaxed">
+            <p className="font-sans text-[var(--color-ink)]/80 text-sm leading-relaxed">
               {e?.subtitle}
             </p>
-            <div className="border-t border-white/10 pt-4 flex flex-col gap-1 text-xs text-white/30">
+            <div
+              className="font-pixel pt-4 flex flex-col gap-1 text-base text-[var(--color-ink)]/60"
+              style={{ borderTop: "2px dashed var(--color-ink)" }}
+            >
               <span>
                 Hype {hype > 0 ? "+" : ""}
                 {hype} · Integrity {integrity > 0 ? "+" : ""}
@@ -612,13 +618,21 @@ export default function HomePage() {
             <div className="mt-2 flex flex-col gap-2">
               <button
                 onClick={handleShareX}
-                className="w-full bg-white text-black font-semibold rounded-lg py-3 hover:bg-white/90 transition-colors text-sm"
+                className="comic-outline comic-press font-sans font-semibold w-full rounded-xl py-3 text-base text-[var(--color-ink)]"
+                style={{
+                  background: "var(--color-sunset)",
+                  letterSpacing: "-0.005em",
+                }}
               >
                 Share on X
               </button>
               <button
                 onClick={() => reset()}
-                className="w-full border border-white/20 text-white/70 font-medium rounded-lg py-3 hover:bg-white/5 transition-colors text-sm"
+                className="comic-outline comic-press font-sans font-semibold w-full rounded-xl py-3 text-base text-[var(--color-ink)]"
+                style={{
+                  background: "var(--color-mint)",
+                  letterSpacing: "-0.005em",
+                }}
               >
                 Play again →
               </button>
@@ -649,7 +663,6 @@ export default function HomePage() {
               ? ONBOARDING_BACKGROUND
               : "/intro-v2/01-departure-board.png"
         }
-        muteButton={muteButton}
         dialogueSlot={dialogueSlot}
         bottomPanel={bottomPanel}
       >

@@ -1,14 +1,176 @@
 @import "tailwindcss";
 
+/* ----------------------------------------------------------------------------
+ * Cartoonish SF — Comic-book design tokens
+ *
+ * Display fonts are chunky bitmap-flavored (Pixelify Sans → Chicago vibe;
+ * VT323 → terminal/pixel) for the "old Apple" feel. Body stays on Geist for
+ * legibility during 15-second timed scenes.
+ * --------------------------------------------------------------------------*/
+
+@theme {
+    /* Single typeface across the whole app — Chicago Kare bitmap. */
+    --font-display: var(--font-chicago), "Chicago", "Geneva", system-ui,
+        sans-serif;
+    --font-pixel: var(--font-chicago), "Chicago", "Geneva", system-ui,
+        sans-serif;
+    --font-sans: var(--font-chicago), "Chicago", "Geneva", system-ui,
+        sans-serif;
+    --font-mono: var(--font-chicago), "Chicago", "Geneva", monospace;
+
+    /* SF palette — slightly desaturated for a more grown-up feel */
+    --color-fog: #f3ece1; /* warm fog paper */
+    --color-fog-soft: #e7ddcc;
+    --color-ink: #20201f; /* near-black, slightly warm */
+    --color-sunset: #f0a094; /* dusty SF golden hour */
+    --color-sunset-deep: #d96a5a;
+    --color-cable: #b8273a; /* muted cable-car red */
+    --color-mustard: #e6b34a; /* aged taxi yellow */
+    --color-karl: #5a8a98; /* Karl the Fog blue */
+    --color-bay: #324f5e;
+    --color-mint: #8fc6a5; /* mellow mint */
+}
+
 :root {
-    --game-font: "Geist Sans", Arial, sans-serif;
+    --game-font: var(--font-chicago), "Chicago", "Geneva", Arial, sans-serif;
+    --ink-shadow: 3px 3px 0 var(--color-ink);
+    --ink-shadow-sm: 2px 2px 0 var(--color-ink);
 }
 
 html,
 body {
     height: 100%;
     overflow: hidden;
-    background: #000;
+    background: var(--color-fog);
+    color: var(--color-ink);
+    font-family: var(--font-chicago), "Chicago", "Geneva", system-ui,
+        sans-serif;
+}
+
+/* Halftone dot pattern overlay — subtle paper-print texture */
+.halftone {
+    background-image: radial-gradient(
+        circle at 1px 1px,
+        rgba(32, 32, 31, 0.1) 0.8px,
+        transparent 0
+    );
+    background-size: 8px 8px;
+}
+
+.halftone-strong {
+    background-image: radial-gradient(
+        circle at 1px 1px,
+        rgba(32, 32, 31, 0.18) 1px,
+        transparent 0
+    );
+    background-size: 6px 6px;
+}
+
+/* Paper grain — slightly warmer noise on light surfaces */
+.paper-grain {
+    background-color: var(--color-fog);
+    background-image:
+        radial-gradient(
+            circle at 25% 30%,
+            rgba(232, 90, 79, 0.06),
+            transparent 40%
+        ),
+        radial-gradient(
+            circle at 75% 70%,
+            rgba(74, 144, 164, 0.08),
+            transparent 45%
+        );
+}
+
+/* ----------------------------------------------------------------------------
+ * Comic outline + drop-shadow utilities
+ * --------------------------------------------------------------------------*/
+
+.comic-outline {
+    border: 2px solid var(--color-ink);
+    box-shadow: var(--ink-shadow);
+}
+
+.comic-outline-sm {
+    border: 1.5px solid var(--color-ink);
+    box-shadow: var(--ink-shadow-sm);
+}
+
+.comic-press {
+    transform: rotate(var(--tilt, 0deg));
+    transition: transform 90ms ease, box-shadow 90ms ease;
+}
+.comic-press:hover:not(:disabled) {
+    transform: rotate(var(--tilt, 0deg)) translate(-1px, -1px);
+    box-shadow: 4px 4px 0 var(--color-ink);
+}
+.comic-press:active:not(:disabled),
+.comic-press[data-pressed="true"] {
+    transform: rotate(var(--tilt, 0deg)) translate(3px, 3px);
+    box-shadow: 0 0 0 var(--color-ink);
+}
+
+/* Tilt utilities — no-op for non-button surfaces (kept for existing markup) */
+.comic-tilt-l,
+.comic-tilt-r {
+    transform: none;
+}
+
+/* Subtle alternating tilt for choice buttons.
+   Sets --tilt so .comic-press's rotate() picks it up and the press animation
+   composes the rotation with the translate. */
+.btn-tilt-l {
+    --tilt: -0.6deg;
+}
+.btn-tilt-r {
+    --tilt: 0.6deg;
+}
+
+/* ----------------------------------------------------------------------------
+ * Speech bubble — comic-style with tail
+ * --------------------------------------------------------------------------*/
+
+.speech-bubble {
+    position: relative;
+    background: var(--color-fog);
+    border: 2px solid var(--color-ink);
+    border-radius: 16px;
+    box-shadow: var(--ink-shadow);
+    color: var(--color-ink);
+}
+
+.speech-bubble::before,
+.speech-bubble::after {
+    content: "";
+    position: absolute;
+    bottom: -18px;
+    left: 44px;
+    width: 0;
+    height: 0;
+    border-style: solid;
+}
+
+/* Outer (black) tail */
+.speech-bubble::before {
+    border-width: 18px 14px 0 0;
+    border-color: var(--color-ink) transparent transparent transparent;
+}
+
+/* Inner (paper) tail — sits on top to give the outline an inner fill */
+.speech-bubble::after {
+    border-width: 14px 10px 0 0;
+    border-color: var(--color-fog) transparent transparent transparent;
+    bottom: -12px;
+    left: 46px;
+}
+
+/* ----------------------------------------------------------------------------
+ * Legacy frosted panel — kept around in case any view still uses it
+ * --------------------------------------------------------------------------*/
+.backdrop-panel {
+    backdrop-filter: blur(16px) saturate(1.4);
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .text-shadow-glow {
@@ -17,11 +179,9 @@ body {
         0 2px 8px rgba(0, 0, 0, 0.9);
 }
 
-.backdrop-panel {
-    backdrop-filter: blur(16px) saturate(1.4);
-    background: rgba(0, 0, 0, 0.55);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-}
+/* ----------------------------------------------------------------------------
+ * Animations
+ * --------------------------------------------------------------------------*/
 
 @keyframes fadeSlideUp {
     from {
@@ -36,13 +196,34 @@ body {
 
 @keyframes pulseGlow {
     0% {
-        box-shadow: 0 0 0px rgba(255, 255, 255, 0);
+        box-shadow: var(--ink-shadow);
     }
     50% {
-        box-shadow: 0 0 18px rgba(255, 255, 255, 0.25);
+        box-shadow: 4px 4px 0 var(--color-sunset);
     }
     100% {
-        box-shadow: 0 0 0px rgba(255, 255, 255, 0);
+        box-shadow: var(--ink-shadow);
+    }
+}
+
+@keyframes wobble {
+    0%,
+    100% {
+        transform: rotate(-0.4deg);
+    }
+    50% {
+        transform: rotate(0.4deg);
+    }
+}
+
+@keyframes bounceIn {
+    0% {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
     }
 }
 
@@ -51,5 +232,13 @@ body {
 }
 
 .animate-pulse-glow {
-    animation: pulseGlow 2s ease-in-out infinite;
+    animation: pulseGlow 1.2s ease-in-out infinite;
+}
+
+.animate-wobble {
+    animation: wobble 2.6s ease-in-out infinite;
+}
+
+.animate-bounce-in {
+    animation: bounceIn 0.4s ease-out both;
 }

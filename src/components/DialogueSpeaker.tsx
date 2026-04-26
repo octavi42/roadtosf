@@ -8,8 +8,8 @@ export interface DialogueSpeakerProps {
 }
 
 /**
- * Renders a speaker label that persists across same-speaker dialogue lines
- * and fades out → swaps → fades in only when the speaker actually changes.
+ * Comic-style nameplate. Persists across same-speaker lines and
+ * fades when the speaker changes.
  */
 export default function DialogueSpeaker({
   speaker,
@@ -35,16 +35,28 @@ export default function DialogueSpeaker({
   }, [speaker, displayed, fadeMs]);
 
   return (
-    <p
-      className="text-white/40 text-xs uppercase font-medium mb-2"
+    <div
+      className="mb-2 ml-4"
       style={{
-        letterSpacing: "0.18em",
         opacity: visible ? 1 : 0,
         transition: `opacity ${fadeMs}ms ease`,
-        minHeight: "1em",
+        minHeight: "1.5em",
       }}
     >
-      {displayed ?? " "}
-    </p>
+      {displayed && (
+        <span
+          className="comic-outline-sm inline-block px-3 py-1 rounded-md font-display uppercase comic-tilt-l"
+          style={{
+            background: "var(--color-mustard)",
+            color: "var(--color-ink)",
+            fontSize: "0.78rem",
+            fontWeight: 700,
+            letterSpacing: "0.12em",
+          }}
+        >
+          {displayed}
+        </span>
+      )}
+    </div>
   );
 }
