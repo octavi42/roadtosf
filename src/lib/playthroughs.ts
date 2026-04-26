@@ -96,18 +96,57 @@ export async function updatePlaythroughArc(id: string, arcJson: unknown): Promis
 export type MarkPaidInput = {
   id: string
   stripeSessionId: string
+  email?: string | null
 }
 
 export async function markPlaythroughPaid(
   input: MarkPaidInput,
 ): Promise<{ id: string; paid_at: string } | null> {
   const sql = getSql()
+  const email = input.email && input.email.length > 0 ? input.email : null
   const rows = await sql`
     UPDATE playthroughs SET
       is_paid = TRUE,
       paid_at = COALESCE(paid_at, NOW()),
-      stripe_session_id = ${input.stripeSessionId}
+      stripe_session_id = ${input.stripeSessionId},
+      email = COALESCE(email, ${email})
     WHERE id = ${input.id}
+    RETURNING id, paid_at
+  `
+  return (rows[0] as { id: string; paid_at: string } | undefined) ?? null
+}
+
+export async function hasPaidPlaythroughForEmail(email: string): Promise<boolean> {
+  const sql = getSql()
+  const rows = await sql`
+    SELECT 1
+    FROM playthroughs
+    WHERE LOWER(email) = LOWER(${email})
+      AND paid_at IS NOT NULL
+    LIMIT 1
+  `
+  return rows.length > 0
+}
+
+export type RedeemByEmailInput = {
+  playthroughId: string
+  email: string
+}
+
+export async function redeemPlaythroughByEmail(
+  input: RedeemByEmailInput,
+): Promise<{ id: string; paid_at: string } | null> {
+  const sql = getSql()
+  // Two-step (Neon HTTP doesn't expose transactions): confirm a prior paid
+  // row exists for this email, then flip the current playthrough.
+  const found = await hasPaidPlaythroughForEmail(input.email)
+  if (!found) return null
+  const rows = await sql`
+    UPDATE playthroughs SET
+      is_paid = TRUE,
+      paid_at = COALESCE(paid_at, NOW()),
+      email = COALESCE(email, ${input.email})
+    WHERE id = ${input.playthroughId}
     RETURNING id, paid_at
   `
   return (rows[0] as { id: string; paid_at: string } | undefined) ?? null
