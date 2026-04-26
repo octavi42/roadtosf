@@ -13,12 +13,14 @@ import DialogueSpeaker from "@/components/DialogueSpeaker";
 // Types
 // ---------------------------------------------------------------------------
 
-type Phase = "api-keys" | "intro" | "generating" | "scene" | "ending";
+type Phase = "intro" | "scene" | "ending";
 
-interface ApiKeys {
-  openaiKey: string;
-  elevenlabsKey: string;
-}
+type IntroFrame =
+  | "departure"
+  | "ticket"
+  | "bar"
+  | "boarding"
+  | "arrival";
 
 interface DialogueLine {
   speaker: string;
@@ -40,6 +42,23 @@ interface SceneData {
 }
 
 type EndingKey = "ipo" | "indicted" | "ai-wrapper" | "acquihire" | "ghosted";
+
+// ---------------------------------------------------------------------------
+// Intro frame backgrounds
+// ---------------------------------------------------------------------------
+
+const INTRO_BG: Record<IntroFrame, string> = {
+  departure: "/intro-v2/01-departure-board.png",
+  ticket: "/intro-v2/02-ticket-counter.png",
+  bar: "/intro-v2/03-airport-bar.png",
+  boarding: "/intro-v2/04-boarding-pass.png",
+  arrival: "/intro-v2/05-sfo-arrival.png",
+};
+
+// Minimum hold for the arrival frame even if downstream generation is fast,
+// so the cinematic always plays. Frame 5 is a curtain over the ~5s arc-LLM
+// call we'll add later — until then, the timer just paces the cut.
+const ARRIVAL_MIN_MS = 4200;
 
 // ---------------------------------------------------------------------------
 // Prescripted story — Wagr (Venmo for sports bets between friends)
@@ -238,8 +257,14 @@ const ENDING_COPY: Record<
 // ---------------------------------------------------------------------------
 
 export default function HomePage() {
-  const [phase, setPhase] = useState<Phase>("api-keys");
+  const [phase, setPhase] = useState<Phase>("intro");
+  const [introFrame, setIntroFrame] = useState<IntroFrame>("departure");
   const [isMuted, setIsMuted] = useState(false);
+
+  // Captured during the bar conversation. Currently just stored locally;
+  // a follow-up PR will pipe it through an LLM extractor for startup name,
+  // self-description register, and silent flavor tags.
+  const [, setPlayerInput] = useState<string>("");
 
   // Story state
   const [sceneIndex, setSceneIndex] = useState(0);
@@ -248,24 +273,48 @@ export default function HomePage() {
   const [integrity, setIntegrity] = useState(0);
   const [ending, setEnding] = useState<EndingKey | null>(null);
 
-  // Dialogue playback state
+  // Dialogue playback state (scene phase)
   const [currentLineIndex, setCurrentLineIndex] = useState(0);
   const [showChoices, setShowChoices] = useState(false);
   const [choiceMade, setChoiceMade] = useState<string | null>(null);
   const onCompleteCalledRef = useRef(false);
 
   // -------------------------------------------------------------------------
-  // Dev: skip API key panel when .env.local keys are present
+  // Dev: skip ticket frame when keys are already present
+  //
+  // Two sources count: (1) env vars on the dev server (/api/dev-keys), and
+  // (2) localStorage from a prior session. Either skips straight past the
+  // ticket frame so the player isn't asked for keys they've already given.
   // -------------------------------------------------------------------------
 
+  const [hasKeys, setHasKeys] = useState(false);
+
   useEffect(() => {
-    if (process.env.NODE_ENV !== "development") return;
-    fetch("/api/dev-keys")
-      .then((r) => r.json())
-      .then((data: { skip: boolean }) => {
-        if (data.skip) setPhase("intro");
-      })
-      .catch(() => {});
+    let cancelled = false;
+
+    const check = async () => {
+      if (typeof window !== "undefined") {
+        const a = localStorage.getItem("rtsf_openai_key");
+        const b = localStorage.getItem("rtsf_elevenlabs_key");
+        if (a && b) {
+          if (!cancelled) setHasKeys(true);
+          return;
+        }
+      }
+      if (process.env.NODE_ENV !== "development") return;
+      try {
+        const r = await fetch("/api/dev-keys");
+        const data = (await r.json()) as { skip: boolean };
+        if (data.skip && !cancelled) setHasKeys(true);
+      } catch {
+        /* ignore */
+      }
+    };
+
+    void check();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // -------------------------------------------------------------------------
@@ -281,18 +330,56 @@ export default function HomePage() {
   }, [phase, sceneIndex]);
 
   // -------------------------------------------------------------------------
-  // Handlers
+  // Arrival frame: minimum-hold timer before cutting to scene 1
   // -------------------------------------------------------------------------
 
-  const handleKeysConfirmed = useCallback((_keys: ApiKeys) => {
-    setPhase("intro");
+  useEffect(() => {
+    if (phase !== "intro" || introFrame !== "arrival") return;
+    const id = setTimeout(() => {
+      setPhase("scene");
+    }, ARRIVAL_MIN_MS);
+    return () => clearTimeout(id);
+  }, [phase, introFrame]);
+
+  // -------------------------------------------------------------------------
+  // Intro handlers
+  // -------------------------------------------------------------------------
+
+  const advanceIntro = useCallback(
+    (next: IntroFrame) => {
+      // If the player already has keys on file, walk past the ticket frame.
+      if (next === "ticket" && hasKeys) {
+        setIntroFrame("bar");
+        return;
+      }
+      setIntroFrame(next);
+    },
+    [hasKeys],
+  );
+
+  const handleKeysConfirmed = useCallback(() => {
+    setHasKeys(true);
+    setIntroFrame("bar");
+  }, []);
+
+  const handleBarSubmit = useCallback((text: string) => {
+    setPlayerInput(text);
+    // TODO: pipe `text` to LLM extractor for startup + self-description tags.
+    setIntroFrame("boarding");
+  }, []);
+
+  const handleSkipIntro = useCallback(() => {
+    setPhase("scene");
   }, []);
 
   const handleMuteToggle = useCallback(() => {
     setIsMuted((prev) => !prev);
   }, []);
 
-  // Called when each dialogue line finishes animating
+  // -------------------------------------------------------------------------
+  // Scene handlers
+  // -------------------------------------------------------------------------
+
   const handleLineComplete = useCallback(() => {
     if (onCompleteCalledRef.current) return;
 
@@ -308,13 +395,11 @@ export default function HomePage() {
     });
   }, [sceneIndex]);
 
-  // Called when the player picks a choice
   const handleChoice = useCallback(
     (choiceId: string) => {
       const scene = SCENES[sceneIndex];
       const choice = scene.choices.find((c) => c.id === choiceId);
 
-      // Apply stat deltas
       const dHype = choice?.hype ?? 0;
       const dIntegrity = choice?.integrity ?? 0;
       const nextHype = hype + dHype;
@@ -325,16 +410,13 @@ export default function HomePage() {
       setChoiceHistory((prev) => [...prev, `scene${scene.id}:${choiceId}`]);
       setChoiceMade(choiceId);
 
-      // Brief pause so the selected button state is visible, then advance
       setTimeout(() => {
         const nextSceneIndex = sceneIndex + 1;
         if (nextSceneIndex >= SCENES.length) {
-          // All scenes done — classify ending
           setEnding(classifyEnding(nextHype, nextIntegrity));
           setPhase("ending");
         } else {
           setSceneIndex(nextSceneIndex);
-          // Reset for next scene (useEffect will also fire but belt+suspenders)
           setCurrentLineIndex(0);
           setShowChoices(false);
           setChoiceMade(null);
@@ -348,14 +430,20 @@ export default function HomePage() {
   const handleTextSubmit = useCallback(
     (text: string) => {
       console.log("[counter-offer]", text);
-      // Scene 3 counter-offer: classify as "walk" for now (integrity boost)
       handleChoice("b");
     },
     [handleChoice],
   );
 
   // -------------------------------------------------------------------------
-  // Derived slots
+  // Background
+  // -------------------------------------------------------------------------
+
+  const backgroundSrc =
+    phase === "intro" ? INTRO_BG[introFrame] : INTRO_BG.ticket;
+
+  // -------------------------------------------------------------------------
+  // Slots
   // -------------------------------------------------------------------------
 
   const muteButton = (
@@ -365,61 +453,102 @@ export default function HomePage() {
   const currentScene = SCENES[sceneIndex] ?? null;
   const currentLine = currentScene?.dialogue[currentLineIndex] ?? null;
 
-  const dialogueSlot =
-    phase === "scene" && currentLine ? (
-      <div className="w-full max-w-2xl mx-auto px-2 select-none">
-        <DialogueSpeaker
-          speaker={showChoices ? undefined : currentLine.speaker}
-        />
-        {!showChoices && (
-          <DialogueSubtitle
-            key={`scene${sceneIndex}-line${currentLineIndex}`}
-            text={currentLine.text}
-            wordInterval={110}
-            onComplete={handleLineComplete}
-          />
-        )}
-      </div>
-    ) : null;
-
-  const bottomPanel = (() => {
-    if (phase !== "scene" || !showChoices) return null;
-
-    // Scene 3 gets an extra free-text counter-offer option
-    if (currentScene?.id === 3 && !isMuted) {
+  const dialogueSlot = (() => {
+    if (phase === "scene" && currentLine) {
       return (
-        <div className="flex flex-col gap-3">
-          <ChoicePanel
-            choices={currentScene.choices}
-            onChoice={handleChoice}
-            disabled={choiceMade !== null}
+        <div className="w-full max-w-2xl mx-auto px-2 select-none">
+          <DialogueSpeaker
+            speaker={showChoices ? undefined : currentLine.speaker}
           />
-          <TextInputPanel
-            placeholder="Counter-offer… (e.g. Keep Maya, drop the clause)"
-            onSubmit={handleTextSubmit}
-            disabled={choiceMade !== null}
+          {!showChoices && (
+            <DialogueSubtitle
+              key={`scene${sceneIndex}-line${currentLineIndex}`}
+              text={currentLine.text}
+              wordInterval={110}
+              onComplete={handleLineComplete}
+            />
+          )}
+        </div>
+      );
+    }
+
+    if (phase === "intro" && introFrame === "ticket") {
+      return (
+        <div className="w-full max-w-2xl mx-auto px-2 select-none">
+          <DialogueSpeaker speaker="Counter Agent" />
+          <DialogueSubtitle
+            key="ticket-line"
+            text="That'll be your OpenAI key and your ElevenLabs key. House policy — we don't store them."
+            wordInterval={70}
           />
         </div>
       );
     }
 
-    if (isMuted) {
+    if (phase === "intro" && introFrame === "bar") {
       return (
-        <TextInputPanel
-          placeholder="Type your response…"
-          onSubmit={handleTextSubmit}
+        <div className="w-full max-w-2xl mx-auto px-2 select-none">
+          <DialogueSpeaker speaker="Bartender" />
+          <DialogueSubtitle
+            key="bar-line"
+            text="First time to SF? What's bringing you out?"
+            wordInterval={80}
+          />
+        </div>
+      );
+    }
+
+    return null;
+  })();
+
+  const bottomPanel = (() => {
+    if (phase === "scene" && showChoices) {
+      if (currentScene?.id === 3 && !isMuted) {
+        return (
+          <div className="flex flex-col gap-3">
+            <ChoicePanel
+              choices={currentScene.choices}
+              onChoice={handleChoice}
+              disabled={choiceMade !== null}
+            />
+            <TextInputPanel
+              placeholder="Counter-offer… (e.g. Keep Maya, drop the clause)"
+              onSubmit={handleTextSubmit}
+              disabled={choiceMade !== null}
+            />
+          </div>
+        );
+      }
+
+      if (isMuted) {
+        return (
+          <TextInputPanel
+            placeholder="Type your response…"
+            onSubmit={handleTextSubmit}
+            disabled={choiceMade !== null}
+          />
+        );
+      }
+
+      return (
+        <ChoicePanel
+          choices={currentScene?.choices ?? []}
+          onChoice={handleChoice}
           disabled={choiceMade !== null}
         />
       );
     }
 
-    return (
-      <ChoicePanel
-        choices={currentScene?.choices ?? []}
-        onChoice={handleChoice}
-        disabled={choiceMade !== null}
-      />
-    );
+    if (phase === "intro" && introFrame === "bar") {
+      return (
+        <TextInputPanel
+          placeholder="Tell the bartender what's on your mind…"
+          onSubmit={handleBarSubmit}
+        />
+      );
+    }
+
+    return null;
   })();
 
   // -------------------------------------------------------------------------
@@ -427,132 +556,156 @@ export default function HomePage() {
   // -------------------------------------------------------------------------
 
   const centerContent = (() => {
-    switch (phase) {
-      case "api-keys":
-        return null;
-
-      case "intro":
-        return (
-          <div className="backdrop-panel animate-fade-slide-up rounded-2xl p-8 max-w-md w-full text-center flex flex-col gap-4">
-            <p className="text-amber-400 text-xs font-semibold tracking-widest uppercase">
-              SFO → Your Future
-            </p>
-            <h1 className="text-white text-2xl font-semibold leading-snug">
-              Your flight to SFO
-              <br />
-              departs in 6 hours.
-            </h1>
-            <p className="text-white/50 text-sm leading-relaxed">
-              You&apos;re the founder of{" "}
-              <span className="text-white font-medium">Wagr</span> — Venmo for
-              sports bets between friends. Ex-Stripe. First-time founder. Your
-              co-founder is already texting.
-            </p>
-            <button
-              onClick={() => setPhase("generating")}
-              className="mt-2 w-full bg-white text-black font-semibold rounded-lg py-3 hover:bg-white/90 transition-colors text-sm"
-            >
-              Board the flight →
-            </button>
-          </div>
-        );
-
-      case "generating":
-        return (
-          <div className="backdrop-panel animate-fade-slide-up rounded-2xl p-8 max-w-sm w-full text-center flex flex-col gap-3">
-            <div className="flex justify-center gap-1.5 mb-2">
-              {[0, 1, 2].map((i) => (
-                <span
-                  key={i}
-                  className="w-2 h-2 rounded-full bg-white/40 animate-pulse"
-                  style={{ animationDelay: `${i * 0.2}s` }}
-                />
-              ))}
+    if (phase === "intro") {
+      switch (introFrame) {
+        case "departure":
+          return (
+            <div className="backdrop-panel animate-fade-slide-up rounded-2xl p-8 max-w-md w-full text-center flex flex-col gap-4">
+              <p className="text-amber-400 text-xs font-semibold tracking-widest uppercase">
+                Gate B12 · Boarding 06:00
+              </p>
+              <h1 className="text-white text-2xl font-semibold leading-snug">
+                Your flight to SFO
+                <br />
+                departs in six hours.
+              </h1>
+              <DialogueSubtitle
+                key="departure-line"
+                text="One-way ticket. You've been planning this for months."
+                wordInterval={90}
+                onComplete={() => advanceIntro("ticket")}
+              />
             </div>
-            <p className="text-white/60 text-sm leading-relaxed">
-              You just landed at SFO.
-              <br />
-              Your co-founder is already texting.
-            </p>
-            <button
-              onClick={() => setPhase("scene")}
-              className="mt-4 text-white/30 hover:text-white/60 text-xs underline transition-colors"
-            >
-              Enter →
-            </button>
-          </div>
-        );
+          );
 
-      case "scene":
-        return (
-          <div className="absolute top-16 left-6">
-            <p
-              className="text-white/30 text-xs font-semibold tracking-widest uppercase"
-              style={{ letterSpacing: "0.18em" }}
-            >
-              {currentScene?.title ?? ""}
-            </p>
-          </div>
-        );
+        case "ticket":
+          return <ApiKeysPanel onConfirm={handleKeysConfirmed} />;
 
-      case "ending": {
-        const e = ending ? ENDING_COPY[ending] : null;
-        return (
-          <div className="backdrop-panel animate-fade-slide-up rounded-2xl p-8 max-w-md w-full text-center flex flex-col gap-5">
-            <p className="text-white/40 text-xs font-semibold tracking-widest uppercase">
-              Your ending
-            </p>
-            <h2
-              className={`text-3xl font-bold tracking-tight ${e?.color ?? "text-white"}`}
-            >
-              {e?.label ?? "UNKNOWN"}
-            </h2>
-            <p className="text-white/60 text-sm leading-relaxed">
-              {e?.subtitle}
-            </p>
-            <div className="border-t border-white/10 pt-4 flex flex-col gap-1 text-xs text-white/30">
-              <span>
-                Hype {hype > 0 ? "+" : ""}
-                {hype} · Integrity {integrity > 0 ? "+" : ""}
-                {integrity}
-              </span>
-              <span>{choiceHistory.length} choices made</span>
+        case "bar":
+          // Center is empty — the bartender's line is in dialogueSlot, the
+          // textarea is in bottomPanel. The bar scene IS the conversation.
+          return null;
+
+        case "boarding":
+          return (
+            <div className="backdrop-panel animate-fade-slide-up rounded-2xl p-8 max-w-md w-full text-center flex flex-col gap-3">
+              <p className="text-amber-400 text-xs font-semibold tracking-widest uppercase">
+                SFO · Now boarding
+              </p>
+              <DialogueSubtitle
+                key="boarding-line"
+                text="Ticket purchased. The plane is waiting."
+                wordInterval={95}
+                onComplete={() => advanceIntro("arrival")}
+              />
             </div>
-            <button
-              onClick={() => {
-                setSceneIndex(0);
-                setChoiceHistory([]);
-                setHype(0);
-                setIntegrity(0);
-                setEnding(null);
-                setPhase("intro");
-              }}
-              className="mt-2 w-full border border-white/20 text-white/70 font-medium rounded-lg py-3 hover:bg-white/5 transition-colors text-sm"
-            >
-              Play again →
-            </button>
-          </div>
-        );
+          );
+
+        case "arrival":
+          return (
+            <div className="backdrop-panel animate-fade-slide-up rounded-2xl p-8 max-w-md w-full text-center flex flex-col gap-4">
+              <div
+                className="flex justify-center gap-1.5"
+                aria-label="Incoming message"
+              >
+                {[0, 1, 2].map((i) => (
+                  <span
+                    key={i}
+                    className="w-2 h-2 rounded-full bg-white/60 animate-pulse"
+                    style={{ animationDelay: `${i * 0.18}s` }}
+                  />
+                ))}
+              </div>
+              <DialogueSubtitle
+                key="arrival-line"
+                text="You just landed at SFO. Your co-founder is already texting."
+                wordInterval={95}
+              />
+            </div>
+          );
       }
     }
+
+    if (phase === "scene") {
+      return (
+        <div className="absolute top-16 left-6">
+          <p
+            className="text-white/30 text-xs font-semibold tracking-widest uppercase"
+            style={{ letterSpacing: "0.18em" }}
+          >
+            {currentScene?.title ?? ""}
+          </p>
+        </div>
+      );
+    }
+
+    if (phase === "ending") {
+      const e = ending ? ENDING_COPY[ending] : null;
+      return (
+        <div className="backdrop-panel animate-fade-slide-up rounded-2xl p-8 max-w-md w-full text-center flex flex-col gap-5">
+          <p className="text-white/40 text-xs font-semibold tracking-widest uppercase">
+            Your ending
+          </p>
+          <h2
+            className={`text-3xl font-bold tracking-tight ${e?.color ?? "text-white"}`}
+          >
+            {e?.label ?? "UNKNOWN"}
+          </h2>
+          <p className="text-white/60 text-sm leading-relaxed">{e?.subtitle}</p>
+          <div className="border-t border-white/10 pt-4 flex flex-col gap-1 text-xs text-white/30">
+            <span>
+              Hype {hype > 0 ? "+" : ""}
+              {hype} · Integrity {integrity > 0 ? "+" : ""}
+              {integrity}
+            </span>
+            <span>{choiceHistory.length} choices made</span>
+          </div>
+          <button
+            onClick={() => {
+              setSceneIndex(0);
+              setChoiceHistory([]);
+              setHype(0);
+              setIntegrity(0);
+              setEnding(null);
+              setIntroFrame("departure");
+              setPhase("intro");
+            }}
+            className="mt-2 w-full border border-white/20 text-white/70 font-medium rounded-lg py-3 hover:bg-white/5 transition-colors text-sm"
+          >
+            Play again →
+          </button>
+        </div>
+      );
+    }
+
+    return null;
   })();
+
+  // Skip is hidden during the bar frame so a stray click doesn't
+  // wipe out the player's in-progress conversation.
+  const showSkip = phase === "intro" && introFrame !== "bar";
 
   // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
 
   return (
-    <>
-      {phase === "api-keys" && <ApiKeysPanel onConfirm={handleKeysConfirmed} />}
-
-      <GameShell
-        backgroundSrc="/intro-v2/01-departure-board.png"
-        muteButton={muteButton}
-        dialogueSlot={dialogueSlot}
-        bottomPanel={bottomPanel}
-      >
-        {centerContent}
-      </GameShell>
-    </>
+    <GameShell
+      backgroundSrc={backgroundSrc}
+      muteButton={muteButton}
+      dialogueSlot={dialogueSlot}
+      bottomPanel={bottomPanel}
+    >
+      {centerContent}
+      {showSkip && (
+        <button
+          onClick={handleSkipIntro}
+          className="fixed bottom-6 right-6 text-white/25 hover:text-white/70 text-xs tracking-widest uppercase transition-colors z-20"
+          style={{ letterSpacing: "0.18em" }}
+        >
+          Skip intro →
+        </button>
+      )}
+    </GameShell>
   );
 }
