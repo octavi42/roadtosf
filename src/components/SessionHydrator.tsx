@@ -24,15 +24,19 @@ function readDevOverride(): DevOverride | null {
 
 export default function SessionHydrator() {
   useEffect(() => {
-    // Apply dev override BEFORE rehydrate so the page's first paint
-    // (gated on hasHydrated) lands on the pinned phase, no flicker.
     const override = readDevOverride();
     if (override) {
       useSessionStore
         .getState()
         .devSetPhase(override.phase, override.sceneIndex);
     }
-    useSessionStore.persist.rehydrate();
+    void Promise.resolve(useSessionStore.persist.rehydrate()).then(() => {
+      if (override) {
+        useSessionStore
+          .getState()
+          .devSetPhase(override.phase, override.sceneIndex);
+      }
+    });
   }, []);
   return null;
 }

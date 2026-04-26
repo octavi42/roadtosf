@@ -3,22 +3,18 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { GameShell } from "@/components/GameShell";
-import ApiKeysPanel from "@/components/ApiKeysPanel";
 import ChoicePanel from "@/components/ChoicePanel";
 import TextInputPanel from "@/components/TextInputPanel";
 import DialogueSubtitle from "@/components/DialogueSubtitle";
 import DialogueSpeaker from "@/components/DialogueSpeaker";
+import OnboardingPanel from "@/components/OnboardingPanel";
+import PaywallPanel from "@/components/PaywallPanel";
 import { useSessionStore } from "@/lib/session";
 import type { EndingKey } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-interface ApiKeys {
-  openaiKey: string;
-  elevenlabsKey: string;
-}
 
 interface DialogueLine {
   speaker: string;
@@ -38,6 +34,25 @@ interface SceneData {
   dialogue: DialogueLine[];
   choices: Choice[];
 }
+
+// ---------------------------------------------------------------------------
+// Welcome narration — host explains the game over a static SF backdrop
+// ---------------------------------------------------------------------------
+
+const WELCOME_LINES = [
+  "Welcome. You've just landed in San Francisco.",
+  "Five scenes. Five timed choices. Twelve endings.",
+  "What happens next is up to you.",
+];
+
+const WELCOME_BACKGROUND = "/intro-v2/05-sfo-arrival.png";
+
+const ONBOARDING_LINES = [
+  "Now then.",
+  "Tell me about your startup.",
+];
+
+const ONBOARDING_BACKGROUND = "/intro-v2/03-airport-bar.png";
 
 // ---------------------------------------------------------------------------
 // Prescripted story — Wagr (Venmo for sports bets between friends)
@@ -230,12 +245,13 @@ export default function HomePage() {
   const ending = useSessionStore((s) => s.ending);
   const historyCount = useSessionStore((s) => s.history.length);
   const playthroughId = useSessionStore((s) => s.playthroughId);
+  const startupName = useSessionStore((s) => s.intro.startupName);
 
   const {
     setPlaythroughId,
-    keysConfirmed,
+    welcomeStarted,
     introSubmitted,
-    enterScenes,
+    paywallSatisfied,
     advanceLine,
     chooseOption,
     advanceScene,
@@ -243,9 +259,9 @@ export default function HomePage() {
   } = useSessionStore(
     useShallow((s) => ({
       setPlaythroughId: s.setPlaythroughId,
-      keysConfirmed: s.keysConfirmed,
+      welcomeStarted: s.welcomeStarted,
       introSubmitted: s.introSubmitted,
-      enterScenes: s.enterScenes,
+      paywallSatisfied: s.paywallSatisfied,
       advanceLine: s.advanceLine,
       chooseOption: s.chooseOption,
       advanceScene: s.advanceScene,
@@ -253,21 +269,39 @@ export default function HomePage() {
     })),
   );
 
-  // -------------------------------------------------------------------------
-  // Dev: skip API key panel when .env.local keys are present
-  // -------------------------------------------------------------------------
+  const [welcomeLineIndex, setWelcomeLineIndex] = useState(0);
+  const [welcomeDone, setWelcomeDone] = useState(false);
+  const welcomeCompleteRef = useRef(false);
 
-  useEffect(() => {
-    if (!hasHydrated) return;
-    if (process.env.NODE_ENV !== "development") return;
-    if (phase !== "api-keys") return;
-    fetch("/api/dev-keys")
-      .then((r) => r.json())
-      .then((data: { skip: boolean }) => {
-        if (data.skip) keysConfirmed();
-      })
-      .catch(() => {});
-  }, [hasHydrated, phase, keysConfirmed]);
+  const handleWelcomeLineComplete = useCallback(() => {
+    if (welcomeCompleteRef.current) return;
+    setWelcomeLineIndex((prev) => {
+      const next = prev + 1;
+      if (next >= WELCOME_LINES.length) {
+        welcomeCompleteRef.current = true;
+        setWelcomeDone(true);
+        return prev;
+      }
+      return next;
+    });
+  }, []);
+
+  const [onboardingLineIndex, setOnboardingLineIndex] = useState(0);
+  const [onboardingNarrationDone, setOnboardingNarrationDone] = useState(false);
+  const onboardingNarrationCompleteRef = useRef(false);
+
+  const handleOnboardingLineComplete = useCallback(() => {
+    if (onboardingNarrationCompleteRef.current) return;
+    setOnboardingLineIndex((prev) => {
+      const next = prev + 1;
+      if (next >= ONBOARDING_LINES.length) {
+        onboardingNarrationCompleteRef.current = true;
+        setOnboardingNarrationDone(true);
+        return prev;
+      }
+      return next;
+    });
+  }, []);
 
   // -------------------------------------------------------------------------
   // DB capture
@@ -310,40 +344,47 @@ export default function HomePage() {
   // Handlers
   // -------------------------------------------------------------------------
 
-  const handleKeysConfirmed = useCallback(
-    (_keys: ApiKeys) => {
-      keysConfirmed();
-    },
-    [keysConfirmed],
-  );
-
-  const handleIntroSubmit = useCallback(() => {
-    const startupName = "Wagr";
-    const startupDescription = "Venmo for sports bets between friends";
-    setPlaythroughId(undefined);
-    introSubmitted("", { startupName, startupDescription });
-    fetch("/api/playthroughs", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        startupName,
-        startupDescription,
-        flavorTags: [],
-        introTranscript: "",
-      }),
-    })
-      .then((r) => r.json())
-      .then((data: { id?: string }) => {
-        if (data.id) setPlaythroughId(data.id);
+  const handleOnboardingSubmit = useCallback(
+    (transcript: string) => {
+      setPlaythroughId(undefined);
+      introSubmitted(transcript);
+      fetch("/api/playthroughs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          flavorTags: [],
+          introTranscript: transcript,
+        }),
       })
-      .catch((err) => console.error("createPlaythrough failed", err));
-  }, [introSubmitted, setPlaythroughId]);
+        .then((r) => r.json())
+        .then((data: { id?: string }) => {
+          if (data.id) setPlaythroughId(data.id);
+        })
+        .catch((err) => console.error("createPlaythrough failed", err));
+    },
+    [introSubmitted, setPlaythroughId],
+  );
 
   const handleLineComplete = useCallback(() => {
     const scene = SCENES[sceneIndex];
     if (!scene) return;
     advanceLine(scene.dialogue.length);
   }, [sceneIndex, advanceLine]);
+
+  const handleShareX = useCallback(() => {
+    if (!ending) return;
+    const copy = ENDING_COPY[ending.key];
+    const story = ending.epilogue ?? copy.subtitle;
+    const headline = startupName
+      ? `Built ${startupName} in San Francisco. Got: ${copy.label}.`
+      : `San Francisco didn't go as planned. Got: ${copy.label}.`;
+    const text = `${story}\n\n${headline}\nTry yours →`;
+    const url = window.location.origin;
+    const intent = `https://twitter.com/intent/tweet?text=${encodeURIComponent(
+      text,
+    )}&url=${encodeURIComponent(url)}`;
+    window.open(intent, "_blank", "noopener,noreferrer");
+  }, [ending, startupName]);
 
   const handleChoice = useCallback(
     (choiceId: string, freeText?: string) => {
@@ -400,24 +441,75 @@ export default function HomePage() {
   const currentScene = SCENES[sceneIndex] ?? null;
   const currentLine = currentScene?.dialogue[currentLineIndex] ?? null;
 
-  const dialogueSlot =
-    phase === "scene" && currentLine ? (
-      <div className="w-full max-w-2xl mx-auto px-2 select-none">
-        <DialogueSpeaker
-          speaker={showChoices ? undefined : currentLine.speaker}
-        />
-        {!showChoices && (
+  const dialogueSlot = (() => {
+    if (phase === "welcome" && !welcomeDone) {
+      return (
+        <div className="w-full max-w-2xl mx-auto px-2 select-none">
+          <DialogueSpeaker speaker={undefined} />
           <DialogueSubtitle
-            key={`scene${sceneIndex}-line${currentLineIndex}`}
-            text={currentLine.text}
-            wordInterval={110}
-            onComplete={handleLineComplete}
+            key={`welcome-line${welcomeLineIndex}`}
+            text={WELCOME_LINES[welcomeLineIndex]}
+            wordInterval={100}
+            onComplete={handleWelcomeLineComplete}
           />
-        )}
-      </div>
-    ) : null;
+        </div>
+      );
+    }
+
+    if (phase === "onboarding" && !onboardingNarrationDone) {
+      return (
+        <div className="w-full max-w-2xl mx-auto px-2 select-none">
+          <DialogueSpeaker speaker={undefined} />
+          <DialogueSubtitle
+            key={`onboarding-line${onboardingLineIndex}`}
+            text={ONBOARDING_LINES[onboardingLineIndex]}
+            wordInterval={110}
+            onComplete={handleOnboardingLineComplete}
+          />
+        </div>
+      );
+    }
+
+    if (phase === "scene" && currentLine) {
+      return (
+        <div className="w-full max-w-2xl mx-auto px-2 select-none">
+          <DialogueSpeaker
+            speaker={showChoices ? undefined : currentLine.speaker}
+          />
+          {!showChoices && (
+            <DialogueSubtitle
+              key={`scene${sceneIndex}-line${currentLineIndex}`}
+              text={currentLine.text}
+              wordInterval={110}
+              onComplete={handleLineComplete}
+            />
+          )}
+        </div>
+      );
+    }
+
+    return null;
+  })();
 
   const bottomPanel = (() => {
+    if (phase === "welcome") {
+      if (!welcomeDone) return null;
+      return (
+        <div className="w-full max-w-md mx-auto animate-bounce-in">
+          <button
+            onClick={() => welcomeStarted()}
+            className="comic-outline comic-press font-sans font-semibold w-full rounded-xl py-3 text-base text-[var(--color-ink)]"
+            style={{
+              background: "var(--color-sunset)",
+              letterSpacing: "-0.005em",
+            }}
+          >
+            Start →
+          </button>
+        </div>
+      );
+    }
+
     if (phase !== "scene" || !showChoices) return null;
 
     // Scene 3 gets an extra free-text counter-offer option
@@ -453,97 +545,23 @@ export default function HomePage() {
 
   const centerContent = (() => {
     switch (phase) {
-      case "api-keys":
+      case "welcome":
         return null;
 
-      case "intro":
-        return (
-          <div
-            className="comic-outline animate-bounce-in rounded-2xl p-8 max-w-md w-full text-center flex flex-col gap-4"
-            style={{ background: "var(--color-fog)" }}
-          >
-            <p
-              className="font-display uppercase font-bold inline-block self-center comic-outline-sm comic-tilt-l rounded-md px-3 py-1"
-              style={{
-                background: "var(--color-mustard)",
-                color: "var(--color-ink)",
-                fontSize: "0.78rem",
-                letterSpacing: "0.18em",
-              }}
-            >
-              SFO → Your Future
-            </p>
-            <h1
-              className="font-sans text-[var(--color-ink)] text-3xl font-bold leading-tight"
-              style={{ letterSpacing: "-0.02em" }}
-            >
-              Your flight to SFO
-              <br />
-              departs in 6 hours.
-            </h1>
-            <p className="font-sans text-[var(--color-ink)]/70 text-sm leading-relaxed">
-              You&apos;re the founder of{" "}
-              <span className="font-sans font-bold text-[var(--color-cable)]">
-                Wagr
-              </span>{" "}
-              — Venmo for sports bets between friends. Ex-Stripe. First-time
-              founder. Your co-founder is already texting.
-            </p>
-            <button
-              onClick={handleIntroSubmit}
-              className="comic-outline comic-press font-sans font-semibold mt-2 w-full rounded-xl py-3 text-base text-[var(--color-ink)]"
-              style={{
-                background: "var(--color-sunset)",
-                letterSpacing: "-0.005em",
-              }}
-            >
-              Board the flight →
-            </button>
-          </div>
-        );
+      case "paywall":
+        return null;
 
-      case "generating":
+      case "onboarding":
+        if (!onboardingNarrationDone) return null;
         return (
-          <div
-            className="comic-outline animate-bounce-in rounded-2xl p-8 max-w-sm w-full text-center flex flex-col gap-3"
-            style={{ background: "var(--color-fog)" }}
-          >
-            <div className="flex justify-center gap-2 mb-2">
-              {[0, 1, 2].map((i) => (
-                <span
-                  key={i}
-                  className="w-3 h-3 rounded-full animate-pulse"
-                  style={{
-                    background: "var(--color-cable)",
-                    border: "2px solid var(--color-ink)",
-                    animationDelay: `${i * 0.2}s`,
-                  }}
-                />
-              ))}
-            </div>
-            <p
-              className="font-sans text-[var(--color-ink)] text-xl leading-snug font-bold"
-              style={{ letterSpacing: "-0.015em" }}
-            >
-              You just landed at SFO.
-            </p>
-            <p className="font-sans text-[var(--color-ink)]/70 text-sm leading-relaxed">
-              Your co-founder is already texting.
-            </p>
-            <button
-              onClick={() => enterScenes()}
-              className="font-pixel mt-4 text-[var(--color-ink)]/60 hover:text-[var(--color-cable)] text-base underline transition-colors"
-            >
-              Enter →
-            </button>
-          </div>
+          <OnboardingPanel onSubmit={handleOnboardingSubmit} />
         );
 
       case "scene":
         return (
           <div className="absolute top-16 left-6">
             <span
-              className="comic-outline-sm comic-tilt-l font-display uppercase font-bold inline-block px-3 py-1 rounded-md"
+              className="comic-outline-sm font-display uppercase font-bold inline-block px-3 py-1 rounded-md"
               style={{
                 background: "var(--color-fog)",
                 color: "var(--color-ink)",
@@ -564,7 +582,7 @@ export default function HomePage() {
             style={{ background: "var(--color-fog)" }}
           >
             <p
-              className="font-display uppercase font-bold inline-block self-center comic-outline-sm comic-tilt-r rounded-md px-3 py-1"
+              className="font-display uppercase font-bold inline-block self-center comic-outline-sm rounded-md px-3 py-1"
               style={{
                 background: "var(--color-mustard)",
                 color: "var(--color-ink)",
@@ -597,16 +615,28 @@ export default function HomePage() {
               </span>
               <span>{historyCount} choices made</span>
             </div>
-            <button
-              onClick={() => reset()}
-              className="comic-outline comic-press font-sans font-semibold mt-2 w-full rounded-xl py-3 text-base text-[var(--color-ink)]"
-              style={{
-                background: "var(--color-mint)",
-                letterSpacing: "-0.005em",
-              }}
-            >
-              Play again →
-            </button>
+            <div className="mt-2 flex flex-col gap-2">
+              <button
+                onClick={handleShareX}
+                className="comic-outline comic-press font-sans font-semibold w-full rounded-xl py-3 text-base text-[var(--color-ink)]"
+                style={{
+                  background: "var(--color-sunset)",
+                  letterSpacing: "-0.005em",
+                }}
+              >
+                Share on X
+              </button>
+              <button
+                onClick={() => reset()}
+                className="comic-outline comic-press font-sans font-semibold w-full rounded-xl py-3 text-base text-[var(--color-ink)]"
+                style={{
+                  background: "var(--color-mint)",
+                  letterSpacing: "-0.005em",
+                }}
+              >
+                Play again →
+              </button>
+            </div>
           </div>
         );
       }
@@ -621,10 +651,18 @@ export default function HomePage() {
 
   return (
     <>
-      {phase === "api-keys" && <ApiKeysPanel onConfirm={handleKeysConfirmed} />}
+      {phase === "paywall" && (
+        <PaywallPanel onSatisfied={() => paywallSatisfied()} />
+      )}
 
       <GameShell
-        backgroundSrc="/intro-v2/01-departure-board.png"
+        backgroundSrc={
+          phase === "welcome"
+            ? WELCOME_BACKGROUND
+            : phase === "onboarding"
+              ? ONBOARDING_BACKGROUND
+              : "/intro-v2/01-departure-board.png"
+        }
         dialogueSlot={dialogueSlot}
         bottomPanel={bottomPanel}
       >

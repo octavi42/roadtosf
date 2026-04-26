@@ -12,12 +12,12 @@ interface DevTarget {
 }
 
 const TARGETS: DevTarget[] = [
-  { label: "API Keys", phase: "api-keys" },
-  { label: "Intro", phase: "intro" },
-  { label: "Generating", phase: "generating" },
+  { label: "Welcome", phase: "welcome" },
+  { label: "Onboarding", phase: "onboarding" },
   { label: "Scene 1", phase: "scene", sceneIndex: 0 },
   { label: "Scene 2", phase: "scene", sceneIndex: 1 },
   { label: "Scene 3", phase: "scene", sceneIndex: 2 },
+  { label: "Paywall", phase: "paywall" },
   { label: "Scene 4", phase: "scene", sceneIndex: 3 },
   { label: "Scene 5", phase: "scene", sceneIndex: 4 },
   { label: "Ending", phase: "ending" },
@@ -50,7 +50,7 @@ export default function DevPanel() {
 
   const clear = () => {
     window.localStorage.removeItem(DEV_OVERRIDE_KEY);
-    devSetPhase("api-keys");
+    devSetPhase("welcome");
     setTick((t) => t + 1);
   };
 
