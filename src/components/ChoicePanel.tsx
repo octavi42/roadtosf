@@ -41,7 +41,7 @@ export default function ChoicePanel({
         {choices.map((choice, idx) => {
           const isSelected = selected === choice.id;
           const accent = ACCENTS[idx % ACCENTS.length];
-          const tilt = idx % 2 === 0 ? "comic-tilt-l" : "comic-tilt-r";
+          const tilt = idx % 2 === 0 ? "btn-tilt-l" : "btn-tilt-r";
           return (
             <button
               key={choice.id}

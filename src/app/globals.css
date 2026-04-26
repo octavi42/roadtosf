@@ -97,22 +97,33 @@ body {
 }
 
 .comic-press {
+    transform: rotate(var(--tilt, 0deg));
     transition: transform 90ms ease, box-shadow 90ms ease;
 }
 .comic-press:hover:not(:disabled) {
-    transform: translate(-1px, -1px);
+    transform: rotate(var(--tilt, 0deg)) translate(-1px, -1px);
     box-shadow: 4px 4px 0 var(--color-ink);
 }
 .comic-press:active:not(:disabled),
 .comic-press[data-pressed="true"] {
-    transform: translate(3px, 3px);
+    transform: rotate(var(--tilt, 0deg)) translate(3px, 3px);
     box-shadow: 0 0 0 var(--color-ink);
 }
 
-/* Tilt utilities — kept as no-ops; previously rotated ±1° */
+/* Tilt utilities — no-op for non-button surfaces (kept for existing markup) */
 .comic-tilt-l,
 .comic-tilt-r {
     transform: none;
+}
+
+/* Subtle alternating tilt for choice buttons.
+   Sets --tilt so .comic-press's rotate() picks it up and the press animation
+   composes the rotation with the translate. */
+.btn-tilt-l {
+    --tilt: -0.6deg;
+}
+.btn-tilt-r {
+    --tilt: 0.6deg;
 }
 
 /* ----------------------------------------------------------------------------
