@@ -24,13 +24,14 @@ function readDevOverride(): DevOverride | null {
 
 export default function SessionHydrator() {
   useEffect(() => {
-    const override = readDevOverride();
-    if (override) {
-      useSessionStore
-        .getState()
-        .devSetPhase(override.phase, override.sceneIndex);
-    }
-    useSessionStore.persist.rehydrate();
+    void useSessionStore.persist.rehydrate().then(() => {
+      const override = readDevOverride();
+      if (override) {
+        useSessionStore
+          .getState()
+          .devSetPhase(override.phase, override.sceneIndex);
+      }
+    });
   }, []);
   return null;
 }
