@@ -4,7 +4,6 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { GameShell } from "@/components/GameShell";
 import ApiKeysPanel from "@/components/ApiKeysPanel";
-import MuteButton from "@/components/MuteButton";
 import ChoicePanel from "@/components/ChoicePanel";
 import TextInputPanel from "@/components/TextInputPanel";
 import DialogueSubtitle from "@/components/DialogueSubtitle";
@@ -223,8 +222,6 @@ const ENDING_COPY: Record<
 // ---------------------------------------------------------------------------
 
 export default function HomePage() {
-  const [isMuted, setIsMuted] = useState(false);
-
   const phase = useSessionStore((s) => s.phase);
   const hasHydrated = useSessionStore((s) => s.hasHydrated);
   const { sceneIndex, currentLineIndex, showChoices, choiceMade } =
@@ -320,10 +317,6 @@ export default function HomePage() {
     [keysConfirmed],
   );
 
-  const handleMuteToggle = useCallback(() => {
-    setIsMuted((prev) => !prev);
-  }, []);
-
   const handleIntroSubmit = useCallback(() => {
     const startupName = "Wagr";
     const startupDescription = "Venmo for sports bets between friends";
@@ -404,10 +397,6 @@ export default function HomePage() {
   // Derived slots
   // -------------------------------------------------------------------------
 
-  const muteButton = (
-    <MuteButton isMuted={isMuted} onToggle={handleMuteToggle} />
-  );
-
   const currentScene = SCENES[sceneIndex] ?? null;
   const currentLine = currentScene?.dialogue[currentLineIndex] ?? null;
 
@@ -432,7 +421,7 @@ export default function HomePage() {
     if (phase !== "scene" || !showChoices) return null;
 
     // Scene 3 gets an extra free-text counter-offer option
-    if (currentScene?.id === 3 && !isMuted) {
+    if (currentScene?.id === 3) {
       return (
         <div className="flex flex-col gap-3">
           <ChoicePanel
@@ -444,22 +433,8 @@ export default function HomePage() {
             placeholder="Counter-offer… (e.g. Keep Maya, drop the clause)"
             onSubmit={handleTextSubmit}
             disabled={choiceMade !== null}
-            isMuted={isMuted}
-            onMuteToggle={handleMuteToggle}
           />
         </div>
-      );
-    }
-
-    if (isMuted) {
-      return (
-        <TextInputPanel
-          placeholder="Type your response…"
-          onSubmit={handleTextSubmit}
-          disabled={choiceMade !== null}
-          isMuted={isMuted}
-          onMuteToggle={handleMuteToggle}
-        />
       );
     }
 
@@ -650,7 +625,6 @@ export default function HomePage() {
 
       <GameShell
         backgroundSrc="/intro-v2/01-departure-board.png"
-        muteButton={muteButton}
         dialogueSlot={dialogueSlot}
         bottomPanel={bottomPanel}
       >

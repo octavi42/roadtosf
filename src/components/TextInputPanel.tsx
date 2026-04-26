@@ -1,15 +1,12 @@
 "use client"
 
 import { useRef, useState, useCallback, KeyboardEvent, ChangeEvent } from "react"
-import MuteButton from "./MuteButton"
 
 interface TextInputPanelProps {
   placeholder?: string
   onSubmit: (text: string) => void
   disabled?: boolean
   maxLength?: number
-  isMuted?: boolean
-  onMuteToggle?: () => void
 }
 
 export default function TextInputPanel({
@@ -17,10 +14,11 @@ export default function TextInputPanel({
   onSubmit,
   disabled = false,
   maxLength = 280,
-  isMuted,
-  onMuteToggle,
 }: TextInputPanelProps) {
   const [value, setValue] = useState("")
+  // UI-only: when true the textarea is locked and we display a "listening" state.
+  // Wire-up to actual speech-to-text happens later — clicking just toggles this flag.
+  const [isListening, setIsListening] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const LINE_HEIGHT = 24
@@ -68,6 +66,8 @@ export default function TextInputPanel({
       ? "text-[var(--color-sunset-deep)]"
       : "text-[var(--color-ink)]/50"
 
+  const textareaDisabled = disabled || isListening
+
   return (
     <div
       className="comic-outline rounded-2xl px-5 py-4 w-full max-w-2xl mx-auto animate-bounce-in"
@@ -78,24 +78,55 @@ export default function TextInputPanel({
         value={value}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
-        disabled={disabled}
-        placeholder={placeholder}
+        disabled={textareaDisabled}
+        placeholder={isListening ? "Listening… speak now" : placeholder}
         rows={MIN_ROWS}
-        className="font-sans w-full bg-transparent text-[var(--color-ink)] text-base resize-none outline-none placeholder-[var(--color-ink)]/40 leading-relaxed disabled:opacity-40 disabled:cursor-not-allowed"
-        style={{ minHeight: `${LINE_HEIGHT * MIN_ROWS}px` }}
+        className="font-sans w-full bg-transparent text-[var(--color-ink)] text-base resize-none outline-none placeholder-[var(--color-ink)]/40 leading-relaxed disabled:cursor-not-allowed"
+        style={{
+          minHeight: `${LINE_HEIGHT * MIN_ROWS}px`,
+          opacity: textareaDisabled && !isListening ? 0.4 : 1,
+        }}
       />
 
       <div className="flex items-center justify-between mt-3 gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          {isMuted !== undefined && onMuteToggle && (
-            <MuteButton isMuted={isMuted} onToggle={onMuteToggle} />
-          )}
-          <span
-            className="font-pixel text-[var(--color-ink)]/50 text-sm select-none truncate"
-            style={{ letterSpacing: "0.05em" }}
+          <button
+            type="button"
+            onClick={() => setIsListening((v) => !v)}
+            disabled={disabled}
+            aria-label={isListening ? "Stop voice input" : "Start voice input"}
+            aria-pressed={isListening}
+            className={[
+              "comic-outline-sm comic-press flex items-center gap-1.5 px-3 py-1.5",
+              "rounded-full font-sans uppercase text-xs font-bold",
+              "disabled:opacity-40 disabled:cursor-not-allowed",
+            ].join(" ")}
+            style={{
+              background: isListening
+                ? "var(--color-cable)"
+                : "var(--color-mint)",
+              color: isListening ? "var(--color-fog)" : "var(--color-ink)",
+              letterSpacing: "0.08em",
+            }}
           >
-            ↵ send · ⇧↵ newline
-          </span>
+            <span aria-hidden="true">🎙</span>
+            {isListening && (
+              <span
+                className="w-1.5 h-1.5 rounded-full animate-pulse"
+                style={{ background: "var(--color-fog)" }}
+              />
+            )}
+            <span>{isListening ? "Listening…" : "Voice"}</span>
+          </button>
+
+          {!isListening && (
+            <span
+              className="font-pixel text-[var(--color-ink)]/50 text-sm select-none truncate"
+              style={{ letterSpacing: "0.05em" }}
+            >
+              ↵ send · ⇧↵ newline
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
