@@ -54,6 +54,7 @@ interface SessionState {
   stats: { hype: number; integrity: number };
   ending?: EndingData;
   playthroughId?: string;
+  paid: boolean;
 
   hasHydrated: boolean;
   setHasHydrated: (value: boolean) => void;
@@ -110,6 +111,7 @@ export const useSessionStore = create<SessionState>()(
       history: [],
       stats: { hype: 0, integrity: 0 },
       ending: undefined,
+      paid: false,
 
       hasHydrated: false,
       setHasHydrated: (value) => set({ hasHydrated: value }),
@@ -191,7 +193,10 @@ export const useSessionStore = create<SessionState>()(
             showChoices: false,
             choiceMade: null,
           };
-          if (state.progress.sceneIndex === PAYWALL_AFTER_SCENE_INDEX) {
+          if (
+            state.progress.sceneIndex === PAYWALL_AFTER_SCENE_INDEX &&
+            !state.paid
+          ) {
             return { phase: "paywall", progress: nextProgress };
           }
           return { progress: nextProgress };
@@ -200,7 +205,7 @@ export const useSessionStore = create<SessionState>()(
       paywallSatisfied: () =>
         set((state) => {
           if (state.phase !== "paywall") return state;
-          return { phase: "scene" };
+          return { phase: "scene", paid: true };
         }),
 
       devSetPhase: (phase, sceneIndex = 0) =>
@@ -249,6 +254,7 @@ export const useSessionStore = create<SessionState>()(
           stats: { hype: 0, integrity: 0 },
           ending: undefined,
           playthroughId: undefined,
+          paid: false,
         }),
     }),
     {
@@ -266,6 +272,7 @@ export const useSessionStore = create<SessionState>()(
         stats: state.stats,
         ending: state.ending,
         playthroughId: state.playthroughId,
+        paid: state.paid,
       }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);

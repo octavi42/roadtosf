@@ -23,11 +23,18 @@ const TARGETS: DevTarget[] = [
   { label: "Ending", phase: "ending" },
 ];
 
+// Phases where downstream code (paywall, scene capture) assumes a playthrough
+// row exists. When the dev jumps directly to one of these we backfill a stub
+// row so the rest of the flow has something to attach to.
+const PHASES_REQUIRING_PLAYTHROUGH: Phase[] = ["scene", "paywall", "ending"];
+
 export default function DevPanel() {
   const [open, setOpen] = useState(false);
   const phase = useSessionStore((s) => s.phase);
   const sceneIndex = useSessionStore((s) => s.progress.sceneIndex);
   const devSetPhase = useSessionStore((s) => s.devSetPhase);
+  const playthroughId = useSessionStore((s) => s.playthroughId);
+  const setPlaythroughId = useSessionStore((s) => s.setPlaythroughId);
 
   const [, setTick] = useState(0);
 
@@ -39,13 +46,33 @@ export default function DevPanel() {
 
   if (process.env.NODE_ENV !== "development") return null;
 
-  const goTo = (target: DevTarget) => {
+  const goTo = async (target: DevTarget) => {
     window.localStorage.setItem(
       DEV_OVERRIDE_KEY,
       JSON.stringify({ phase: target.phase, sceneIndex: target.sceneIndex }),
     );
     devSetPhase(target.phase, target.sceneIndex);
     setTick((t) => t + 1);
+
+    if (
+      PHASES_REQUIRING_PLAYTHROUGH.includes(target.phase) &&
+      !playthroughId
+    ) {
+      try {
+        const r = await fetch("/api/playthroughs", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            flavorTags: [],
+            introTranscript: "[dev jump — no onboarding]",
+          }),
+        });
+        const data = (await r.json()) as { id?: string };
+        if (data.id) setPlaythroughId(data.id);
+      } catch (err) {
+        console.error("dev backfill playthrough failed", err);
+      }
+    }
   };
 
   const clear = () => {
