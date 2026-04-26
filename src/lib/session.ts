@@ -3,11 +3,18 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import type { EndingKey, StoryArc } from "./types";
 
 export type Phase =
-  | "api-keys"
-  | "intro"
-  | "generating"
+  | "welcome"
+  | "onboarding"
   | "scene"
+  | "paywall"
   | "ending";
+
+/**
+ * Paywall fires when this scene index has just been completed
+ * (i.e. the wall sits between scene N+1 and scene N+2 in player-facing terms).
+ * Single source of truth — move this to shift the wall.
+ */
+export const PAYWALL_AFTER_SCENE_INDEX = 2;
 
 export interface IntroData {
   transcript: string;
@@ -52,13 +59,14 @@ interface SessionState {
   setHasHydrated: (value: boolean) => void;
 
   setPlaythroughId: (id: string | undefined) => void;
-  keysConfirmed: () => void;
+  welcomeStarted: () => void;
   introSubmitted: (
     transcript: string,
     extracted?: Partial<Omit<IntroData, "transcript">>,
   ) => void;
-  enterScenes: () => void;
+  paywallSatisfied: () => void;
   arcReady: (arc: StoryArc) => void;
+  devSetPhase: (phase: Phase, sceneIndex?: number) => void;
   advanceLine: (totalLines: number) => void;
   chooseOption: (
     choiceId: string,
@@ -95,7 +103,7 @@ function classifyEnding(hype: number, integrity: number): EndingKey {
 export const useSessionStore = create<SessionState>()(
   persist(
     (set) => ({
-      phase: "api-keys",
+      phase: "welcome",
       intro: INITIAL_INTRO,
       arc: undefined,
       progress: INITIAL_PROGRESS,
@@ -108,17 +116,18 @@ export const useSessionStore = create<SessionState>()(
 
       setPlaythroughId: (id) => set({ playthroughId: id }),
 
-      keysConfirmed: () =>
+      welcomeStarted: () =>
         set((state) => {
-          if (state.phase !== "api-keys") return state;
-          return { phase: "intro" };
+          if (state.phase !== "welcome") return state;
+          return { phase: "onboarding" };
         }),
 
       introSubmitted: (transcript, extracted) =>
         set((state) => {
-          if (state.phase !== "intro") return state;
+          if (state.phase !== "onboarding") return state;
           return {
-            phase: "generating",
+            phase: "scene",
+            progress: INITIAL_PROGRESS,
             intro: {
               ...state.intro,
               transcript,
@@ -126,12 +135,6 @@ export const useSessionStore = create<SessionState>()(
               flavorTags: extracted?.flavorTags ?? state.intro.flavorTags,
             },
           };
-        }),
-
-      enterScenes: () =>
-        set((state) => {
-          if (state.phase !== "generating") return state;
-          return { phase: "scene", progress: INITIAL_PROGRESS };
         }),
 
       arcReady: (arc) => set({ arc }),
@@ -182,19 +185,63 @@ export const useSessionStore = create<SessionState>()(
               },
             };
           }
-          return {
-            progress: {
-              sceneIndex: nextIndex,
-              currentLineIndex: 0,
-              showChoices: false,
-              choiceMade: null,
-            },
+          const nextProgress = {
+            sceneIndex: nextIndex,
+            currentLineIndex: 0,
+            showChoices: false,
+            choiceMade: null,
           };
+          if (state.progress.sceneIndex === PAYWALL_AFTER_SCENE_INDEX) {
+            return { phase: "paywall", progress: nextProgress };
+          }
+          return { progress: nextProgress };
+        }),
+
+      paywallSatisfied: () =>
+        set((state) => {
+          if (state.phase !== "paywall") return state;
+          return { phase: "scene" };
+        }),
+
+      devSetPhase: (phase, sceneIndex = 0) =>
+        set((state) => {
+          if (phase === "scene") {
+            return {
+              phase,
+              progress: {
+                sceneIndex,
+                currentLineIndex: 0,
+                showChoices: false,
+                choiceMade: null,
+              },
+              ending: undefined,
+            };
+          }
+          if (phase === "paywall") {
+            return {
+              phase,
+              progress: {
+                sceneIndex: PAYWALL_AFTER_SCENE_INDEX + 1,
+                currentLineIndex: 0,
+                showChoices: false,
+                choiceMade: null,
+              },
+              ending: undefined,
+            };
+          }
+          if (phase === "ending") {
+            return {
+              phase,
+              ending:
+                state.ending ?? { key: "ipo", achievementsUnlocked: [] },
+            };
+          }
+          return { phase, ending: undefined };
         }),
 
       reset: () =>
         set({
-          phase: "intro",
+          phase: "onboarding",
           intro: INITIAL_INTRO,
           arc: undefined,
           progress: INITIAL_PROGRESS,
