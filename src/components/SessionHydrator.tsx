@@ -24,8 +24,13 @@ function readDevOverride(): DevOverride | null {
 
 export default function SessionHydrator() {
   useEffect(() => {
-    void useSessionStore.persist.rehydrate().then(() => {
-      const override = readDevOverride();
+    const override = readDevOverride();
+    if (override) {
+      useSessionStore
+        .getState()
+        .devSetPhase(override.phase, override.sceneIndex);
+    }
+    void Promise.resolve(useSessionStore.persist.rehydrate()).then(() => {
       if (override) {
         useSessionStore
           .getState()
