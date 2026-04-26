@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getStripe } from '@/lib/stripe'
+import { getStripe, PAYWALL_PRICE_USD_CENTS } from '@/lib/stripe'
 import { markPlaythroughPaid } from '@/lib/playthroughs'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -29,7 +29,14 @@ export async function POST(request: Request) {
     const stripe = getStripe()
     const intent = await stripe.paymentIntents.retrieve(paymentIntentId)
 
-    const paid = intent.status === 'succeeded'
+    // Defense in depth: don't trust just the status. Confirm the charge was
+    // for the price we actually meant to charge, in the currency we asked
+    // for. Stops accidental bypasses if a future endpoint creates intents
+    // on the same Stripe account with a 'playthroughId' metadata key.
+    const paid =
+      intent.status === 'succeeded' &&
+      intent.amount === PAYWALL_PRICE_USD_CENTS &&
+      intent.currency === 'usd'
     if (!paid) {
       return NextResponse.json({ paid: false })
     }

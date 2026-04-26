@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
 import {
   Elements,
@@ -114,6 +114,14 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
   const [returningUser, setReturningUser] = useState<boolean | null>(null);
   const [checkingEmail, setCheckingEmail] = useState(false);
 
+  // Mirror returningUser in a ref so handleSubmit can read the latest value
+  // after awaiting an in-flight check (state from the closure is stale).
+  const returningUserRef = useRef<boolean | null>(null);
+  // Track an in-flight /check-email call so handleSubmit can await it before
+  // charging — closes the race where blur (triggered by the Pay click)
+  // starts a check that hasn't resolved yet.
+  const checkInFlightRef = useRef<Promise<void> | null>(null);
+
   // OTP state for the returning-user flow.
   const [codeSent, setCodeSent] = useState(false);
   const [code, setCode] = useState("");
@@ -157,23 +165,37 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
   const handleEmailBlur = async () => {
     const trimmed = email.trim();
     if (!EMAIL_RE.test(trimmed)) {
+      returningUserRef.current = null;
       setReturningUser(null);
       return;
     }
     setCheckingEmail(true);
+    const promise = (async () => {
+      try {
+        const r = await fetch("/api/paywall/check-email", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email: trimmed }),
+        });
+        const data = (await r.json()) as { paid?: boolean };
+        const result = Boolean(data.paid);
+        returningUserRef.current = result;
+        setReturningUser(result);
+      } catch (err) {
+        console.error("paywall check-email failed", err);
+        returningUserRef.current = null;
+        setReturningUser(null);
+      } finally {
+        setCheckingEmail(false);
+      }
+    })();
+    checkInFlightRef.current = promise;
     try {
-      const r = await fetch("/api/paywall/check-email", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email: trimmed }),
-      });
-      const data = (await r.json()) as { paid?: boolean };
-      setReturningUser(Boolean(data.paid));
-    } catch (err) {
-      console.error("paywall check-email failed", err);
-      setReturningUser(null);
+      await promise;
     } finally {
-      setCheckingEmail(false);
+      if (checkInFlightRef.current === promise) {
+        checkInFlightRef.current = null;
+      }
     }
   };
 
@@ -242,6 +264,24 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
     const cardNumber = elements.getElement(CardNumberElement);
     if (!cardNumber) return;
 
+    const trimmedEmail = email.trim();
+    if (!EMAIL_RE.test(trimmedEmail)) {
+      setError("Enter your email so we can send you a receipt.");
+      return;
+    }
+
+    // Settle any in-flight /check-email so a returning user is never charged.
+    // If the user clicks Pay before tabbing out, the click event fires the
+    // blur handler synchronously; without this await, the charge could run
+    // before the lookup resolves.
+    if (checkInFlightRef.current) {
+      await checkInFlightRef.current;
+    }
+    if (returningUserRef.current === true) {
+      // The returning-user OTP UI should already be on screen.
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
 
@@ -297,7 +337,16 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
   };
 
   const stripeReady = stripe && elements && clientSecret;
-  const buttonDisabled = !stripeReady || submitting;
+  const emailValid = EMAIL_RE.test(email.trim());
+  const buttonDisabled =
+    !stripeReady ||
+    submitting ||
+    checkingEmail ||
+    !emailValid ||
+    // Wait for /check-email to confirm yes/no before allowing a charge —
+    // prevents the double-charge race if the user clicks Pay before blur
+    // resolves.
+    returningUser === null;
 
   return (
     <PaywallShell>
@@ -313,6 +362,7 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
             // Invalidate any prior lookup as soon as the email changes —
             // we'll re-check on blur once they stop typing.
             if (returningUser !== null) setReturningUser(null);
+            returningUserRef.current = null;
             if (codeSent) {
               setCodeSent(false);
               setCode("");

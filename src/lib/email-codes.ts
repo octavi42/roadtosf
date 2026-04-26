@@ -37,8 +37,14 @@ export async function issueEmailCode(email: string): Promise<IssueResult> {
 }
 
 /**
- * Look up the most recent active code for this email and consume it if
- * the supplied code matches. Returns true on success, false otherwise.
+ * Atomically consume the most recent active code for this email if the
+ * supplied code matches. Returns true on success, false otherwise.
+ *
+ * Single SQL statement so SELECT-then-UPDATE TOCTOU is impossible — under
+ * READ COMMITTED, concurrent UPDATEs serialize on the row lock and re-evaluate
+ * the WHERE clause against the post-lock row state. After one success, used_at
+ * is no longer NULL and subsequent UPDATEs match no rows. After MAX_ATTEMPTS
+ * misses, attempts is no longer < MAX_ATTEMPTS and increments stop.
  *
  * Failure modes (all return false): no active code, expired, max attempts
  * reached, code mismatch (increments attempts).
@@ -48,34 +54,25 @@ export async function checkAndConsumeEmailCode(
   code: string,
 ): Promise<boolean> {
   const sql = getSql()
+  const codeHash = hashCode(code)
   const rows = await sql`
-    SELECT id, code_hash, attempts
-    FROM paywall_email_codes
-    WHERE LOWER(email) = LOWER(${email})
-      AND expires_at > NOW()
+    UPDATE paywall_email_codes
+    SET
+      used_at  = CASE WHEN code_hash = ${codeHash} THEN NOW() ELSE used_at END,
+      attempts = CASE WHEN code_hash = ${codeHash} THEN attempts ELSE attempts + 1 END
+    WHERE id = (
+      SELECT id FROM paywall_email_codes
+      WHERE LOWER(email) = LOWER(${email})
+        AND expires_at > NOW()
+        AND used_at IS NULL
+      ORDER BY created_at DESC
+      LIMIT 1
+    )
       AND used_at IS NULL
-    ORDER BY created_at DESC
-    LIMIT 1
+      AND attempts < ${MAX_ATTEMPTS}
+    RETURNING (code_hash = ${codeHash}) AS matched
   `
   if (rows.length === 0) return false
-  const row = rows[0] as {
-    id: string
-    code_hash: string
-    attempts: number
-  }
-  if (row.attempts >= MAX_ATTEMPTS) return false
-
-  if (row.code_hash !== hashCode(code)) {
-    await sql`
-      UPDATE paywall_email_codes SET attempts = attempts + 1
-      WHERE id = ${row.id}
-    `
-    return false
-  }
-
-  await sql`
-    UPDATE paywall_email_codes SET used_at = NOW()
-    WHERE id = ${row.id}
-  `
-  return true
+  const row = rows[0] as { matched: boolean }
+  return row.matched === true
 }
