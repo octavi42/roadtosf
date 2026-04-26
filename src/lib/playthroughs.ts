@@ -93,6 +93,26 @@ export async function updatePlaythroughArc(id: string, arcJson: unknown): Promis
   return (rows[0] as { id: string } | undefined) ?? null
 }
 
+export type MarkPaidInput = {
+  id: string
+  stripeSessionId: string
+}
+
+export async function markPlaythroughPaid(
+  input: MarkPaidInput,
+): Promise<{ id: string; paid_at: string } | null> {
+  const sql = getSql()
+  const rows = await sql`
+    UPDATE playthroughs SET
+      is_paid = TRUE,
+      paid_at = COALESCE(paid_at, NOW()),
+      stripe_session_id = ${input.stripeSessionId}
+    WHERE id = ${input.id}
+    RETURNING id, paid_at
+  `
+  return (rows[0] as { id: string; paid_at: string } | undefined) ?? null
+}
+
 export type FinalizePlaythroughInput = {
   id: string
   ending: string
