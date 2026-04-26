@@ -253,13 +253,9 @@ export const useSessionStore = create<SessionState>()(
     }),
     {
       name: "roadtosf-session",
-      // TEMP: persistence disabled while iterating on the welcome screen.
-      // Restore by swapping storage back to sessionStorage and removing the noop.
-      storage: createJSONStorage(() => ({
-        getItem: () => null,
-        setItem: () => {},
-        removeItem: () => {},
-      })),
+      storage: createJSONStorage(() =>
+        typeof window === "undefined" ? undefined! : sessionStorage,
+      ),
       skipHydration: true,
       partialize: (state) => ({
         phase: state.phase,

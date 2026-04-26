@@ -139,7 +139,7 @@ export default function PaywallPanel({ onSatisfied }: PaywallPanelProps) {
 
           {/* Footer */}
           <p className="text-white/30 text-[10px] text-center mt-4 tracking-wide">
-            Powered by Stripe · Encrypted end-to-end
+            Prototype — no real charge
           </p>
         </div>
       </div>
