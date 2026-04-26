@@ -14,22 +14,22 @@
     --font-pixel: var(--font-vt323), "Chicago", "Monaco", monospace;
     --font-sans: var(--font-geist-sans), "Geist Sans", system-ui, sans-serif;
 
-    /* Comic SF palette */
-    --color-fog: #f4ede2; /* warm fog paper */
-    --color-fog-soft: #ebe2d3;
-    --color-ink: #1b1b1f; /* comic outline black */
-    --color-sunset: #ff8a7a; /* SF golden hour */
-    --color-sunset-deep: #e85a4f;
-    --color-cable: #c8102e; /* cable car red */
-    --color-mustard: #ffc857; /* taxi yellow */
-    --color-karl: #4a90a4; /* Karl the Fog blue */
-    --color-bay: #2e5266;
-    --color-mint: #8ad9b1; /* AI emerald */
+    /* SF palette — slightly desaturated for a more grown-up feel */
+    --color-fog: #f3ece1; /* warm fog paper */
+    --color-fog-soft: #e7ddcc;
+    --color-ink: #20201f; /* near-black, slightly warm */
+    --color-sunset: #f0a094; /* dusty SF golden hour */
+    --color-sunset-deep: #d96a5a;
+    --color-cable: #b8273a; /* muted cable-car red */
+    --color-mustard: #e6b34a; /* aged taxi yellow */
+    --color-karl: #5a8a98; /* Karl the Fog blue */
+    --color-bay: #324f5e;
+    --color-mint: #8fc6a5; /* mellow mint */
 }
 
 :root {
     --game-font: var(--font-pixelify), "Chicago", "Geneva", Arial, sans-serif;
-    --ink-shadow: 4px 4px 0 var(--color-ink);
+    --ink-shadow: 3px 3px 0 var(--color-ink);
     --ink-shadow-sm: 2px 2px 0 var(--color-ink);
 }
 
@@ -41,23 +41,23 @@ body {
     color: var(--color-ink);
 }
 
-/* Halftone dot pattern overlay — adds a subtle paper-print texture */
+/* Halftone dot pattern overlay — subtle paper-print texture */
 .halftone {
     background-image: radial-gradient(
         circle at 1px 1px,
-        rgba(27, 27, 31, 0.18) 1px,
+        rgba(32, 32, 31, 0.1) 0.8px,
         transparent 0
     );
-    background-size: 6px 6px;
+    background-size: 8px 8px;
 }
 
 .halftone-strong {
     background-image: radial-gradient(
         circle at 1px 1px,
-        rgba(27, 27, 31, 0.32) 1.2px,
+        rgba(32, 32, 31, 0.18) 1px,
         transparent 0
     );
-    background-size: 5px 5px;
+    background-size: 6px 6px;
 }
 
 /* Paper grain — slightly warmer noise on light surfaces */
@@ -81,12 +81,12 @@ body {
  * --------------------------------------------------------------------------*/
 
 .comic-outline {
-    border: 3px solid var(--color-ink);
+    border: 2px solid var(--color-ink);
     box-shadow: var(--ink-shadow);
 }
 
 .comic-outline-sm {
-    border: 2px solid var(--color-ink);
+    border: 1.5px solid var(--color-ink);
     box-shadow: var(--ink-shadow-sm);
 }
 
@@ -95,20 +95,18 @@ body {
 }
 .comic-press:hover:not(:disabled) {
     transform: translate(-1px, -1px);
-    box-shadow: 5px 5px 0 var(--color-ink);
+    box-shadow: 4px 4px 0 var(--color-ink);
 }
 .comic-press:active:not(:disabled),
 .comic-press[data-pressed="true"] {
-    transform: translate(4px, 4px);
+    transform: translate(3px, 3px);
     box-shadow: 0 0 0 var(--color-ink);
 }
 
-/* Hand-placed slight tilt — used sparingly so it feels intentional */
-.comic-tilt-l {
-    transform: rotate(-1.2deg);
-}
+/* Tilt utilities — kept as no-ops; previously rotated ±1° */
+.comic-tilt-l,
 .comic-tilt-r {
-    transform: rotate(1deg);
+    transform: none;
 }
 
 /* ----------------------------------------------------------------------------
@@ -118,8 +116,8 @@ body {
 .speech-bubble {
     position: relative;
     background: var(--color-fog);
-    border: 3px solid var(--color-ink);
-    border-radius: 18px;
+    border: 2px solid var(--color-ink);
+    border-radius: 16px;
     box-shadow: var(--ink-shadow);
     color: var(--color-ink);
 }
@@ -128,8 +126,8 @@ body {
 .speech-bubble::after {
     content: "";
     position: absolute;
-    bottom: -22px;
-    left: 48px;
+    bottom: -18px;
+    left: 44px;
     width: 0;
     height: 0;
     border-style: solid;
@@ -137,16 +135,16 @@ body {
 
 /* Outer (black) tail */
 .speech-bubble::before {
-    border-width: 22px 18px 0 0;
+    border-width: 18px 14px 0 0;
     border-color: var(--color-ink) transparent transparent transparent;
 }
 
 /* Inner (paper) tail — sits on top to give the outline an inner fill */
 .speech-bubble::after {
-    border-width: 17px 13px 0 0;
+    border-width: 14px 10px 0 0;
     border-color: var(--color-fog) transparent transparent transparent;
-    bottom: -14px;
-    left: 51px;
+    bottom: -12px;
+    left: 46px;
 }
 
 /* ----------------------------------------------------------------------------
@@ -184,7 +182,7 @@ body {
         box-shadow: var(--ink-shadow);
     }
     50% {
-        box-shadow: 6px 6px 0 var(--color-sunset);
+        box-shadow: 4px 4px 0 var(--color-sunset);
     }
     100% {
         box-shadow: var(--ink-shadow);
@@ -194,24 +192,21 @@ body {
 @keyframes wobble {
     0%,
     100% {
-        transform: rotate(-1deg);
+        transform: rotate(-0.4deg);
     }
     50% {
-        transform: rotate(1deg);
+        transform: rotate(0.4deg);
     }
 }
 
 @keyframes bounceIn {
     0% {
         opacity: 0;
-        transform: scale(0.85) translateY(14px);
-    }
-    60% {
-        opacity: 1;
-        transform: scale(1.04) translateY(-2px);
+        transform: translateY(10px);
     }
     100% {
-        transform: scale(1) translateY(0);
+        opacity: 1;
+        transform: translateY(0);
     }
 }
 
@@ -228,5 +223,5 @@ body {
 }
 
 .animate-bounce-in {
-    animation: bounceIn 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation: bounceIn 0.4s ease-out both;
 }

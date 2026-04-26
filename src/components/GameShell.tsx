@@ -67,10 +67,10 @@ export function GameShell({
           />
         )}
 
-        {/* Halftone dot overlay for comic texture */}
+        {/* Halftone dot overlay — subtle paper texture */}
         <div
           className="absolute inset-0 halftone pointer-events-none"
-          style={{ opacity: 0.35, mixBlendMode: "multiply" }}
+          style={{ opacity: 0.18, mixBlendMode: "multiply" }}
         />
 
         {/* Soft top-down wash — keeps speech bubble legible without going dark */}

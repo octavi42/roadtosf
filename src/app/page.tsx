@@ -495,8 +495,8 @@ export default function HomePage() {
               SFO → Your Future
             </p>
             <h1
-              className="font-display text-[var(--color-ink)] text-3xl font-bold leading-tight"
-              style={{ letterSpacing: "0.01em" }}
+              className="font-sans text-[var(--color-ink)] text-3xl font-bold leading-tight"
+              style={{ letterSpacing: "-0.02em" }}
             >
               Your flight to SFO
               <br />
@@ -504,7 +504,7 @@ export default function HomePage() {
             </h1>
             <p className="font-sans text-[var(--color-ink)]/70 text-sm leading-relaxed">
               You&apos;re the founder of{" "}
-              <span className="font-display font-bold text-[var(--color-cable)]">
+              <span className="font-sans font-bold text-[var(--color-cable)]">
                 Wagr
               </span>{" "}
               — Venmo for sports bets between friends. Ex-Stripe. First-time
@@ -512,10 +512,10 @@ export default function HomePage() {
             </p>
             <button
               onClick={handleIntroSubmit}
-              className="comic-outline comic-press font-display uppercase font-bold mt-2 w-full rounded-xl py-3 text-base text-[var(--color-ink)]"
+              className="comic-outline comic-press font-sans font-semibold mt-2 w-full rounded-xl py-3 text-base text-[var(--color-ink)]"
               style={{
                 background: "var(--color-sunset)",
-                letterSpacing: "0.08em",
+                letterSpacing: "-0.005em",
               }}
             >
               Board the flight →
@@ -542,7 +542,10 @@ export default function HomePage() {
                 />
               ))}
             </div>
-            <p className="font-display text-[var(--color-ink)] text-lg leading-snug font-bold">
+            <p
+              className="font-sans text-[var(--color-ink)] text-xl leading-snug font-bold"
+              style={{ letterSpacing: "-0.015em" }}
+            >
               You just landed at SFO.
             </p>
             <p className="font-sans text-[var(--color-ink)]/70 text-sm leading-relaxed">
@@ -593,10 +596,10 @@ export default function HomePage() {
               Your ending
             </p>
             <h2
-              className="comic-outline font-display text-3xl font-bold tracking-tight rounded-xl py-4 px-3 text-[var(--color-ink)]"
+              className="comic-outline font-sans text-3xl font-bold rounded-xl py-4 px-3 text-[var(--color-ink)]"
               style={{
                 background: e?.bg ?? "var(--color-fog-soft)",
-                letterSpacing: "0.04em",
+                letterSpacing: "-0.01em",
               }}
             >
               {e?.label ?? "UNKNOWN"}
@@ -617,10 +620,10 @@ export default function HomePage() {
             </div>
             <button
               onClick={() => reset()}
-              className="comic-outline comic-press font-display uppercase font-bold mt-2 w-full rounded-xl py-3 text-base text-[var(--color-ink)]"
+              className="comic-outline comic-press font-sans font-semibold mt-2 w-full rounded-xl py-3 text-base text-[var(--color-ink)]"
               style={{
                 background: "var(--color-mint)",
-                letterSpacing: "0.08em",
+                letterSpacing: "-0.005em",
               }}
             >
               Play again →

@@ -50,15 +50,15 @@ export default function ChoicePanel({
               data-pressed={isSelected}
               className={[
                 "comic-outline comic-press flex-1 min-w-[150px] max-w-[230px]",
-                "px-4 py-3 rounded-2xl font-display text-[var(--color-ink)]",
-                "text-base font-bold uppercase tracking-wide",
+                "px-4 py-3 rounded-xl font-sans text-[var(--color-ink)]",
+                "text-base font-semibold",
                 "disabled:opacity-50 disabled:cursor-not-allowed",
                 isSelected ? "animate-pulse-glow" : tilt,
               ].join(" ")}
               style={{
                 background: isSelected ? "var(--color-sunset)" : accent.bg,
-                letterSpacing: "0.04em",
-                lineHeight: 1.15,
+                letterSpacing: "-0.005em",
+                lineHeight: 1.2,
               }}
               onMouseEnter={(e) => {
                 if (!isSelected)

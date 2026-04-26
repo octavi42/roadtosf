@@ -81,7 +81,7 @@ export default function ApiKeysPanel({ onConfirm }: ApiKeysPanelProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 paper-grain">
       <div
         className="absolute inset-0 halftone pointer-events-none"
-        style={{ opacity: 0.25, mixBlendMode: "multiply" }}
+        style={{ opacity: 0.14, mixBlendMode: "multiply" }}
       />
       <div
         className="comic-outline animate-bounce-in rounded-2xl p-8 w-full max-w-md relative"
@@ -101,7 +101,10 @@ export default function ApiKeysPanel({ onConfirm }: ApiKeysPanelProps) {
         </p>
 
         {/* Title */}
-        <h2 className="font-display text-[var(--color-ink)] text-2xl font-bold mb-1 leading-tight">
+        <h2
+          className="font-sans text-[var(--color-ink)] text-2xl font-bold mb-1 leading-tight"
+          style={{ letterSpacing: "-0.02em" }}
+        >
           Card on file, please.
         </h2>
 
@@ -178,10 +181,10 @@ export default function ApiKeysPanel({ onConfirm }: ApiKeysPanelProps) {
         <button
           type="button"
           onClick={handleConfirm}
-          className="comic-outline comic-press font-display uppercase font-bold w-full rounded-xl py-3 text-base mt-6 text-[var(--color-ink)]"
+          className="comic-outline comic-press font-sans font-semibold w-full rounded-xl py-3 text-base mt-6 text-[var(--color-ink)]"
           style={{
             background: "var(--color-sunset)",
-            letterSpacing: "0.08em",
+            letterSpacing: "-0.005em",
           }}
         >
           Charge card →

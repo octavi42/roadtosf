@@ -63,8 +63,8 @@ export default function DialogueSubtitle({
     >
       <div className="speech-bubble px-6 py-4 animate-bounce-in">
         <p
-          className="font-display text-[var(--color-ink)] text-lg leading-snug"
-          style={{ letterSpacing: "0.01em", fontWeight: 500 }}
+          className="font-sans text-[var(--color-ink)] text-lg leading-snug"
+          style={{ letterSpacing: "-0.005em", fontWeight: 500 }}
           aria-live="polite"
           aria-label={text}
         >

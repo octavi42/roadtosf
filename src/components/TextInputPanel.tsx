@@ -97,10 +97,10 @@ export default function TextInputPanel({
           <button
             onClick={submit}
             disabled={disabled || value.trim().length === 0}
-            className="comic-outline-sm comic-press font-display uppercase font-bold rounded-lg px-3 py-1.5 text-[var(--color-ink)] text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="comic-outline-sm comic-press font-sans font-semibold rounded-lg px-3 py-1.5 text-[var(--color-ink)] text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             style={{
               background: "var(--color-mustard)",
-              letterSpacing: "0.08em",
+              letterSpacing: "-0.005em",
             }}
           >
             Send →
