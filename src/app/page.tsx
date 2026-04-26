@@ -248,6 +248,7 @@ export default function HomePage() {
   const ending = useSessionStore((s) => s.ending);
   const historyCount = useSessionStore((s) => s.history.length);
   const playthroughId = useSessionStore((s) => s.playthroughId);
+  const startupName = useSessionStore((s) => s.intro.startupName);
 
   const {
     setPlaythroughId,
@@ -376,6 +377,21 @@ export default function HomePage() {
     if (!scene) return;
     advanceLine(scene.dialogue.length);
   }, [sceneIndex, advanceLine]);
+
+  const handleShareX = useCallback(() => {
+    if (!ending) return;
+    const copy = ENDING_COPY[ending.key];
+    const story = ending.epilogue ?? copy.subtitle;
+    const headline = startupName
+      ? `Built ${startupName} in San Francisco. Got: ${copy.label}.`
+      : `San Francisco didn't go as planned. Got: ${copy.label}.`;
+    const text = `${story}\n\n${headline}\nTry yours →`;
+    const url = window.location.origin;
+    const intent = `https://twitter.com/intent/tweet?text=${encodeURIComponent(
+      text,
+    )}&url=${encodeURIComponent(url)}`;
+    window.open(intent, "_blank", "noopener,noreferrer");
+  }, [ending, startupName]);
 
   const handleChoice = useCallback(
     (choiceId: string, freeText?: string) => {
@@ -593,12 +609,20 @@ export default function HomePage() {
               </span>
               <span>{historyCount} choices made</span>
             </div>
-            <button
-              onClick={() => reset()}
-              className="mt-2 w-full border border-white/20 text-white/70 font-medium rounded-lg py-3 hover:bg-white/5 transition-colors text-sm"
-            >
-              Play again →
-            </button>
+            <div className="mt-2 flex flex-col gap-2">
+              <button
+                onClick={handleShareX}
+                className="w-full bg-white text-black font-semibold rounded-lg py-3 hover:bg-white/90 transition-colors text-sm"
+              >
+                Share on X
+              </button>
+              <button
+                onClick={() => reset()}
+                className="w-full border border-white/20 text-white/70 font-medium rounded-lg py-3 hover:bg-white/5 transition-colors text-sm"
+              >
+                Play again →
+              </button>
+            </div>
           </div>
         );
       }

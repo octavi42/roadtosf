@@ -29,8 +29,6 @@ export default function DevPanel() {
   const sceneIndex = useSessionStore((s) => s.progress.sceneIndex);
   const devSetPhase = useSessionStore((s) => s.devSetPhase);
 
-  // Force re-render when localStorage override changes (multi-tab not a concern;
-  // local boolean lets the "active" highlight reflect the saved override).
   const [, setTick] = useState(0);
 
   useEffect(() => {
