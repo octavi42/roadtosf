@@ -9,7 +9,7 @@
  * --------------------------------------------------------------------------*/
 
 @theme {
-    --font-display: var(--font-pixelify), "Chicago", "Geneva", system-ui,
+    --font-display: var(--font-chicago), "Chicago", "Geneva", system-ui,
         sans-serif;
     --font-pixel: var(--font-vt323), "Chicago", "Monaco", monospace;
     --font-sans: var(--font-geist-sans), "Geist Sans", system-ui, sans-serif;
@@ -28,7 +28,7 @@
 }
 
 :root {
-    --game-font: var(--font-pixelify), "Chicago", "Geneva", Arial, sans-serif;
+    --game-font: var(--font-chicago), "Chicago", "Geneva", Arial, sans-serif;
     --ink-shadow: 3px 3px 0 var(--color-ink);
     --ink-shadow-sm: 2px 2px 0 var(--color-ink);
 }
