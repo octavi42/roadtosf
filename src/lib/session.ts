@@ -46,10 +46,12 @@ interface SessionState {
   history: SceneOutcome[];
   stats: { hype: number; integrity: number };
   ending?: EndingData;
+  playthroughId?: string;
 
   hasHydrated: boolean;
   setHasHydrated: (value: boolean) => void;
 
+  setPlaythroughId: (id: string | undefined) => void;
   keysConfirmed: () => void;
   introSubmitted: (
     transcript: string,
@@ -103,6 +105,8 @@ export const useSessionStore = create<SessionState>()(
 
       hasHydrated: false,
       setHasHydrated: (value) => set({ hasHydrated: value }),
+
+      setPlaythroughId: (id) => set({ playthroughId: id }),
 
       keysConfirmed: () =>
         set((state) => {
@@ -197,6 +201,7 @@ export const useSessionStore = create<SessionState>()(
           history: [],
           stats: { hype: 0, integrity: 0 },
           ending: undefined,
+          playthroughId: undefined,
         }),
     }),
     {
@@ -213,6 +218,7 @@ export const useSessionStore = create<SessionState>()(
         history: state.history,
         stats: state.stats,
         ending: state.ending,
+        playthroughId: state.playthroughId,
       }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
