@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { GameShell } from "@/components/GameShell";
 import ApiKeysPanel from "@/components/ApiKeysPanel";
 import MuteButton from "@/components/MuteButton";
@@ -8,12 +9,12 @@ import ChoicePanel from "@/components/ChoicePanel";
 import TextInputPanel from "@/components/TextInputPanel";
 import DialogueSubtitle from "@/components/DialogueSubtitle";
 import DialogueSpeaker from "@/components/DialogueSpeaker";
+import { useSessionStore } from "@/lib/session";
+import type { EndingKey } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-type Phase = "api-keys" | "intro" | "generating" | "scene" | "ending";
 
 interface ApiKeys {
   openaiKey: string;
@@ -38,8 +39,6 @@ interface SceneData {
   dialogue: DialogueLine[];
   choices: Choice[];
 }
-
-type EndingKey = "ipo" | "indicted" | "ai-wrapper" | "acquihire" | "ghosted";
 
 // ---------------------------------------------------------------------------
 // Prescripted story — Wagr (Venmo for sports bets between friends)
@@ -183,20 +182,6 @@ const SCENES: SceneData[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
-// Stat helpers
-// ---------------------------------------------------------------------------
-
-function classifyEnding(hype: number, integrity: number): EndingKey {
-  const magnitude = Math.abs(hype) + Math.abs(integrity);
-  if (magnitude < 3) return "ghosted";
-  if (hype >= 2 && integrity >= 2) return "ipo";
-  if (hype >= 2 && integrity < 0) return "indicted";
-  if (hype < 0 && integrity >= 2) return "ai-wrapper";
-  if (hype < 0 && integrity < 0) return "acquihire";
-  return "ghosted";
-}
-
 const ENDING_COPY: Record<
   EndingKey,
   { label: string; subtitle: string; color: string }
@@ -238,111 +223,83 @@ const ENDING_COPY: Record<
 // ---------------------------------------------------------------------------
 
 export default function HomePage() {
-  const [phase, setPhase] = useState<Phase>("api-keys");
   const [isMuted, setIsMuted] = useState(false);
 
-  // Story state
-  const [sceneIndex, setSceneIndex] = useState(0);
-  const [choiceHistory, setChoiceHistory] = useState<string[]>([]);
-  const [hype, setHype] = useState(0);
-  const [integrity, setIntegrity] = useState(0);
-  const [ending, setEnding] = useState<EndingKey | null>(null);
+  const phase = useSessionStore((s) => s.phase);
+  const hasHydrated = useSessionStore((s) => s.hasHydrated);
+  const { sceneIndex, currentLineIndex, showChoices, choiceMade } =
+    useSessionStore(useShallow((s) => s.progress));
+  const { hype, integrity } = useSessionStore(useShallow((s) => s.stats));
+  const ending = useSessionStore((s) => s.ending);
+  const historyCount = useSessionStore((s) => s.history.length);
 
-  // Dialogue playback state
-  const [currentLineIndex, setCurrentLineIndex] = useState(0);
-  const [showChoices, setShowChoices] = useState(false);
-  const [choiceMade, setChoiceMade] = useState<string | null>(null);
-  const onCompleteCalledRef = useRef(false);
+  const {
+    keysConfirmed,
+    introSubmitted,
+    enterScenes,
+    advanceLine,
+    chooseOption,
+    advanceScene,
+    reset,
+  } = useSessionStore(
+    useShallow((s) => ({
+      keysConfirmed: s.keysConfirmed,
+      introSubmitted: s.introSubmitted,
+      enterScenes: s.enterScenes,
+      advanceLine: s.advanceLine,
+      chooseOption: s.chooseOption,
+      advanceScene: s.advanceScene,
+      reset: s.reset,
+    })),
+  );
 
   // -------------------------------------------------------------------------
   // Dev: skip API key panel when .env.local keys are present
   // -------------------------------------------------------------------------
 
   useEffect(() => {
+    if (!hasHydrated) return;
     if (process.env.NODE_ENV !== "development") return;
+    if (phase !== "api-keys") return;
     fetch("/api/dev-keys")
       .then((r) => r.json())
       .then((data: { skip: boolean }) => {
-        if (data.skip) setPhase("intro");
+        if (data.skip) keysConfirmed();
       })
       .catch(() => {});
-  }, []);
-
-  // -------------------------------------------------------------------------
-  // Reset dialogue state whenever scene changes
-  // -------------------------------------------------------------------------
-
-  useEffect(() => {
-    if (phase !== "scene") return;
-    setCurrentLineIndex(0);
-    setShowChoices(false);
-    setChoiceMade(null);
-    onCompleteCalledRef.current = false;
-  }, [phase, sceneIndex]);
+  }, [hasHydrated, phase, keysConfirmed]);
 
   // -------------------------------------------------------------------------
   // Handlers
   // -------------------------------------------------------------------------
 
-  const handleKeysConfirmed = useCallback((_keys: ApiKeys) => {
-    setPhase("intro");
-  }, []);
+  const handleKeysConfirmed = useCallback(
+    (_keys: ApiKeys) => {
+      keysConfirmed();
+    },
+    [keysConfirmed],
+  );
 
   const handleMuteToggle = useCallback(() => {
     setIsMuted((prev) => !prev);
   }, []);
 
-  // Called when each dialogue line finishes animating
   const handleLineComplete = useCallback(() => {
-    if (onCompleteCalledRef.current) return;
+    const scene = SCENES[sceneIndex];
+    if (!scene) return;
+    advanceLine(scene.dialogue.length);
+  }, [sceneIndex, advanceLine]);
 
-    setCurrentLineIndex((prev) => {
-      const scene = SCENES[sceneIndex];
-      const next = prev + 1;
-      if (next >= scene.dialogue.length) {
-        onCompleteCalledRef.current = true;
-        setShowChoices(true);
-        return prev;
-      }
-      return next;
-    });
-  }, [sceneIndex]);
-
-  // Called when the player picks a choice
   const handleChoice = useCallback(
     (choiceId: string) => {
       const scene = SCENES[sceneIndex];
-      const choice = scene.choices.find((c) => c.id === choiceId);
-
-      // Apply stat deltas
-      const dHype = choice?.hype ?? 0;
-      const dIntegrity = choice?.integrity ?? 0;
-      const nextHype = hype + dHype;
-      const nextIntegrity = integrity + dIntegrity;
-
-      setHype(nextHype);
-      setIntegrity(nextIntegrity);
-      setChoiceHistory((prev) => [...prev, `scene${scene.id}:${choiceId}`]);
-      setChoiceMade(choiceId);
-
-      // Brief pause so the selected button state is visible, then advance
+      const choice = scene?.choices.find((c) => c.id === choiceId);
+      chooseOption(choiceId, choice?.hype ?? 0, choice?.integrity ?? 0);
       setTimeout(() => {
-        const nextSceneIndex = sceneIndex + 1;
-        if (nextSceneIndex >= SCENES.length) {
-          // All scenes done — classify ending
-          setEnding(classifyEnding(nextHype, nextIntegrity));
-          setPhase("ending");
-        } else {
-          setSceneIndex(nextSceneIndex);
-          // Reset for next scene (useEffect will also fire but belt+suspenders)
-          setCurrentLineIndex(0);
-          setShowChoices(false);
-          setChoiceMade(null);
-          onCompleteCalledRef.current = false;
-        }
+        advanceScene(SCENES.length);
       }, 600);
     },
-    [sceneIndex, hype, integrity],
+    [sceneIndex, chooseOption, advanceScene],
   );
 
   const handleTextSubmit = useCallback(
@@ -449,7 +406,7 @@ export default function HomePage() {
               co-founder is already texting.
             </p>
             <button
-              onClick={() => setPhase("generating")}
+              onClick={() => introSubmitted("")}
               className="mt-2 w-full bg-white text-black font-semibold rounded-lg py-3 hover:bg-white/90 transition-colors text-sm"
             >
               Board the flight →
@@ -475,7 +432,7 @@ export default function HomePage() {
               Your co-founder is already texting.
             </p>
             <button
-              onClick={() => setPhase("scene")}
+              onClick={() => enterScenes()}
               className="mt-4 text-white/30 hover:text-white/60 text-xs underline transition-colors"
             >
               Enter →
@@ -496,7 +453,7 @@ export default function HomePage() {
         );
 
       case "ending": {
-        const e = ending ? ENDING_COPY[ending] : null;
+        const e = ending ? ENDING_COPY[ending.key] : null;
         return (
           <div className="backdrop-panel animate-fade-slide-up rounded-2xl p-8 max-w-md w-full text-center flex flex-col gap-5">
             <p className="text-white/40 text-xs font-semibold tracking-widest uppercase">
@@ -516,17 +473,10 @@ export default function HomePage() {
                 {hype} · Integrity {integrity > 0 ? "+" : ""}
                 {integrity}
               </span>
-              <span>{choiceHistory.length} choices made</span>
+              <span>{historyCount} choices made</span>
             </div>
             <button
-              onClick={() => {
-                setSceneIndex(0);
-                setChoiceHistory([]);
-                setHype(0);
-                setIntegrity(0);
-                setEnding(null);
-                setPhase("intro");
-              }}
+              onClick={() => reset()}
               className="mt-2 w-full border border-white/20 text-white/70 font-medium rounded-lg py-3 hover:bg-white/5 transition-colors text-sm"
             >
               Play again →
@@ -540,6 +490,8 @@ export default function HomePage() {
   // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
+
+  if (!hasHydrated) return null;
 
   return (
     <>

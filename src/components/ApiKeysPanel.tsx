@@ -72,21 +72,20 @@ export default function ApiKeysPanel({ onConfirm }: ApiKeysPanelProps) {
   };
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-50 px-4">
-      <div className="backdrop-panel animate-fade-slide-up rounded-2xl p-8 w-full max-w-md">
+    <div className="backdrop-panel animate-fade-slide-up rounded-2xl p-8 w-full max-w-md">
         {/* Overline */}
         <p className="text-amber-400 text-xs font-semibold tracking-widest uppercase mb-4">
-          Boarding Pass Required
+          Capital for the trip
         </p>
 
         {/* Title */}
         <h2 className="text-white text-xl font-semibold mb-1">
-          You&apos;ll need your own keys
+          Card on file, please
         </h2>
 
         {/* Subtitle */}
         <p className="text-white/40 text-sm mb-6">
-          Stored locally. Never sent to our servers.
+          Stored on your device. Never sent to our servers.
         </p>
 
         {/* Fields */}
@@ -160,7 +159,7 @@ export default function ApiKeysPanel({ onConfirm }: ApiKeysPanelProps) {
           onClick={handleConfirm}
           className="w-full bg-white text-black font-semibold rounded-lg py-3 hover:bg-white/90 transition-colors mt-6"
         >
-          Claim your seat →
+          Charge card →
         </button>
 
         {/* Error */}
@@ -168,6 +167,5 @@ export default function ApiKeysPanel({ onConfirm }: ApiKeysPanelProps) {
           <p className="text-red-400 text-xs mt-2 text-center">{error}</p>
         )}
       </div>
-    </div>
   );
 }
