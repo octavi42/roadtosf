@@ -9,10 +9,14 @@
  * --------------------------------------------------------------------------*/
 
 @theme {
+    /* Single typeface across the whole app — Chicago Kare bitmap. */
     --font-display: var(--font-chicago), "Chicago", "Geneva", system-ui,
         sans-serif;
-    --font-pixel: var(--font-vt323), "Chicago", "Monaco", monospace;
-    --font-sans: var(--font-geist-sans), "Geist Sans", system-ui, sans-serif;
+    --font-pixel: var(--font-chicago), "Chicago", "Geneva", system-ui,
+        sans-serif;
+    --font-sans: var(--font-chicago), "Chicago", "Geneva", system-ui,
+        sans-serif;
+    --font-mono: var(--font-chicago), "Chicago", "Geneva", monospace;
 
     /* SF palette — slightly desaturated for a more grown-up feel */
     --color-fog: #f3ece1; /* warm fog paper */
@@ -39,6 +43,8 @@ body {
     overflow: hidden;
     background: var(--color-fog);
     color: var(--color-ink);
+    font-family: var(--font-chicago), "Chicago", "Geneva", system-ui,
+        sans-serif;
 }
 
 /* Halftone dot pattern overlay — subtle paper-print texture */
