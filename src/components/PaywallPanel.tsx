@@ -114,6 +114,11 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
   const [returningUser, setReturningUser] = useState<boolean | null>(null);
   const [checkingEmail, setCheckingEmail] = useState(false);
 
+  // OTP state for the returning-user flow.
+  const [codeSent, setCodeSent] = useState(false);
+  const [code, setCode] = useState("");
+  const [sendingCode, setSendingCode] = useState(false);
+
   // Fetch a PaymentIntent the moment the panel mounts so the form is ready
   // to submit by the time the player has finished typing.
   useEffect(() => {
@@ -172,27 +177,61 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
     }
   };
 
-  const handleRedeem = async () => {
+  const handleSendCode = async () => {
+    if (sendingCode) return;
+    if (!EMAIL_RE.test(email.trim())) return;
+    setSendingCode(true);
+    setError(null);
+    try {
+      const r = await fetch("/api/paywall/email/send-code", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      const data = (await r.json()) as { sent?: boolean; error?: string };
+      if (!r.ok || !data.sent) {
+        setError(data.error ?? "Could not send code.");
+        setSendingCode(false);
+        return;
+      }
+      setCodeSent(true);
+    } catch (err) {
+      console.error("paywall send-code failed", err);
+      setError("Network error sending code.");
+    } finally {
+      setSendingCode(false);
+    }
+  };
+
+  const handleVerifyCode = async () => {
     if (submitting) return;
     if (!playthroughId) return;
+    if (!/^\d{6}$/.test(code.trim())) {
+      setError("Enter the 6-digit code.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
-      const r = await fetch("/api/paywall/redeem", {
+      const r = await fetch("/api/paywall/email/verify-code", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ playthroughId, email: email.trim() }),
+        body: JSON.stringify({
+          playthroughId,
+          email: email.trim(),
+          code: code.trim(),
+        }),
       });
       const data = (await r.json()) as { paid?: boolean; error?: string };
       if (!r.ok || !data.paid) {
-        setError(data.error ?? "Could not redeem.");
+        setError(data.error ?? "Could not verify code.");
         setSubmitting(false);
         return;
       }
       onSatisfied();
     } catch (err) {
-      console.error("paywall redeem failed", err);
-      setError("Network error during redeem.");
+      console.error("paywall verify-code failed", err);
+      setError("Network error during verify.");
       setSubmitting(false);
     }
   };
@@ -274,6 +313,10 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
             // Invalidate any prior lookup as soon as the email changes —
             // we'll re-check on blur once they stop typing.
             if (returningUser !== null) setReturningUser(null);
+            if (codeSent) {
+              setCodeSent(false);
+              setCode("");
+            }
           }}
           onBlur={handleEmailBlur}
           placeholder="you@example.com"
@@ -366,14 +409,16 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
       )}
 
       {returningUser ? (
-        <button
-          type="button"
-          onClick={handleRedeem}
-          disabled={submitting || !playthroughId}
-          className="w-full bg-emerald-400 text-black font-semibold rounded-lg py-3 hover:bg-emerald-300 transition-colors text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {submitting ? "Continuing…" : "Continue with previous payment →"}
-        </button>
+        <ReturningUserPanel
+          codeSent={codeSent}
+          code={code}
+          onCodeChange={setCode}
+          sendingCode={sendingCode}
+          submitting={submitting}
+          onSendCode={handleSendCode}
+          onVerify={handleVerifyCode}
+          canSubmit={Boolean(playthroughId)}
+        />
       ) : (
         <button
           type="button"
@@ -390,6 +435,73 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
         Stripe test mode — use 4242 4242 4242 4242
       </p>
     </PaywallShell>
+  );
+}
+
+function ReturningUserPanel({
+  codeSent,
+  code,
+  onCodeChange,
+  sendingCode,
+  submitting,
+  onSendCode,
+  onVerify,
+  canSubmit,
+}: {
+  codeSent: boolean;
+  code: string;
+  onCodeChange: (v: string) => void;
+  sendingCode: boolean;
+  submitting: boolean;
+  onSendCode: () => void;
+  onVerify: () => void;
+  canSubmit: boolean;
+}) {
+  if (!codeSent) {
+    return (
+      <button
+        type="button"
+        onClick={onSendCode}
+        disabled={sendingCode || !canSubmit}
+        className="w-full bg-emerald-400 text-black font-semibold rounded-lg py-3 hover:bg-emerald-300 transition-colors text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {sendingCode ? "Sending…" : "Send code to email →"}
+      </button>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="block text-white/55 text-[11px] uppercase tracking-wider">
+        Enter the 6-digit code
+      </label>
+      <input
+        value={code}
+        onChange={(e) =>
+          onCodeChange(e.target.value.replace(/[^\d]/g, "").slice(0, 6))
+        }
+        placeholder="123456"
+        inputMode="numeric"
+        maxLength={6}
+        autoComplete="one-time-code"
+        className="w-full bg-white/5 border border-white/10 rounded-lg px-3.5 py-2.5 text-white text-base tracking-[0.4em] text-center placeholder-white/25 focus:outline-none focus:border-white/30 transition-colors"
+      />
+      <button
+        type="button"
+        onClick={onVerify}
+        disabled={submitting || !canSubmit || code.length !== 6}
+        className="w-full bg-emerald-400 text-black font-semibold rounded-lg py-3 hover:bg-emerald-300 transition-colors text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {submitting ? "Verifying…" : "Verify and continue →"}
+      </button>
+      <button
+        type="button"
+        onClick={onSendCode}
+        disabled={sendingCode}
+        className="text-white/40 text-[11px] hover:text-white/70 transition-colors mt-1"
+      >
+        {sendingCode ? "Resending…" : "Resend code"}
+      </button>
+    </div>
   );
 }
 
