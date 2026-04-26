@@ -444,6 +444,8 @@ export default function HomePage() {
             placeholder="Counter-offer… (e.g. Keep Maya, drop the clause)"
             onSubmit={handleTextSubmit}
             disabled={choiceMade !== null}
+            isMuted={isMuted}
+            onMuteToggle={handleMuteToggle}
           />
         </div>
       );
@@ -455,6 +457,8 @@ export default function HomePage() {
           placeholder="Type your response…"
           onSubmit={handleTextSubmit}
           disabled={choiceMade !== null}
+          isMuted={isMuted}
+          onMuteToggle={handleMuteToggle}
         />
       );
     }
