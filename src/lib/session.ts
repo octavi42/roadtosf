@@ -4,10 +4,17 @@ import type { EndingKey, StoryArc } from "./types";
 
 export type Phase =
   | "welcome"
-  | "api-keys"
   | "onboarding"
   | "scene"
+  | "paywall"
   | "ending";
+
+/**
+ * Paywall fires when this scene index has just been completed
+ * (i.e. the wall sits between scene N+1 and scene N+2 in player-facing terms).
+ * Single source of truth — move this to shift the wall.
+ */
+export const PAYWALL_AFTER_SCENE_INDEX = 2;
 
 export interface IntroData {
   transcript: string;
@@ -53,11 +60,11 @@ interface SessionState {
 
   setPlaythroughId: (id: string | undefined) => void;
   welcomeStarted: () => void;
-  keysConfirmed: () => void;
   introSubmitted: (
     transcript: string,
     extracted?: Partial<Omit<IntroData, "transcript">>,
   ) => void;
+  paywallSatisfied: () => void;
   arcReady: (arc: StoryArc) => void;
   devSetPhase: (phase: Phase, sceneIndex?: number) => void;
   advanceLine: (totalLines: number) => void;
@@ -112,12 +119,6 @@ export const useSessionStore = create<SessionState>()(
       welcomeStarted: () =>
         set((state) => {
           if (state.phase !== "welcome") return state;
-          return { phase: "api-keys" };
-        }),
-
-      keysConfirmed: () =>
-        set((state) => {
-          if (state.phase !== "api-keys") return state;
           return { phase: "onboarding" };
         }),
 
@@ -184,14 +185,22 @@ export const useSessionStore = create<SessionState>()(
               },
             };
           }
-          return {
-            progress: {
-              sceneIndex: nextIndex,
-              currentLineIndex: 0,
-              showChoices: false,
-              choiceMade: null,
-            },
+          const nextProgress = {
+            sceneIndex: nextIndex,
+            currentLineIndex: 0,
+            showChoices: false,
+            choiceMade: null,
           };
+          if (state.progress.sceneIndex === PAYWALL_AFTER_SCENE_INDEX) {
+            return { phase: "paywall", progress: nextProgress };
+          }
+          return { progress: nextProgress };
+        }),
+
+      paywallSatisfied: () =>
+        set((state) => {
+          if (state.phase !== "paywall") return state;
+          return { phase: "scene" };
         }),
 
       devSetPhase: (phase, sceneIndex = 0) =>
@@ -201,6 +210,18 @@ export const useSessionStore = create<SessionState>()(
               phase,
               progress: {
                 sceneIndex,
+                currentLineIndex: 0,
+                showChoices: false,
+                choiceMade: null,
+              },
+              ending: undefined,
+            };
+          }
+          if (phase === "paywall") {
+            return {
+              phase,
+              progress: {
+                sceneIndex: PAYWALL_AFTER_SCENE_INDEX + 1,
                 currentLineIndex: 0,
                 showChoices: false,
                 choiceMade: null,

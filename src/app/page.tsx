@@ -3,24 +3,19 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { GameShell } from "@/components/GameShell";
-import ApiKeysPanel from "@/components/ApiKeysPanel";
 import MuteButton from "@/components/MuteButton";
 import ChoicePanel from "@/components/ChoicePanel";
 import TextInputPanel from "@/components/TextInputPanel";
 import DialogueSubtitle from "@/components/DialogueSubtitle";
 import DialogueSpeaker from "@/components/DialogueSpeaker";
 import OnboardingPanel from "@/components/OnboardingPanel";
+import PaywallPanel from "@/components/PaywallPanel";
 import { useSessionStore } from "@/lib/session";
 import type { EndingKey } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-interface ApiKeys {
-  openaiKey: string;
-  elevenlabsKey: string;
-}
 
 interface DialogueLine {
   speaker: string;
@@ -257,8 +252,8 @@ export default function HomePage() {
   const {
     setPlaythroughId,
     welcomeStarted,
-    keysConfirmed,
     introSubmitted,
+    paywallSatisfied,
     advanceLine,
     chooseOption,
     advanceScene,
@@ -267,8 +262,8 @@ export default function HomePage() {
     useShallow((s) => ({
       setPlaythroughId: s.setPlaythroughId,
       welcomeStarted: s.welcomeStarted,
-      keysConfirmed: s.keysConfirmed,
       introSubmitted: s.introSubmitted,
+      paywallSatisfied: s.paywallSatisfied,
       advanceLine: s.advanceLine,
       chooseOption: s.chooseOption,
       advanceScene: s.advanceScene,
@@ -311,29 +306,6 @@ export default function HomePage() {
   }, []);
 
   // -------------------------------------------------------------------------
-  // Dev: skip API key panel when .env.local keys are present
-  // -------------------------------------------------------------------------
-
-  useEffect(() => {
-    if (!hasHydrated) return;
-    if (process.env.NODE_ENV !== "development") return;
-    if (phase !== "api-keys") return;
-    // DevPanel pinning to api-keys must beat the dev-keys auto-skip
-    if (typeof window !== "undefined") {
-      try {
-        const raw = window.localStorage.getItem("rtsf_dev_phase");
-        if (raw && JSON.parse(raw).phase === "api-keys") return;
-      } catch {}
-    }
-    fetch("/api/dev-keys")
-      .then((r) => r.json())
-      .then((data: { skip: boolean }) => {
-        if (data.skip) keysConfirmed();
-      })
-      .catch(() => {});
-  }, [hasHydrated, phase, keysConfirmed]);
-
-  // -------------------------------------------------------------------------
   // DB capture
   // -------------------------------------------------------------------------
 
@@ -373,13 +345,6 @@ export default function HomePage() {
   // -------------------------------------------------------------------------
   // Handlers
   // -------------------------------------------------------------------------
-
-  const handleKeysConfirmed = useCallback(
-    (_keys: ApiKeys) => {
-      keysConfirmed();
-    },
-    [keysConfirmed],
-  );
 
   const handleMuteToggle = useCallback(() => {
     setIsMuted((prev) => !prev);
@@ -584,7 +549,7 @@ export default function HomePage() {
       case "welcome":
         return null;
 
-      case "api-keys":
+      case "paywall":
         return null;
 
       case "onboarding":
@@ -648,10 +613,8 @@ export default function HomePage() {
 
   return (
     <>
-      {phase === "api-keys" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/40 backdrop-blur-sm">
-          <ApiKeysPanel onConfirm={handleKeysConfirmed} />
-        </div>
+      {phase === "paywall" && (
+        <PaywallPanel onSatisfied={() => paywallSatisfied()} />
       )}
 
       <GameShell

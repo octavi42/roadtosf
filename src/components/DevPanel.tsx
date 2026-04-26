@@ -13,11 +13,11 @@ interface DevTarget {
 
 const TARGETS: DevTarget[] = [
   { label: "Welcome", phase: "welcome" },
-  { label: "API Keys", phase: "api-keys" },
   { label: "Onboarding", phase: "onboarding" },
   { label: "Scene 1", phase: "scene", sceneIndex: 0 },
   { label: "Scene 2", phase: "scene", sceneIndex: 1 },
   { label: "Scene 3", phase: "scene", sceneIndex: 2 },
+  { label: "Paywall", phase: "paywall" },
   { label: "Scene 4", phase: "scene", sceneIndex: 3 },
   { label: "Scene 5", phase: "scene", sceneIndex: 4 },
   { label: "Ending", phase: "ending" },
