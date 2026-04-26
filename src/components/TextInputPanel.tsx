@@ -1,12 +1,21 @@
 "use client"
 
-import { useRef, useState, useCallback, KeyboardEvent, ChangeEvent } from "react"
+import {
+  useRef,
+  useState,
+  useCallback,
+  useEffect,
+  KeyboardEvent,
+  ChangeEvent,
+} from "react"
 
 interface TextInputPanelProps {
   placeholder?: string
   onSubmit: (text: string) => void
   disabled?: boolean
   maxLength?: number
+  /** ms between typed characters in the placeholder reveal */
+  typeSpeedMs?: number
 }
 
 export default function TextInputPanel({
@@ -14,6 +23,7 @@ export default function TextInputPanel({
   onSubmit,
   disabled = false,
   maxLength = 280,
+  typeSpeedMs = 38,
 }: TextInputPanelProps) {
   const [value, setValue] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -21,6 +31,30 @@ export default function TextInputPanel({
   const LINE_HEIGHT = 24
   const MIN_ROWS = 1
   const MAX_ROWS = 4
+
+  // Typewriter placeholder ----------------------------------------------------
+  const [typedCount, setTypedCount] = useState(0)
+  const [showCursor, setShowCursor] = useState(true)
+
+  // Reset typing when the placeholder string itself changes (e.g. Scene 3 swap)
+  useEffect(() => {
+    setTypedCount(0)
+  }, [placeholder])
+
+  // Type one character at a time until the placeholder is fully revealed
+  useEffect(() => {
+    if (typedCount >= placeholder.length) return
+    const id = setTimeout(() => {
+      setTypedCount((n) => n + 1)
+    }, typeSpeedMs)
+    return () => clearTimeout(id)
+  }, [typedCount, placeholder, typeSpeedMs])
+
+  // Blink the cursor — slightly slower than typing so it doesn't strobe
+  useEffect(() => {
+    const id = setInterval(() => setShowCursor((c) => !c), 530)
+    return () => clearInterval(id)
+  }, [])
 
   function recalcHeight(el: HTMLTextAreaElement) {
     el.style.height = "auto"
@@ -63,22 +97,47 @@ export default function TextInputPanel({
       ? "text-[var(--color-sunset-deep)]"
       : "text-[var(--color-ink)]/50"
 
+  const typedSlice = placeholder.slice(0, typedCount)
+
   return (
     <div
       className="comic-outline rounded-2xl px-5 py-4 w-full max-w-2xl mx-auto animate-bounce-in"
       style={{ background: "var(--color-fog)" }}
     >
-      <textarea
-        ref={textareaRef}
-        value={value}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        disabled={disabled}
-        placeholder={placeholder}
-        rows={MIN_ROWS}
-        className="font-sans w-full bg-transparent text-[var(--color-ink)] text-base resize-none outline-none placeholder-[var(--color-ink)]/40 leading-relaxed disabled:opacity-40 disabled:cursor-not-allowed"
-        style={{ minHeight: `${LINE_HEIGHT * MIN_ROWS}px` }}
-      />
+      <div className="relative">
+        {/* Typewriter placeholder overlay — visible only when value is empty */}
+        {value.length === 0 && (
+          <div
+            aria-hidden="true"
+            className="font-sans pointer-events-none absolute inset-0 text-base leading-relaxed text-[var(--color-ink)]/40 select-none whitespace-pre-wrap break-words"
+            style={{ minHeight: `${LINE_HEIGHT * MIN_ROWS}px` }}
+          >
+            {typedSlice}
+            <span
+              aria-hidden="true"
+              style={{
+                opacity: showCursor ? 1 : 0,
+                transition: "opacity 80ms linear",
+                color: "var(--color-ink)",
+              }}
+            >
+              ▌
+            </span>
+          </div>
+        )}
+
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          disabled={disabled}
+          aria-label={placeholder}
+          rows={MIN_ROWS}
+          className="font-sans relative w-full bg-transparent text-[var(--color-ink)] text-base resize-none outline-none leading-relaxed disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ minHeight: `${LINE_HEIGHT * MIN_ROWS}px` }}
+        />
+      </div>
 
       <div className="flex items-center justify-between mt-3">
         <span
