@@ -68,6 +68,7 @@ interface SessionState {
   ) => void;
   advanceScene: (totalScenes: number) => void;
   reset: () => void;
+  devSetPhase: (phase: Phase, sceneIndex?: number) => void;
 }
 
 const INITIAL_INTRO: IntroData = {
@@ -202,6 +203,30 @@ export const useSessionStore = create<SessionState>()(
           stats: { hype: 0, integrity: 0 },
           ending: undefined,
           playthroughId: undefined,
+        }),
+
+      devSetPhase: (phase, sceneIndex = 0) =>
+        set((state) => {
+          if (phase === "scene") {
+            return {
+              phase,
+              progress: {
+                sceneIndex,
+                currentLineIndex: 0,
+                showChoices: false,
+                choiceMade: null,
+              },
+              ending: undefined,
+            };
+          }
+          if (phase === "ending") {
+            return {
+              phase,
+              ending:
+                state.ending ?? { key: "ipo", achievementsUnlocked: [] },
+            };
+          }
+          return { phase, ending: undefined };
         }),
     }),
     {
