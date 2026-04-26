@@ -327,6 +327,7 @@ export default function HomePage() {
   const handleIntroSubmit = useCallback(() => {
     const startupName = "Wagr";
     const startupDescription = "Venmo for sports bets between friends";
+    setPlaythroughId(undefined);
     introSubmitted("", { startupName, startupDescription });
     fetch("/api/playthroughs", {
       method: "POST",
@@ -361,7 +362,8 @@ export default function HomePage() {
 
       if (playthroughId && scene) {
         const startedAt = choiceShownAtRef.current;
-        const timeToChooseMs = startedAt ? Date.now() - startedAt : null;
+        const timeToChooseMs =
+          startedAt !== null ? Date.now() - startedAt : null;
         fetch(`/api/playthroughs/${playthroughId}/scenes`, {
           method: "POST",
           headers: { "content-type": "application/json" },
