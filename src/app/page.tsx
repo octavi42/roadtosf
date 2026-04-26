@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { GameShell } from "@/components/GameShell";
 import ApiKeysPanel from "@/components/ApiKeysPanel";
@@ -232,8 +232,10 @@ export default function HomePage() {
   const { hype, integrity } = useSessionStore(useShallow((s) => s.stats));
   const ending = useSessionStore((s) => s.ending);
   const historyCount = useSessionStore((s) => s.history.length);
+  const playthroughId = useSessionStore((s) => s.playthroughId);
 
   const {
+    setPlaythroughId,
     keysConfirmed,
     introSubmitted,
     enterScenes,
@@ -243,6 +245,7 @@ export default function HomePage() {
     reset,
   } = useSessionStore(
     useShallow((s) => ({
+      setPlaythroughId: s.setPlaythroughId,
       keysConfirmed: s.keysConfirmed,
       introSubmitted: s.introSubmitted,
       enterScenes: s.enterScenes,
@@ -270,6 +273,43 @@ export default function HomePage() {
   }, [hasHydrated, phase, keysConfirmed]);
 
   // -------------------------------------------------------------------------
+  // DB capture
+  // -------------------------------------------------------------------------
+
+  // Tracks when the choice panel became visible, for time_to_choose_ms.
+  const choiceShownAtRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (showChoices) {
+      if (choiceShownAtRef.current === null) {
+        choiceShownAtRef.current = Date.now();
+      }
+    } else {
+      choiceShownAtRef.current = null;
+    }
+  }, [showChoices]);
+
+  // Finalize the playthrough exactly once when the ending lands.
+  const finalizedRef = useRef(false);
+  useEffect(() => {
+    if (phase !== "ending") {
+      finalizedRef.current = false;
+      return;
+    }
+    if (finalizedRef.current) return;
+    if (!playthroughId || !ending) return;
+    finalizedRef.current = true;
+    fetch(`/api/playthroughs/${playthroughId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ending: ending.key,
+        epilogue: null,
+        achievements: ending.achievementsUnlocked,
+      }),
+    }).catch((err) => console.error("finalizePlaythrough failed", err));
+  }, [phase, playthroughId, ending]);
+
+  // -------------------------------------------------------------------------
   // Handlers
   // -------------------------------------------------------------------------
 
@@ -284,6 +324,28 @@ export default function HomePage() {
     setIsMuted((prev) => !prev);
   }, []);
 
+  const handleIntroSubmit = useCallback(() => {
+    const startupName = "Wagr";
+    const startupDescription = "Venmo for sports bets between friends";
+    setPlaythroughId(undefined);
+    introSubmitted("", { startupName, startupDescription });
+    fetch("/api/playthroughs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        startupName,
+        startupDescription,
+        flavorTags: [],
+        introTranscript: "",
+      }),
+    })
+      .then((r) => r.json())
+      .then((data: { id?: string }) => {
+        if (data.id) setPlaythroughId(data.id);
+      })
+      .catch((err) => console.error("createPlaythrough failed", err));
+  }, [introSubmitted, setPlaythroughId]);
+
   const handleLineComplete = useCallback(() => {
     const scene = SCENES[sceneIndex];
     if (!scene) return;
@@ -291,22 +353,49 @@ export default function HomePage() {
   }, [sceneIndex, advanceLine]);
 
   const handleChoice = useCallback(
-    (choiceId: string) => {
+    (choiceId: string, freeText?: string) => {
       const scene = SCENES[sceneIndex];
       const choice = scene?.choices.find((c) => c.id === choiceId);
-      chooseOption(choiceId, choice?.hype ?? 0, choice?.integrity ?? 0);
+      const hypeDelta = choice?.hype ?? 0;
+      const integrityDelta = choice?.integrity ?? 0;
+      chooseOption(choiceId, hypeDelta, integrityDelta);
+
+      if (playthroughId && scene) {
+        const startedAt = choiceShownAtRef.current;
+        const timeToChooseMs =
+          startedAt !== null ? Date.now() - startedAt : null;
+        fetch(`/api/playthroughs/${playthroughId}/scenes`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            sceneNumber: scene.id,
+            dialogue: scene.dialogue
+              .map((d) => `${d.speaker}: ${d.text}`)
+              .join("\n"),
+            choicesShown: scene.choices.map((c) => ({
+              id: c.id,
+              label: c.label,
+            })),
+            choicePicked: choiceId,
+            freeText: freeText ?? null,
+            wasTimeout: false,
+            timeToChooseMs,
+            statDeltas: { hype: hypeDelta, integrity: integrityDelta },
+          }),
+        }).catch((err) => console.error("logSceneEvent failed", err));
+      }
+
       setTimeout(() => {
         advanceScene(SCENES.length);
       }, 600);
     },
-    [sceneIndex, chooseOption, advanceScene],
+    [sceneIndex, chooseOption, advanceScene, playthroughId],
   );
 
   const handleTextSubmit = useCallback(
     (text: string) => {
-      console.log("[counter-offer]", text);
       // Scene 3 counter-offer: classify as "walk" for now (integrity boost)
-      handleChoice("b");
+      handleChoice("b", text);
     },
     [handleChoice],
   );
@@ -406,7 +495,7 @@ export default function HomePage() {
               co-founder is already texting.
             </p>
             <button
-              onClick={() => introSubmitted("")}
+              onClick={handleIntroSubmit}
               className="mt-2 w-full bg-white text-black font-semibold rounded-lg py-3 hover:bg-white/90 transition-colors text-sm"
             >
               Board the flight →
