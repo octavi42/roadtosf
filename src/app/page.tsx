@@ -318,6 +318,13 @@ export default function HomePage() {
     if (!hasHydrated) return;
     if (process.env.NODE_ENV !== "development") return;
     if (phase !== "api-keys") return;
+    // DevPanel pinning to api-keys must beat the dev-keys auto-skip
+    if (typeof window !== "undefined") {
+      try {
+        const raw = window.localStorage.getItem("rtsf_dev_phase");
+        if (raw && JSON.parse(raw).phase === "api-keys") return;
+      } catch {}
+    }
     fetch("/api/dev-keys")
       .then((r) => r.json())
       .then((data: { skip: boolean }) => {

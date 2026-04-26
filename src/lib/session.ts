@@ -59,6 +59,7 @@ interface SessionState {
     extracted?: Partial<Omit<IntroData, "transcript">>,
   ) => void;
   arcReady: (arc: StoryArc) => void;
+  devSetPhase: (phase: Phase, sceneIndex?: number) => void;
   advanceLine: (totalLines: number) => void;
   chooseOption: (
     choiceId: string,
@@ -191,6 +192,30 @@ export const useSessionStore = create<SessionState>()(
               choiceMade: null,
             },
           };
+        }),
+
+      devSetPhase: (phase, sceneIndex = 0) =>
+        set((state) => {
+          if (phase === "scene") {
+            return {
+              phase,
+              progress: {
+                sceneIndex,
+                currentLineIndex: 0,
+                showChoices: false,
+                choiceMade: null,
+              },
+              ending: undefined,
+            };
+          }
+          if (phase === "ending") {
+            return {
+              phase,
+              ending:
+                state.ending ?? { key: "ipo", achievementsUnlocked: [] },
+            };
+          }
+          return { phase, ending: undefined };
         }),
 
       reset: () =>
