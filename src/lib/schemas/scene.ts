@@ -192,26 +192,21 @@ export function coerceRawSceneJson(data: unknown, opts?: CoerceSceneOptions): un
   }
 
   // shareMoment: drop the field if malformed rather than failing the whole
-  // scene. A bad share blurb is much worse than no share moment.
+  // scene. A bad share blurb is much worse than no share moment. Trim first
+  // so a model that pads with whitespace still validates against the min(1)
+  // rule; if it still fails, just delete it.
   if (out.shareMoment !== undefined) {
-    const sm = out.shareMoment
-    const valid =
-      sm &&
-      typeof sm === 'object' &&
-      typeof (sm as Record<string, unknown>).title === 'string' &&
-      typeof (sm as Record<string, unknown>).blurb === 'string' &&
-      ((sm as Record<string, unknown>).title as string).trim().length > 0 &&
-      ((sm as Record<string, unknown>).blurb as string).trim().length > 0
-    if (valid) {
-      const t = ((sm as Record<string, unknown>).title as string).trim()
-      const b = ((sm as Record<string, unknown>).blurb as string).trim()
-      out.shareMoment = {
-        title: t.length > 60 ? t.slice(0, 60).trimEnd() : t,
-        blurb: b.length > 180 ? b.slice(0, 180).trimEnd() : b,
-      }
-    } else {
-      delete out.shareMoment
-    }
+    const sm = out.shareMoment as Record<string, unknown> | null
+    const trimmed =
+      sm && typeof sm === 'object'
+        ? {
+            title: typeof sm.title === 'string' ? sm.title.trim() : sm.title,
+            blurb: typeof sm.blurb === 'string' ? sm.blurb.trim() : sm.blurb,
+          }
+        : sm
+    const parsed = shareMomentSchema.safeParse(trimmed)
+    if (parsed.success) out.shareMoment = parsed.data
+    else delete out.shareMoment
   }
 
   if (Array.isArray(out.dialogue)) {

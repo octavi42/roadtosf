@@ -17,7 +17,12 @@ import {
   EPISODE_LENGTH,
 } from "@/lib/session";
 import { ARCHETYPES } from "@/lib/archetypes";
-import type { ArcSkeleton, EndingKey, Scene as LLMScene } from "@/lib/types";
+import type {
+  ArcSkeleton,
+  EndingKey,
+  Scene as LLMScene,
+  ShareMoment,
+} from "@/lib/types";
 import type {
   IntroData,
   MissingQuestion,
@@ -91,7 +96,7 @@ interface UnifiedScene {
   isLLM: boolean;
   // LLM-only — emitted when the scene contains a shareable beat. Frequency
   // is capped client-side; see shareMomentFiredInEpisode in session.ts.
-  shareMoment?: { title: string; blurb: string };
+  shareMoment?: ShareMoment;
 }
 
 function formatArchetypeSpeaker(speaker: string): string {
@@ -234,7 +239,6 @@ export default function HomePage() {
   const shareMomentFiredInEpisode = useSessionStore(
     (s) => s.shareMomentFiredInEpisode,
   );
-  const markShareMomentFired = useSessionStore((s) => s.markShareMomentFired);
   const startupName = intro.startupName;
 
   const {
@@ -253,6 +257,7 @@ export default function HomePage() {
     chooseOption,
     advanceScene,
     reset,
+    markShareMomentFired,
   } = useSessionStore(
     useShallow((s) => ({
       setPlaythroughId: s.setPlaythroughId,
@@ -270,6 +275,7 @@ export default function HomePage() {
       chooseOption: s.chooseOption,
       advanceScene: s.advanceScene,
       reset: s.reset,
+      markShareMomentFired: s.markShareMomentFired,
     })),
   );
 
@@ -344,45 +350,32 @@ export default function HomePage() {
   const currentLine = currentScene?.dialogue[currentLineIndex] ?? null;
 
   // Share-moment trigger: an LLM scene may carry a `shareMoment` payload, but
-  // only one fires per episode. The fired-flag is keyed by sceneIndex so the
-  // overlay reappears if the player navigates back to it within the episode,
-  // and stays suppressed once another scene in the episode has already shown
-  // its own moment. New episodes reset the flag in arcSkeletonReady.
+  // only one fires per episode. Once any scene in the episode has fired, the
+  // budget is spent — even if the player revisits the same scene later. New
+  // episodes reset the flag in arcSkeletonReady.
   const shareMomentVisible =
     phase === "scene" &&
     !!currentScene?.shareMoment &&
-    (shareMomentFiredInEpisode === null ||
-      shareMomentFiredInEpisode === sceneIndex);
+    shareMomentFiredInEpisode === null;
 
   useEffect(() => {
-    if (
-      shareMomentVisible &&
-      currentScene?.shareMoment &&
-      shareMomentFiredInEpisode !== sceneIndex
-    ) {
-      // Mark fired the first time this scene's overlay actually shows. This
-      // burns the per-episode budget so later scenes won't trigger their own.
+    // Synchronise the persisted "fired this episode" flag with the first
+    // render that actually shows the overlay. The deps narrow this to one
+    // run per scene transition, so the cascading-render concern doesn't
+    // apply — this is a one-shot ack, not a state-driven loop.
+    if (shareMomentVisible) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       markShareMomentFired(sceneIndex);
     }
-  }, [
-    shareMomentVisible,
-    currentScene?.shareMoment,
-    shareMomentFiredInEpisode,
-    sceneIndex,
-    markShareMomentFired,
-  ]);
+  }, [shareMomentVisible, sceneIndex, markShareMomentFired]);
 
   const handleShareMomentShare = useCallback(() => {
     const sm = currentScene?.shareMoment;
     if (!sm) return;
-    const playUrl =
-      typeof window !== "undefined" ? window.location.origin : "";
-    const text = `${sm.title} — ${sm.blurb}`;
-    const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}${playUrl ? `&url=${encodeURIComponent(playUrl)}` : ""}`;
-    if (typeof window !== "undefined") {
-      window.open(url, "_blank", "noopener,noreferrer");
-    }
+    const playUrl = window.location.origin;
+    const text = `${sm.title}\n${sm.blurb}`;
+    const url = `https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(playUrl)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
   }, [currentScene?.shareMoment]);
 
   const choiceShownAtRef = useRef<number | null>(null);
@@ -1456,12 +1449,14 @@ export default function HomePage() {
         {centerContent}
       </GameShell>
 
-      <ShareNotification
-        visible={shareMomentVisible}
-        title={currentScene?.shareMoment?.title ?? ""}
-        blurb={currentScene?.shareMoment?.blurb ?? ""}
-        onShare={handleShareMomentShare}
-      />
+      {shareMomentVisible && currentScene?.shareMoment && (
+        <ShareNotification
+          visible
+          title={currentScene.shareMoment.title}
+          blurb={currentScene.shareMoment.blurb}
+          onShare={handleShareMomentShare}
+        />
+      )}
     </>
   );
 }
