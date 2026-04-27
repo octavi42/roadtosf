@@ -21,6 +21,7 @@ export type IntroExtractField =
   | "stage"
   | "team"
   | "fundingModel"
+  | "targetCustomer"
   | "concern";
 
 export interface TextInputConfig {

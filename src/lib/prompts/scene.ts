@@ -22,6 +22,7 @@ export interface BuildScenePromptInput {
   stage?: string
   team?: string
   fundingModel?: string
+  targetCustomer?: string
   concern?: string
   flavorTags: string[]
   recentChoices: PriorChoiceSummary[] // only the last few; older context lives in storySoFar
@@ -35,27 +36,30 @@ HARD RULES:
 - Numbers must be valid JSON: write 1 not +1, write 2 not +2.
 - Real people are NEVER named — archetype them.
 - Use ONLY the archetype assigned in the outline as the in-scene speaker (other archetypes can be referenced in dialogue but not present).
+- In JSON, "archetype" and NPC dialogue "speaker" MUST be the lowercase archetype KEY (vc|cofounder|reporter|hater|mentor) or player|narrator — NEVER a display string like "Stranger, Co-founder & CTO" or "Victor, Managing Partner…".
 - Total dialogue across all lines in this scene MUST be ≤${MAX_DIALOGUE_CHARS_PER_SCENE} chars (TTS budget).
 - Each individual dialogue line ≤160 chars and MUST contain non-empty text. Do not use empty strings for "silent beats" — express silence in narration prose, not as an empty player line.
 - 2–4 dialogue lines per scene total.
 - Choice labels: 2–3 per scene, ≤8 words each, action-flavored.
 - Stat deltas: hype and integrity each ∈ {-2, -1, 0, +1, +2}. Most should be ±1.
+- timeoutSeconds: integer from 8 to 60 only (not seconds-per-line totals).
+- choice "consequence": optional, ≤160 characters each if present.
 - imagePrompt: ≤220 chars. Setting + character action + mood + composition. NEVER style words (no "comic", "cel-shaded", "illustration") — the renderer prepends those.
 - DO NOT resolve the run in dialogue. The player chooses when to end. Each scene leaves a hook.
 
 ABSOLUTE PROHIBITIONS (override the outline if they conflict):
-- NEVER name a character "Maya" unless the player's "Team" facts explicitly contain "Maya".
+- The cofounder speaker has no fixed first name from the roster ("Stranger" is a label only). Use a name only if "Team" facts name someone, verbatim.
 - If the player's Team says "solo" / "no cofounder": do NOT speak as if a cofounder is already in the player's life. The cofounder archetype, if assigned, is a stranger trying to attach themselves OR a memory/ghost — never a current partner.
-- If the player named a cofounder (e.g. "my cofounder Anna"), use that name verbatim. Never substitute "Maya" or anyone else.
+- If the player named a cofounder (e.g. "my cofounder Anna"), use that name verbatim. Never substitute a different name.
 - If Funding says "bootstrapping": do NOT reference term sheets the player has, equity advisory clauses, or VC drama in motion. VC scenes are cold solicitations, not active deals.
 
 OUTPUT SHAPE:
 {
   "id": number,
   "title": string,
-  "archetype": "<assigned archetype>",
+  "archetype": "vc"|"cofounder"|"reporter"|"hater"|"mentor" (exactly; same as THIS SCENE in outline),
   "imagePrompt": string,
-  "dialogue": [{ "speaker": "<archetype>"|"player"|"narrator", "text": string }],
+  "dialogue": [{ "speaker": same archetype key OR "player" OR "narrator", "text": string }],
   "choices": [{ "id": "a"|"b"|"c", "label": string, "consequence": string, "hype": number, "integrity": number }],
   "timeoutSeconds": number,
   "timeoutChoiceId": "a"|"b"|"c"
@@ -88,8 +92,14 @@ export function buildScenePromptParts(input: BuildScenePromptInput) {
   // Cached block: stable across all scene calls in the same episode.
   // Replaces the prior "dump all history" approach with a compressed summary.
   const cachedContext = `## CHARACTER (this scene's speaker)
-${input.outline.archetype}: ${arche.name}, ${arche.title}.
+JSON keys — use EXACTLY for "archetype" and for NPC dialogue "speaker": ${input.outline.archetype}
+Role card (voice flavor only; never paste this label into JSON): ${arche.name}, ${arche.title}.
 Personality: ${arche.personality}
+${
+  input.outline.archetype === 'cofounder'
+    ? '\nNote: "Stranger" is UI flavor only — not a spoken name. If Team facts say solo, they must not claim to be an existing cofounder unless Team names someone.'
+    : ''
+}
 
 ## CURRENT EPISODE SKELETON
 ${arcSummary}
@@ -106,6 +116,7 @@ Stage: ${input.stage || '(unstated)'}
 ## PLAYER FACTS (HONOR THESE — never invent contradictions)
 Team: ${input.team || '(unstated; do not invent a cofounder, treat as solo)'}
 Funding: ${input.fundingModel || '(unstated; do not assume a fundraising track)'}
+Target customer: ${input.targetCustomer || '(unstated; keep generic — don\'t invent a wrong segment)'}
 Current concern: ${input.concern || '(unstated)'}`
 
   // Per-call (uncached): the recent choices + scene target.

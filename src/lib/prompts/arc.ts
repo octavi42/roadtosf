@@ -20,10 +20,11 @@ export interface BuildArcPromptInput {
   startupDescription: string
   founderPersona: string
   stage?: string
-  // Captured in scene 4 Q&A. The LLM MUST honor these — never invent a
-  // contradicting cofounder name or funding situation.
+  // Captured in scene 4 Q&A (or extracted from the pitch). The LLM MUST honor
+  // these — never invent a contradicting cofounder name or funding situation.
   team?: string
   fundingModel?: string
+  targetCustomer?: string
   concern?: string
   flavorTags: string[]
   // For episode 0: choices from authored scenes. For 1+: only the LAST EPISODE's
@@ -46,14 +47,14 @@ HARD RULES:
 - Each "beat" string MUST be ≤ 400 characters. One sentence preferred. Do not pad with detail.
 
 ABSOLUTE PROHIBITIONS (override anything else if they conflict):
-- NEVER name a character "Maya" unless the player's "Team" facts explicitly contain "Maya".
+- The cofounder archetype roster uses the label "Stranger" — not a canon first name. Never give that speaker a fixed first name unless the player's "Team" facts name someone (use that verbatim).
 - If the player's Team says "solo" / "no cofounder" / similar:
   • Do NOT introduce a cofounder character that already exists in the player's life.
   • The "cofounder" archetype scene must reframe — e.g. an old friend pitching to join, a YC-batch acquaintance trying to attach themselves, the ghost of a cofounder the player ALMOST had. Treat the player as alone.
 - If the player's Funding says "bootstrapping" / "no raise" / similar:
   • Do NOT invent term sheets the player accepted, VC partnership offers under negotiation, or implied fundraising history.
   • VC scenes can still happen but as cold pitches the player is being SOLICITED for, not deals already in motion.
-- If the player named a cofounder (e.g. "my cofounder Anna"), use that name verbatim. Never substitute "Maya" or anyone else.
+- If the player named a cofounder (e.g. "my cofounder Anna"), use that name verbatim. Never substitute a different name.
 
 OUTPUT SHAPE:
 {
@@ -142,6 +143,7 @@ Flavor tags: ${input.flavorTags.length ? input.flavorTags.join(', ') : '(none)'}
 ## PLAYER FACTS (HONOR THESE — never invent contradictions)
 Team: ${input.team || '(unstated; do not invent a cofounder, treat as solo)'}
 Funding: ${input.fundingModel || '(unstated; do not assume a fundraising track)'}
+Target customer: ${input.targetCustomer || '(unstated; keep generic — don\'t invent a wrong segment)'}
 Current concern: ${input.concern || '(unstated)'}
 
 Current stats — hype ${input.currentStats.hype}, integrity ${input.currentStats.integrity}.

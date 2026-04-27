@@ -5,7 +5,7 @@
     "archetype": "reporter",
     "imagePrompt": "a Mission cafe, exposed brick, a male tech reporter holding a notepad leaning across a small table, founder's hands wrapped around a coffee cup, two-shot, mid-morning soft light",
     "dialogue": [
-      { "speaker": "reporter", "text": "Three sources say your cofounder's already drafting a goodbye thread. Want to confirm or correct it?" },
+      { "speaker": "reporter", "text": "Three sources inside your batch say there's a goodbye thread already drafted. Want to confirm or correct it?" },
       { "speaker": "reporter", "text": "I'm running it either way. Your version, or the one that bleeds." }
     ],
     "choices": [
@@ -21,12 +21,12 @@
     "archetype": "vc",
     "imagePrompt": "the bar at Rosewood Sand Hill at golden hour, a patrician VC in a tailored blazer across a marble table, founder's hands clasped, a leather portfolio between them, cinematic two-shot",
     "dialogue": [
-      { "speaker": "vc", "text": "Three million, fifteen percent. Maya goes advisory. Offer expires when the bill comes." },
+      { "speaker": "vc", "text": "Three million, fifteen percent. We pick the next hire. Offer expires when the bill comes." },
       { "speaker": "vc", "text": "Tell me something true that almost nobody agrees with you on." }
     ],
     "choices": [
-      { "id": "a", "label": "Take it.", "consequence": "Maya isn't told tonight.", "hype": 1, "integrity": -1 },
-      { "id": "b", "label": "Counter — keep Maya in.", "consequence": "Offer collapses by Friday.", "hype": 0, "integrity": 1 },
+      { "id": "a", "label": "Take it.", "consequence": "Cap table goes from yours to theirs.", "hype": 1, "integrity": -1 },
+      { "id": "b", "label": "Counter — keep more equity.", "consequence": "Offer collapses by Friday.", "hype": 0, "integrity": 1 },
       { "id": "c", "label": "Walk away.", "consequence": "The check goes to a competitor.", "hype": -1, "integrity": 1 }
     ],
     "timeoutSeconds": 15,
@@ -52,14 +52,14 @@
     "id": 9,
     "title": "Scene 9 · The Reckoning",
     "archetype": "cofounder",
-    "imagePrompt": "founder's apartment kitchen at midnight, cofounder standing across the counter holding a phone, screen glow lighting her face, founder seated, two-shot, raw confrontation",
+    "imagePrompt": "founder's apartment kitchen at midnight, a stranger from the YC batch leaning on the counter with a phone in hand, screen glow on their face, founder seated, two-shot, raw confrontation",
     "dialogue": [
-      { "speaker": "cofounder", "text": "I saw the term sheet. The advisory clause with my name on it." },
-      { "speaker": "cofounder", "text": "I have thirty percent. Whatever you say next — choose carefully." }
+      { "speaker": "narrator", "text": "Your phone lights up. Someone from the batch wants to talk equity. They claim they have leverage." },
+      { "speaker": "cofounder", "text": "Whatever you decide tonight — choose carefully. The screen goes dark in your hand." }
     ],
     "choices": [
-      { "id": "a", "label": "Lie. You never saw it.", "consequence": "She pretends to believe you.", "hype": 0, "integrity": -2 },
-      { "id": "b", "label": "Level with her.", "consequence": "One of you leaves by morning.", "hype": 0, "integrity": 2 }
+      { "id": "a", "label": "Lie. Buy time.", "consequence": "They pretend to believe you.", "hype": 0, "integrity": -2 },
+      { "id": "b", "label": "Tell them straight.", "consequence": "One of you leaves by morning.", "hype": 0, "integrity": 2 }
     ],
     "timeoutSeconds": 15,
     "timeoutChoiceId": "b"

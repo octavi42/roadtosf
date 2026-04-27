@@ -8,6 +8,7 @@ type Body = {
   flavorTags?: unknown
   team?: unknown
   fundingModel?: unknown
+  targetCustomer?: unknown
   concern?: unknown
   choiceHistory?: unknown
 }
@@ -46,7 +47,7 @@ HARD RULES:
 - Output a single JSON object only. No prose before or after, no fences. Shape: {"epilogue": "..."}
 - One paragraph, ~80 words, max 600 chars.
 - Tone: present-tense, biting, Bloomberg lede with a comic punchline at the end.
-- HONOR PLAYER FACTS: if Team says "solo", do NOT invent a cofounder character (no Maya, no Anna, no anyone). If Team names a person, use that name verbatim. If Funding says "bootstrapping", do NOT mention VCs or term sheets that didn't happen.
+- HONOR PLAYER FACTS: if Team says "solo", do NOT invent a cofounder character. If Team names a person, use that name verbatim. If Funding says "bootstrapping", do NOT mention VCs or term sheets that didn't happen.
 - Do NOT name real people; archetype them.`
 
 function parseFromRaw(raw: string) {
@@ -66,6 +67,7 @@ export async function POST(request: Request) {
   const flavorTags = asStringArray(body.flavorTags)
   const team = asString(body.team, '')
   const fundingModel = asString(body.fundingModel, '')
+  const targetCustomer = asString(body.targetCustomer, '')
   const concern = asString(body.concern, '')
   const history = asChoiceHistory(body.choiceHistory)
 
@@ -80,6 +82,7 @@ Flavor tags: ${flavorTags.join(', ') || '(none)'}
 PLAYER FACTS (HONOR THESE):
 Team: ${team || '(unstated; treat as solo, do NOT invent a cofounder)'}
 Funding: ${fundingModel || '(unstated; do NOT assume a fundraising track)'}
+Target customer: ${targetCustomer || '(unstated; keep generic — do NOT invent a wrong segment)'}
 Current concern: ${concern || '(unstated)'}
 
 Choices made (in order):

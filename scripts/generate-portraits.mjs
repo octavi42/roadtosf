@@ -22,7 +22,7 @@ const ARCHETYPES = [
   },
   {
     id: "cofounder",
-    name: "Maya",
+    name: "Stranger",
     title: "Co-founder and CTO of a startup",
     imageStyle:
       "young woman, wearing a hoodie, dark circles under bright eyes, messy bun, laptop stickers visible, co-working space background",

@@ -24,15 +24,32 @@ export const PAYWALL_AFTER_SCENE_INDEX = 2;
 export const AUTHORED_SCENE_COUNT = 4;
 export const EPISODE_LENGTH = 5;
 
+export type MissingQuestionField =
+  | "team"
+  | "fundingModel"
+  | "stage"
+  | "targetCustomer"
+  | "concern";
+
+export interface MissingQuestion {
+  field: MissingQuestionField;
+  question: string;
+}
+
 export interface IntroData {
   transcript: string;
   startupName?: string;
   startupDescription?: string;
   selfDescription?: string;
   stage?: string;
-  team?: string; // captured in scene 4 Q&A: solo / cofounder name(s) / team
-  fundingModel?: string; // captured in scene 4 Q&A: raising / bootstrapping / runway
-  concern?: string; // captured in scene 4 Q&A: what's broken right now
+  team?: string; // solo / cofounder name(s) / team
+  fundingModel?: string; // raising / bootstrapping / runway
+  targetCustomer?: string; // who the product is for — concrete characters for cameos
+  concern?: string; // what's broken right now
+  // Populated by /api/extract-facts after scene 2. Drives the dynamic Q&A in
+  // scene 4. Empty array means "everything was already covered" and scene 4
+  // auto-advances. Undefined means extraction hasn't run yet (or failed).
+  missingQuestions?: MissingQuestion[];
   flavorTags: string[];
 }
 
@@ -79,6 +96,10 @@ interface SessionState {
     extracted?: Partial<Omit<IntroData, "transcript">>,
   ) => void;
   captureIntro: (updates: Partial<IntroData>) => void;
+  factsExtracted: (payload: {
+    extracted: Partial<IntroData>;
+    missing: MissingQuestion[];
+  }) => void;
   paywallSatisfied: () => void;
   arcReady: (arc: StoryArc) => void;
   arcSkeletonReady: (skeleton: ArcSkeleton) => void;
@@ -176,6 +197,34 @@ export const useSessionStore = create<SessionState>()(
               : state.intro.flavorTags,
           },
         })),
+
+      factsExtracted: ({ extracted, missing }) =>
+        set((state) => {
+          // Only adopt extracted fields that are non-empty and not already
+          // captured directly by the player. Player-typed answers always win.
+          const patch: Partial<IntroData> = {};
+          (
+            [
+              "team",
+              "fundingModel",
+              "stage",
+              "targetCustomer",
+              "concern",
+            ] as const
+          ).forEach((k) => {
+            const v = extracted[k];
+            if (typeof v === "string" && v.trim().length > 0 && !state.intro[k]) {
+              patch[k] = v.trim();
+            }
+          });
+          return {
+            intro: {
+              ...state.intro,
+              ...patch,
+              missingQuestions: missing,
+            },
+          };
+        }),
 
       arcReady: (arc) => set({ arc }),
 

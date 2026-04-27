@@ -7,6 +7,12 @@ export const MODELS = {
   epilogue: 'claude-haiku-4-5-20251001',
 } as const
 
+/** Arc skeleton generation; override with ANTHROPIC_ARC_MODEL for faster (e.g. Haiku) runs. */
+export function arcModel(): string {
+  const o = process.env.ANTHROPIC_ARC_MODEL?.trim()
+  return o && o.length > 0 ? o : MODELS.arc
+}
+
 let cached: Anthropic | null = null
 
 function client(): Anthropic {

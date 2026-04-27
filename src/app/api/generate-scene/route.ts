@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server'
 import { completeJson, MODELS, extractJsonObject } from '@/lib/anthropic'
-import { sceneSchema, sanitizeScene, type ParsedScene } from '@/lib/schemas/scene'
+import {
+  coerceRawSceneJson,
+  sceneSchema,
+  sanitizeScene,
+  type ParsedScene,
+} from '@/lib/schemas/scene'
 import { arcSkeletonSchema } from '@/lib/schemas/arc'
 import { buildScenePromptParts, type PriorChoiceSummary } from '@/lib/prompts/scene'
+import type { Archetype } from '@/lib/types'
 import fallbackScenes from '@/lib/fallback/scenes.json'
 
 const AUTHORED_SCENE_COUNT = 4
@@ -20,6 +26,7 @@ type Body = {
   stage?: unknown
   team?: unknown
   fundingModel?: unknown
+  targetCustomer?: unknown
   concern?: unknown
   flavorTags?: unknown
   recentChoices?: unknown
@@ -57,7 +64,7 @@ function asPriorChoices(v: unknown): PriorChoiceSummary[] {
   })
 }
 
-function parseFromRaw(raw: string): ParsedScene {
+function parseFromRaw(raw: string, assignedArchetype: Archetype): ParsedScene {
   let json: unknown
   try {
     json = extractJsonObject(raw)
@@ -65,7 +72,7 @@ function parseFromRaw(raw: string): ParsedScene {
     console.warn('[generate-scene] JSON extraction failed. raw:', raw.slice(0, 800))
     throw e
   }
-  const result = sceneSchema.safeParse(json)
+  const result = sceneSchema.safeParse(coerceRawSceneJson(json, { assignedArchetype }))
   if (!result.success) {
     console.warn(
       '[generate-scene] Zod validation failed. issues:',
@@ -119,6 +126,7 @@ export async function POST(request: Request) {
     stage: asString(body.stage, '') || undefined,
     team: asString(body.team, '') || undefined,
     fundingModel: asString(body.fundingModel, '') || undefined,
+    targetCustomer: asString(body.targetCustomer, '') || undefined,
     concern: asString(body.concern, '') || undefined,
     flavorTags: asStringArray(body.flavorTags),
     recentChoices: asPriorChoices(body.recentChoices ?? body.priorChoices),
@@ -137,7 +145,7 @@ export async function POST(request: Request) {
     if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY missing')
     const scene = await completeJson(
       { model: MODELS.scene, systemBlocks, userBlocks, maxTokens: 1000, temperature: 0.9 },
-      parseFromRaw,
+      (raw) => parseFromRaw(raw, outline.archetype),
     )
     return NextResponse.json({ scene, source: 'llm' as const })
   } catch (err) {
