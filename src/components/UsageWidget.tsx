@@ -14,7 +14,7 @@ export default function UsageWidget() {
 
   return (
     <div
-      className="fixed top-5 right-6 z-30 select-none pointer-events-none"
+      className="fixed top-16 right-6 z-30 select-none pointer-events-none"
       aria-live="polite"
     >
       <div
