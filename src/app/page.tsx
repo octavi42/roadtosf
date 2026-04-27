@@ -370,6 +370,19 @@ export default function HomePage() {
     };
   }, [hasHydrated, sessionEmail, setCreditsRemaining]);
 
+  // Auto-skip the paywall when the player has carry-over credits. Covers
+  // two paths the boundary check in advanceScene doesn't: (a) async balance
+  // arrival — fetch resolves AFTER advanceScene has already routed to
+  // paywall, (b) dev skip-to-paywall, which jumps phase=paywall after a
+  // reset that wiped paid/credits client-side. The next group fire is
+  // still server-authoritative; a stale client mirror just bounces back
+  // here via 402 → creditsExhausted.
+  useEffect(() => {
+    if (phase !== "paywall") return;
+    if (creditsRemaining < 1) return;
+    paywallSatisfied(0);
+  }, [phase, creditsRemaining, paywallSatisfied]);
+
   // Q&A scenes (e.g. scene 4 car ride) walk through `scene.questions` after
   // the intro dialogue. Local state — resets when the player moves scenes.
   const [qaStepIndex, setQaStepIndex] = useState(0);

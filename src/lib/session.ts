@@ -433,8 +433,19 @@ export const useSessionStore = create<SessionState>()(
             showChoices: false,
             choiceMade: null,
           };
-          // Paywall after the configured authored scene
+          // Paywall after the configured authored scene — but only if the
+          // player has neither paid in this client session nor carried a
+          // credit balance over from a prior pack (returning logged-in
+          // user). Skipping the gate here when creditsRemaining > 0 is
+          // safe: the server still authoritatively debits on the next
+          // group fire, and a stale client mirror (says N, server says 0)
+          // bounces straight back to paywall via the 402 → creditsExhausted
+          // path. The cost of the leak in that edge case is the four
+          // post-paywall authored scenes' TTS — acceptable.
           if (currentIndex === PAYWALL_AFTER_SCENE_INDEX && !state.paid) {
+            if (state.creditsRemaining > 0) {
+              return { paid: true, progress: nextProgress };
+            }
             return { phase: "paywall", progress: nextProgress };
           }
           // After the last authored scene, hand off to LLM via generating-arc
