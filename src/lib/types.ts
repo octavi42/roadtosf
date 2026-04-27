@@ -28,18 +28,22 @@ export interface Scene {
   timeoutChoiceId: string
 }
 
-// One row of the upfront arc-skeleton call: gives each LLM scene a beat,
-// archetype, and short consequence note so per-scene calls stay coherent.
+// One row of an episode skeleton: gives each LLM scene a beat, archetype, and
+// short note on which prior choice should shape it.
 export interface SceneOutline {
-  index: number // 0-indexed within the LLM tail (0..LLM_SCENE_COUNT-1)
+  index: number // 0-indexed within the *current episode* (0..EPISODE_LENGTH-1)
   archetype: Archetype
-  beat: string // one-sentence summary of what happens
-  hingesOn?: string // notes on which prior choice should shape this scene
+  beat: string
+  hingesOn?: string
 }
 
+// One episode = one /api/generate-arc call. Episodes are regenerated as the
+// player plays past the end of the current skeleton.
 export interface ArcSkeleton {
-  premise: string // 1-2 sentences capturing the through-line
+  episodeIndex: number // 0 for the first skeleton, 1 for the second, ...
+  premise: string
   scenes: SceneOutline[]
+  storySoFar?: string // returned with episodes 1+; compresses everything before
 }
 
 export interface StoryArc {
@@ -47,8 +51,9 @@ export interface StoryArc {
   founderPersona: string
   stage?: string
   flavorTags: string[]
-  arcSkeleton?: ArcSkeleton
-  scenes: Scene[] // LLM-generated tail; filled in as each generate-scene call returns
+  arcSkeleton?: ArcSkeleton // current episode's skeleton (replaced on regen)
+  scenes: Scene[] // unbounded list of LLM-generated scenes
+  storySoFar?: string // rolling compressed summary; updated each episode regen
   endingKey?: EndingKey
   endingNarrative?: string
   shareCardPrompt?: string

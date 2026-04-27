@@ -11,7 +11,7 @@ import PaywallPanel from "@/components/PaywallPanel";
 import {
   useSessionStore,
   AUTHORED_SCENE_COUNT,
-  TOTAL_SCENE_COUNT,
+  EPISODE_LENGTH,
 } from "@/lib/session";
 import { ARCHETYPES } from "@/lib/archetypes";
 import type { ArcSkeleton, EndingKey, Scene as LLMScene } from "@/lib/types";
@@ -31,6 +31,8 @@ const WELCOME_LINES = [
 ];
 
 const WELCOME_BACKGROUND = "/intro-v2/01-departure-board.png";
+
+const END_RUN_CHOICE_ID = "__end_run__";
 
 const ENDING_COPY: Record<
   EndingKey,
@@ -95,12 +97,23 @@ function adaptLLMScene(scene: LLMScene): UnifiedScene {
       speaker: formatArchetypeSpeaker(d.speaker),
       text: d.text,
     })),
-    choices: scene.choices.map((c) => ({
-      id: c.id,
-      label: c.label,
-      hype: c.hype,
-      integrity: c.integrity,
-    })),
+    choices: [
+      ...scene.choices.map((c) => ({
+        id: c.id,
+        label: c.label,
+        hype: c.hype,
+        integrity: c.integrity,
+      })),
+      // Always-present "End my run" exit on every LLM scene. UI-injected, not
+      // produced by the LLM. Stat-neutral; ending classifier reads cumulative
+      // hype/integrity from history at endRun() time.
+      {
+        id: END_RUN_CHOICE_ID,
+        label: "End my run.",
+        hype: 0,
+        integrity: 0,
+      },
+    ],
     isLLM: true,
   };
 }
@@ -117,7 +130,7 @@ function authoredAsUnified(scene: SceneData): UnifiedScene {
   };
 }
 
-const ARC_GEN_TIMEOUT_MS = 25000;
+const ARC_GEN_TIMEOUT_MS = 30000;
 const SCENE_GEN_TIMEOUT_MS = 15000;
 
 interface ArcGenResponse {
@@ -174,6 +187,7 @@ export default function HomePage() {
     dynamicSceneReady,
     enterGeneratingArc,
     exitGeneratingArc,
+    endRun,
     setEpilogue,
     advanceLine,
     chooseOption,
@@ -189,6 +203,7 @@ export default function HomePage() {
       dynamicSceneReady: s.dynamicSceneReady,
       enterGeneratingArc: s.enterGeneratingArc,
       exitGeneratingArc: s.exitGeneratingArc,
+      endRun: s.endRun,
       setEpilogue: s.setEpilogue,
       advanceLine: s.advanceLine,
       chooseOption: s.chooseOption,
@@ -237,73 +252,101 @@ export default function HomePage() {
     }
   }, [showChoices]);
 
-  // Arc-skeleton generation: fire when entering authored scene 5 (last
-  // authored). The Sonnet call runs while the player reads / types, so by the
-  // time scene 5 finishes the skeleton is hopefully ready.
-  const arcGenFiredRef = useRef(false);
+  // Helpers for arc-call construction --------------------------------------
+  const buildArcRequestBody = useCallback(
+    (episodeIndex: number) => {
+      // For episode 0: send all authored choices.
+      // For episode 1+: send only the most recent episode's choices; older
+      // context lives in the rolling storySoFar on `arc`.
+      const recentChoices =
+        episodeIndex === 0
+          ? history
+              .filter((h) => h.sceneId <= AUTHORED_SCENE_COUNT)
+              .map((h) => ({
+                sceneId: h.sceneId,
+                choiceLabel: h.choiceLabel,
+                hypeDelta: h.hypeDelta,
+                integrityDelta: h.integrityDelta,
+              }))
+          : history.slice(-EPISODE_LENGTH).map((h) => ({
+              sceneId: h.sceneId,
+              choiceLabel: h.choiceLabel,
+              hypeDelta: h.hypeDelta,
+              integrityDelta: h.integrityDelta,
+            }));
+
+      return {
+        episodeIndex,
+        priorStorySoFar: arc?.storySoFar,
+        startupName: arc?.startupName ?? intro.startupName ?? "the startup",
+        startupDescription: intro.startupDescription ?? "",
+        founderPersona: arc?.founderPersona ?? intro.selfDescription ?? "",
+        stage: arc?.stage ?? intro.stage,
+        flavorTags: arc?.flavorTags ?? intro.flavorTags,
+        recentChoices,
+        currentStats: { hype, integrity },
+        seed: playthroughId ?? `local-${Date.now()}`,
+      };
+    },
+    [arc, intro, history, hype, integrity, playthroughId],
+  );
+
+  // Reset all per-run refs when playthroughId changes (new run)
+  const arcGenFiredRef = useRef<Set<number>>(new Set()); // episodes already requested
+  const sceneGenFiredRef = useRef<Set<number>>(new Set()); // global llm indices already requested
+  useEffect(() => {
+    arcGenFiredRef.current = new Set();
+    sceneGenFiredRef.current = new Set();
+  }, [playthroughId]);
+
+  // Episode 0 generation: fire when entering authored scene 5 (the last
+  // authored). Sonnet runs in the background while the player reads / types.
   useEffect(() => {
     if (phase !== "scene") return;
     if (sceneIndex !== AUTHORED_SCENE_COUNT - 1) return;
-    if (arc?.arcSkeleton) return;
-    if (arcGenFiredRef.current) return;
-    arcGenFiredRef.current = true;
+    if (arc?.arcSkeleton?.episodeIndex === 0) return;
+    if (arcGenFiredRef.current.has(0)) return;
+    arcGenFiredRef.current.add(0);
 
     postWithTimeout<ArcGenResponse>(
       "/api/generate-arc",
-      {
-        startupName: intro.startupName ?? "the startup",
-        startupDescription: intro.startupDescription ?? "",
-        founderPersona: intro.selfDescription ?? "",
-        stage: intro.stage,
-        flavorTags: intro.flavorTags,
-        priorChoices: history.map((h) => ({
-          sceneId: h.sceneId,
-          choiceLabel: h.choiceLabel,
-          hypeDelta: h.hypeDelta,
-          integrityDelta: h.integrityDelta,
-        })),
-        currentStats: { hype, integrity },
-        seed: playthroughId ?? `local-${Date.now()}`,
-      },
+      buildArcRequestBody(0),
       ARC_GEN_TIMEOUT_MS,
     )
       .then((data) => arcSkeletonReady(data.skeleton))
-      .catch((err) => console.error("generate-arc failed", err));
-  }, [
-    phase,
-    sceneIndex,
-    arc?.arcSkeleton,
-    intro,
-    history,
-    hype,
-    integrity,
-    playthroughId,
-    arcSkeletonReady,
-  ]);
+      .catch((err) => console.error("generate-arc[0] failed", err));
+  }, [phase, sceneIndex, arc?.arcSkeleton, buildArcRequestBody, arcSkeletonReady]);
 
-  // generating-arc phase: when skeleton is ready, fire the first LLM scene
-  // generation, then exit into 'scene' phase at sceneIndex = AUTHORED_SCENE_COUNT.
-  const firstSceneFiredRef = useRef(false);
+  // generating-arc phase: when the *current* skeleton is ready, fire the
+  // first LLM scene of that episode and exit into 'scene' phase.
+  const firstSceneFiredRef = useRef<number | null>(null);
   useEffect(() => {
     if (phase !== "generating-arc") {
-      firstSceneFiredRef.current = false;
+      firstSceneFiredRef.current = null;
       return;
     }
-    if (!arc?.arcSkeleton) return;
-    if (firstSceneFiredRef.current) return;
-    firstSceneFiredRef.current = true;
+    const skeleton = arc?.arcSkeleton;
+    if (!skeleton) return;
+    const epi = skeleton.episodeIndex;
+    if (firstSceneFiredRef.current === epi) return;
+    firstSceneFiredRef.current = epi;
+
+    const globalLLMIndex = epi * EPISODE_LENGTH; // first scene of this episode
 
     postWithTimeout<SceneGenResponse>(
       "/api/generate-scene",
       {
-        llmIndex: 0,
-        arcSkeleton: arc.arcSkeleton,
-        startupName: arc.startupName,
+        llmIndex: globalLLMIndex,
+        episodeIndex: epi,
+        llmIndexInEpisode: 0,
+        arcSkeleton: skeleton,
+        storySoFar: arc?.storySoFar,
+        startupName: arc?.startupName,
         startupDescription: intro.startupDescription ?? "",
-        founderPersona: arc.founderPersona,
-        stage: arc.stage,
-        flavorTags: arc.flavorTags,
-        priorChoices: history.map((h) => ({
+        founderPersona: arc?.founderPersona,
+        stage: arc?.stage,
+        flavorTags: arc?.flavorTags,
+        recentChoices: history.slice(-EPISODE_LENGTH).map((h) => ({
           sceneId: h.sceneId,
           choiceLabel: h.choiceLabel,
           hypeDelta: h.hypeDelta,
@@ -314,11 +357,12 @@ export default function HomePage() {
       SCENE_GEN_TIMEOUT_MS,
     )
       .then((data) => {
-        dynamicSceneReady(0, data.scene);
+        sceneGenFiredRef.current.add(globalLLMIndex);
+        dynamicSceneReady(globalLLMIndex, data.scene);
         exitGeneratingArc();
       })
       .catch((err) => {
-        console.error("generate-scene[0] failed", err);
+        console.error("generate-scene[first] failed", err);
         exitGeneratingArc();
       });
   }, [
@@ -332,32 +376,40 @@ export default function HomePage() {
     exitGeneratingArc,
   ]);
 
-  // Eager next-scene generation: when an LLM scene mounts, kick off the next
-  // scene's generation so it's ready when the player picks.
-  const sceneGenFiredRef = useRef<Set<number>>(new Set());
+  // Eager next-scene generation: fire scene N+1 as soon as scene N mounts.
+  // Runs forever — no upper bound.
   useEffect(() => {
     if (phase !== "scene") return;
     if (sceneIndex < AUTHORED_SCENE_COUNT) return;
+    if (!arc?.arcSkeleton) return;
+
     const llmIndex = sceneIndex - AUTHORED_SCENE_COUNT;
     const nextLLMIndex = llmIndex + 1;
-    if (nextLLMIndex >= 5) return; // LLM_SCENE_COUNT
-    if (!arc?.arcSkeleton) return;
-    const nextStored = arc.scenes[nextLLMIndex];
-    if (nextStored && nextStored.dialogue.length > 0) return;
+    const skeleton = arc.arcSkeleton;
+    const nextInEpisode = nextLLMIndex - skeleton.episodeIndex * EPISODE_LENGTH;
+
+    // Only eager-trigger within the current episode. Cross-episode generation
+    // is handled by the regen effect below.
+    if (nextInEpisode < 0 || nextInEpisode >= skeleton.scenes.length) return;
     if (sceneGenFiredRef.current.has(nextLLMIndex)) return;
+    const stored = arc.scenes[nextLLMIndex];
+    if (stored && stored.dialogue.length > 0) return;
     sceneGenFiredRef.current.add(nextLLMIndex);
 
     postWithTimeout<SceneGenResponse>(
       "/api/generate-scene",
       {
         llmIndex: nextLLMIndex,
-        arcSkeleton: arc.arcSkeleton,
+        episodeIndex: skeleton.episodeIndex,
+        llmIndexInEpisode: nextInEpisode,
+        arcSkeleton: skeleton,
+        storySoFar: arc.storySoFar,
         startupName: arc.startupName,
         startupDescription: intro.startupDescription ?? "",
         founderPersona: arc.founderPersona,
         stage: arc.stage,
         flavorTags: arc.flavorTags,
-        priorChoices: history.map((h) => ({
+        recentChoices: history.slice(-EPISODE_LENGTH).map((h) => ({
           sceneId: h.sceneId,
           choiceLabel: h.choiceLabel,
           hypeDelta: h.hypeDelta,
@@ -370,6 +422,88 @@ export default function HomePage() {
       .then((data) => dynamicSceneReady(nextLLMIndex, data.scene))
       .catch((err) =>
         console.error(`generate-scene[${nextLLMIndex}] failed`, err),
+      );
+  }, [
+    phase,
+    sceneIndex,
+    arc,
+    intro.startupDescription,
+    history,
+    hype,
+    integrity,
+    dynamicSceneReady,
+  ]);
+
+  // Episode regeneration: when the current LLM scene is the SECOND-TO-LAST of
+  // its episode, kick off generation of the next episode's skeleton in the
+  // background. By the time the player advances past the last scene, the new
+  // skeleton (and its first scene) should be ready.
+  useEffect(() => {
+    if (phase !== "scene") return;
+    if (sceneIndex < AUTHORED_SCENE_COUNT) return;
+    const skeleton = arc?.arcSkeleton;
+    if (!skeleton) return;
+    const llmIndex = sceneIndex - AUTHORED_SCENE_COUNT;
+    const inEpisode = llmIndex - skeleton.episodeIndex * EPISODE_LENGTH;
+    // Trigger the regen at the second-to-last scene of the episode (gives the
+    // Sonnet call ~one full scene of latency cover).
+    if (inEpisode !== EPISODE_LENGTH - 2) return;
+
+    const nextEpisode = skeleton.episodeIndex + 1;
+    if (arcGenFiredRef.current.has(nextEpisode)) return;
+    arcGenFiredRef.current.add(nextEpisode);
+
+    postWithTimeout<ArcGenResponse>(
+      "/api/generate-arc",
+      buildArcRequestBody(nextEpisode),
+      ARC_GEN_TIMEOUT_MS,
+    )
+      .then((data) => arcSkeletonReady(data.skeleton))
+      .catch((err) => console.error(`generate-arc[${nextEpisode}] failed`, err));
+  }, [phase, sceneIndex, arc?.arcSkeleton, buildArcRequestBody, arcSkeletonReady]);
+
+  // After regen: when the new skeleton lands AND we're still in 'scene' phase
+  // at the last scene of the prior episode, fire the first scene of the new
+  // episode so it's ready when the player advances.
+  useEffect(() => {
+    if (phase !== "scene") return;
+    if (sceneIndex < AUTHORED_SCENE_COUNT) return;
+    const skeleton = arc?.arcSkeleton;
+    if (!skeleton) return;
+    const epi = skeleton.episodeIndex;
+    if (epi === 0) return; // episode-0 first-scene is fired by generating-arc effect
+    const firstSceneOfNewEpisode = epi * EPISODE_LENGTH;
+    if (sceneGenFiredRef.current.has(firstSceneOfNewEpisode)) return;
+    const stored = arc?.scenes[firstSceneOfNewEpisode];
+    if (stored && stored.dialogue.length > 0) return;
+    sceneGenFiredRef.current.add(firstSceneOfNewEpisode);
+
+    postWithTimeout<SceneGenResponse>(
+      "/api/generate-scene",
+      {
+        llmIndex: firstSceneOfNewEpisode,
+        episodeIndex: epi,
+        llmIndexInEpisode: 0,
+        arcSkeleton: skeleton,
+        storySoFar: arc?.storySoFar,
+        startupName: arc?.startupName,
+        startupDescription: intro.startupDescription ?? "",
+        founderPersona: arc?.founderPersona,
+        stage: arc?.stage,
+        flavorTags: arc?.flavorTags,
+        recentChoices: history.slice(-EPISODE_LENGTH).map((h) => ({
+          sceneId: h.sceneId,
+          choiceLabel: h.choiceLabel,
+          hypeDelta: h.hypeDelta,
+          integrityDelta: h.integrityDelta,
+        })),
+        currentStats: { hype, integrity },
+      },
+      SCENE_GEN_TIMEOUT_MS,
+    )
+      .then((data) => dynamicSceneReady(firstSceneOfNewEpisode, data.scene))
+      .catch((err) =>
+        console.error(`generate-scene[${firstSceneOfNewEpisode}] failed`, err),
       );
   }, [
     phase,
@@ -487,6 +621,38 @@ export default function HomePage() {
   const handleChoice = useCallback(
     (choiceId: string) => {
       if (!currentScene) return;
+
+      // "End my run" — UI-injected exit. Logs as a no-op stat-wise, then ends.
+      if (choiceId === END_RUN_CHOICE_ID) {
+        chooseOption(choiceId, "End my run", 0, 0);
+        if (playthroughId) {
+          fetch(`/api/playthroughs/${playthroughId}/scenes`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              sceneNumber: currentScene.id,
+              dialogue: currentScene.dialogue
+                .map((d) => `${d.speaker ?? ""}: ${d.text}`)
+                .join("\n"),
+              choicesShown: (currentScene.choices ?? []).map((c) => ({
+                id: c.id,
+                label: c.label,
+              })),
+              choicePicked: choiceId,
+              freeText: null,
+              wasTimeout: false,
+              timeToChooseMs:
+                choiceShownAtRef.current !== null
+                  ? Date.now() - choiceShownAtRef.current
+                  : null,
+              statDeltas: { hype: 0, integrity: 0 },
+            }),
+          }).catch((err) => console.error("logSceneEvent failed", err));
+        }
+        setTimeout(() => endRun(), 600);
+        return;
+      }
+
       const choice = currentScene.choices?.find((c) => c.id === choiceId);
       if (!choice) return;
       const hypeDelta = choice.hype;
@@ -519,10 +685,10 @@ export default function HomePage() {
       }
 
       setTimeout(() => {
-        advanceScene(TOTAL_SCENE_COUNT);
+        advanceScene();
       }, 600);
     },
-    [currentScene, chooseOption, advanceScene, playthroughId],
+    [currentScene, chooseOption, advanceScene, endRun, playthroughId],
   );
 
   const handleSceneTextSubmit = useCallback(
@@ -568,7 +734,7 @@ export default function HomePage() {
       }
 
       setTimeout(() => {
-        advanceScene(TOTAL_SCENE_COUNT);
+        advanceScene();
       }, 600);
     },
     [currentScene, captureIntro, chooseOption, advanceScene, playthroughId],
@@ -642,24 +808,6 @@ export default function HomePage() {
       );
     }
 
-    if (currentScene?.ctaLabel) {
-      return (
-        <div className="w-full max-w-md mx-auto animate-bounce-in">
-          <button
-            onClick={() => handleChoice("commit")}
-            disabled={choiceMade !== null}
-            className="comic-outline comic-press font-sans font-semibold w-full rounded-xl py-3 text-base text-[var(--color-ink)] disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{
-              background: "var(--color-sunset)",
-              letterSpacing: "-0.005em",
-            }}
-          >
-            {currentScene.ctaLabel}
-          </button>
-        </div>
-      );
-    }
-
     return (
       <ChoicePanel
         choices={currentScene.choices ?? []}
@@ -703,7 +851,7 @@ export default function HomePage() {
             <p className="font-sans text-[var(--color-ink)]/80 text-sm leading-relaxed">
               The city's still loading.
               <br />
-              Five more scenes between you and the rest of your life.
+              Pick your end whenever you're ready.
             </p>
           </div>
         );

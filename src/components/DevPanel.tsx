@@ -5,7 +5,7 @@ import { useShallow } from "zustand/react/shallow";
 import {
   useSessionStore,
   AUTHORED_SCENE_COUNT,
-  LLM_SCENE_COUNT,
+  EPISODE_LENGTH,
   type Phase,
 } from "@/lib/session";
 import { SCENES } from "@/lib/scenes";
@@ -18,8 +18,6 @@ interface DevTarget {
   label: string;
   phase: Phase;
   sceneIndex?: number;
-  // Whether this target is reachable right now (e.g. LLM scene 8 is only
-  // reachable after the arc has been generated and scene 8 has come back).
   available?: boolean;
 }
 
@@ -56,6 +54,7 @@ export default function DevPanel() {
   const playthroughId = useSessionStore((s) => s.playthroughId);
   const setPlaythroughId = useSessionStore((s) => s.setPlaythroughId);
   const arcSkeleton = useSessionStore((s) => s.arc?.arcSkeleton);
+  const storySoFar = useSessionStore((s) => s.arc?.storySoFar);
   const dynamicScenes = useSessionStore(
     useShallow((s) => s.arc?.scenes ?? []),
   );
@@ -70,11 +69,14 @@ export default function DevPanel() {
 
   if (process.env.NODE_ENV !== "development") return null;
 
-  // LLM scene targets — present even when not yet ready so the dev sees the
-  // pipeline shape, but disabled until the scene has been generated.
-  const llmTargets: DevTarget[] = Array.from({ length: LLM_SCENE_COUNT }, (_, i) => {
-    const llmIndex = i;
-    const scene = dynamicScenes[llmIndex];
+  // Endless mode: scene targets grow as scenes are generated. Always show one
+  // "stub" extra slot so the player can preview what's pending.
+  const generatedCount = dynamicScenes.filter(
+    (s) => s && s.dialogue.length > 0,
+  ).length;
+  const targetSlotCount = Math.max(EPISODE_LENGTH, generatedCount + 1);
+  const llmTargets: DevTarget[] = Array.from({ length: targetSlotCount }, (_, i) => {
+    const scene = dynamicScenes[i];
     const ready = !!scene && scene.dialogue.length > 0;
     return {
       label: `Scene ${AUTHORED_SCENE_COUNT + i + 1}${ready ? "" : " ·"}`,
@@ -130,6 +132,8 @@ export default function DevPanel() {
     phase === target.phase &&
     (target.sceneIndex === undefined || target.sceneIndex === sceneIndex);
 
+  const currentEpisode = arcSkeleton?.episodeIndex ?? 0;
+
   return (
     <div className="fixed bottom-4 right-4 z-[100] font-mono">
       {!open ? (
@@ -183,13 +187,17 @@ export default function DevPanel() {
           </div>
 
           <div className="text-[9px] text-white/30 mb-2 leading-tight">
-            <span className="text-white/50">·</span> = LLM scene not yet
-            generated
+            <span className="text-white/50">·</span> = LLM scene not yet generated
             {arcSkeleton ? (
-              <span className="ml-1 text-emerald-400/60">arc ✓</span>
+              <span className="ml-1 text-emerald-400/60">
+                ep {currentEpisode} ✓
+              </span>
             ) : (
               <span className="ml-1 text-white/30">arc pending</span>
             )}
+            <span className="ml-1 text-white/40">
+              · {generatedCount} llm scenes
+            </span>
           </div>
 
           <button
@@ -241,14 +249,6 @@ export default function DevPanel() {
                       </span>
                     </div>
                   )}
-                  {scene.ctaLabel && (
-                    <div className="mt-2 pt-2 border-t border-white/10 text-[10px] text-white/50">
-                      <span className="uppercase tracking-widest text-white/40">
-                        cta →
-                      </span>{" "}
-                      <span className="text-white/85">{scene.ctaLabel}</span>
-                    </div>
-                  )}
                   {scene.choices && (
                     <div className="mt-2 pt-2 border-t border-white/10 space-y-0.5">
                       {scene.choices.map((c) => (
@@ -272,11 +272,24 @@ export default function DevPanel() {
                 </div>
               ))}
 
-              {/* Arc skeleton (one-line outline of all 5 LLM scenes) */}
+              {/* Rolling story-so-far summary */}
+              {storySoFar && (
+                <div className="border border-rose-400/30 rounded p-2 bg-rose-400/[0.04]">
+                  <div className="text-[10px] tracking-widest uppercase text-rose-400/70 mb-1.5">
+                    Story So Far (rolling)
+                  </div>
+                  <div className="text-[11px] text-white/80 italic leading-snug">
+                    {storySoFar}
+                  </div>
+                </div>
+              )}
+
+              {/* Current episode skeleton */}
               {arcSkeleton && (
                 <div className="border border-amber-400/30 rounded p-2 bg-amber-400/[0.04]">
-                  <div className="text-[10px] tracking-widest uppercase text-amber-400/70 mb-1.5">
-                    Arc Skeleton
+                  <div className="text-[10px] tracking-widest uppercase text-amber-400/70 mb-1.5 flex justify-between gap-2">
+                    <span>Episode {arcSkeleton.episodeIndex} skeleton</span>
+                    <span>{arcSkeleton.scenes.length} beats</span>
                   </div>
                   <div className="text-[11px] text-white/75 italic mb-2 leading-snug">
                     {arcSkeleton.premise}
@@ -297,19 +310,25 @@ export default function DevPanel() {
                 </div>
               )}
 
-              {/* Dynamic LLM scenes — render only those that have arrived */}
+              {/* All generated LLM scenes, with episode dividers */}
               {dynamicScenes
                 .map((scene, llmIndex) => ({ scene, llmIndex }))
                 .filter(({ scene }) => scene && scene.dialogue.length > 0)
-                .map(({ scene, llmIndex }) => (
-                  <DynamicSceneCard
-                    key={`llm-${llmIndex}`}
-                    scene={scene}
-                    llmIndex={llmIndex}
-                  />
-                ))}
+                .map(({ scene, llmIndex }) => {
+                  const epi = Math.floor(llmIndex / EPISODE_LENGTH);
+                  const positionInEpi = llmIndex % EPISODE_LENGTH;
+                  return (
+                    <DynamicSceneCard
+                      key={`llm-${llmIndex}`}
+                      scene={scene}
+                      llmIndex={llmIndex}
+                      episodeIndex={epi}
+                      positionInEpisode={positionInEpi}
+                    />
+                  );
+                })}
 
-              {dynamicScenes.length === 0 && arcSkeleton && (
+              {generatedCount === 0 && arcSkeleton && (
                 <div className="text-[10px] text-white/40 italic text-center py-2">
                   Awaiting first LLM scene…
                 </div>
@@ -329,12 +348,24 @@ export default function DevPanel() {
   );
 }
 
-function DynamicSceneCard({ scene, llmIndex }: { scene: LLMScene; llmIndex: number }) {
+function DynamicSceneCard({
+  scene,
+  llmIndex,
+  episodeIndex,
+  positionInEpisode,
+}: {
+  scene: LLMScene;
+  llmIndex: number;
+  episodeIndex: number;
+  positionInEpisode: number;
+}) {
   return (
     <div className="border border-sky-400/30 rounded p-2 bg-sky-400/[0.04]">
       <div className="text-[10px] tracking-widest uppercase text-sky-400/70 mb-1.5 flex justify-between gap-2">
         <span>{scene.title || `Scene ${AUTHORED_SCENE_COUNT + llmIndex + 1}`}</span>
-        <span>llm · {scene.archetype}</span>
+        <span>
+          ep {episodeIndex}.{positionInEpisode} · {scene.archetype}
+        </span>
       </div>
       <div className="space-y-1.5">
         {scene.dialogue.map((line, i) => {

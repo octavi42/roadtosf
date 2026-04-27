@@ -10,8 +10,10 @@ export const sceneOutlineSchema = z.object({
 })
 
 export const arcSkeletonSchema = z.object({
+  episodeIndex: z.number().int().min(0).max(50).default(0),
   premise: z.string().min(10).max(280),
-  scenes: z.array(sceneOutlineSchema).min(3).max(8),
+  scenes: z.array(sceneOutlineSchema).length(5),
+  storySoFar: z.string().min(20).max(700).optional(),
 })
 
 export type ParsedArcSkeleton = z.infer<typeof arcSkeletonSchema>

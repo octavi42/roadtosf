@@ -5,15 +5,22 @@ import { arcSkeletonSchema } from '@/lib/schemas/arc'
 import { buildScenePromptParts, type PriorChoiceSummary } from '@/lib/prompts/scene'
 import fallbackScenes from '@/lib/fallback/scenes.json'
 
+const AUTHORED_SCENE_COUNT = 5
+const EPISODE_LENGTH = 5
+
 type Body = {
-  llmIndex?: unknown
+  llmIndex?: unknown // global LLM-tail index (0..N)
+  llmIndexInEpisode?: unknown // optional override; otherwise computed
+  episodeIndex?: unknown
   arcSkeleton?: unknown
+  storySoFar?: unknown
   startupName?: unknown
   startupDescription?: unknown
   founderPersona?: unknown
   stage?: unknown
   flavorTags?: unknown
-  priorChoices?: unknown
+  recentChoices?: unknown
+  priorChoices?: unknown // back-compat alias
   currentStats?: unknown
 }
 
@@ -60,6 +67,10 @@ export async function POST(request: Request) {
   }
 
   const llmIndex = asInt(body.llmIndex, 0)
+  const computedEpisodeIndex = Math.floor(llmIndex / EPISODE_LENGTH)
+  const computedInEpisode = llmIndex % EPISODE_LENGTH
+  const episodeIndex = asInt(body.episodeIndex, computedEpisodeIndex)
+  const llmIndexInEpisode = asInt(body.llmIndexInEpisode, computedInEpisode)
 
   let arcSkeleton
   try {
@@ -68,24 +79,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'invalid arcSkeleton', detail: String(err) }, { status: 400 })
   }
 
-  const outline = arcSkeleton.scenes.find((s) => s.index === llmIndex) ?? arcSkeleton.scenes[llmIndex]
+  const outline =
+    arcSkeleton.scenes.find((s) => s.index === llmIndexInEpisode) ?? arcSkeleton.scenes[llmIndexInEpisode]
   if (!outline) {
-    return NextResponse.json({ error: `no outline for llmIndex ${llmIndex}` }, { status: 400 })
+    return NextResponse.json({ error: `no outline for index ${llmIndexInEpisode} in episode ${episodeIndex}` }, { status: 400 })
   }
 
-  const sceneId = 5 + llmIndex + 1 // authored scenes are 1..5; LLM tail starts at 6
+  const sceneId = AUTHORED_SCENE_COUNT + llmIndex + 1
 
   const promptInput = {
-    llmIndex,
+    episodeIndex,
+    llmIndexInEpisode,
     sceneId,
     outline,
     arcSkeleton,
+    storySoFar: asString(body.storySoFar, '') || undefined,
     startupName: asString(body.startupName, 'the startup'),
     startupDescription: asString(body.startupDescription, ''),
     founderPersona: asString(body.founderPersona, ''),
     stage: asString(body.stage, '') || undefined,
     flavorTags: asStringArray(body.flavorTags),
-    priorChoices: asPriorChoices(body.priorChoices),
+    recentChoices: asPriorChoices(body.recentChoices ?? body.priorChoices),
     currentStats: {
       hype: asInt((body.currentStats as Record<string, unknown> | undefined)?.hype, 0),
       integrity: asInt(
@@ -106,10 +120,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ scene, source: 'llm' as const })
   } catch (err) {
     console.warn(`generate-scene index=${llmIndex}: LLM path failed, returning fallback`, err)
+    // For fallback, modulo-cycle through the static bank if we've gone past 5
     const fbList = fallbackScenes as unknown[]
-    const fb = fbList[llmIndex]
+    const fb = fbList[llmIndex % fbList.length]
     if (!fb) return NextResponse.json({ error: 'no fallback scene' }, { status: 500 })
     const parsed = sanitizeScene(sceneSchema.parse(fb))
-    return NextResponse.json({ scene: parsed, source: 'fallback' as const })
+    // Patch the id to match the requested global llmIndex so the renderer
+    // doesn't show duplicate scene numbers across cycled fallbacks.
+    return NextResponse.json({ scene: { ...parsed, id: sceneId }, source: 'fallback' as const })
   }
 }

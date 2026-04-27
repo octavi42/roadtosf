@@ -2,7 +2,7 @@ import { ARCHETYPES } from '../archetypes'
 import { filterLore } from '../lore'
 import type { Archetype } from '../types'
 
-export const LLM_SCENE_COUNT = 5
+export const EPISODE_LENGTH = 5
 
 const ARC_ARCHETYPES: Archetype[] = ['cofounder', 'reporter', 'vc', 'hater', 'mentor']
 
@@ -14,45 +14,53 @@ export interface PriorChoiceSummary {
 }
 
 export interface BuildArcPromptInput {
+  episodeIndex: number // 0 for the opening episode, 1+ for regenerations
+  priorStorySoFar?: string // present on episodes 1+
   startupName: string
   startupDescription: string
   founderPersona: string
   stage?: string
   flavorTags: string[]
-  priorChoices: PriorChoiceSummary[]
+  // For episode 0: choices from authored scenes. For 1+: only the LAST EPISODE's
+  // choices (everything older is compressed into priorStorySoFar).
+  recentChoices: PriorChoiceSummary[]
   currentStats: { hype: number; integrity: number }
   seed?: string
   todayISO: string
 }
 
-const SYSTEM_RULES = `You are the arc-skeleton engine for "Road to SF", a satirical comic-book founder game. The player has just finished 5 hand-authored onboarding scenes (Jordan calling from SF, the airport, the cofounder Maya). You produce the 5-scene LLM tail that closes the story.
+const SYSTEM_RULES = `You are the arc-skeleton engine for "Road to SF", a satirical comic-book founder game running in ENDLESS MODE. The story is delivered as 5-scene episodes; you produce one episode at a time.
 
 HARD RULES:
 - Output a single JSON object. No prose, no fences. The user message will start your response with "{".
 - Real people are NEVER named — archetype them ("a Thiel-coded VC", "a YC partner with the blog", "a Sam-coded accelerator partner").
 - Each scene has ONE archetype as the speaker. Use the assigned archetype list verbatim — do not reorder or substitute.
 - Tone: comic, biting, cinematic. Each beat lands like a graphic novel panel.
+- The story does NOT end at the close of an episode — the player chooses when to end the run. Land each episode on a hook, not a resolution.
 
 OUTPUT SHAPE:
 {
-  "premise": string,                              // 1-2 sentences, the through-line
+  "episodeIndex": <integer matching the input>,
+  "premise": string (1-2 sentences, the through-line of THIS episode),
   "scenes": [                                     // exactly 5 entries
     {
-      "index": 0..4,
+      "index": 0..4,                              // index within this episode
       "archetype": "vc"|"cofounder"|"reporter"|"hater"|"mentor",
       "beat": string (≤220 chars, one sentence describing what happens),
       "hingesOn": string (optional, names the prior choice this scene exploits)
     }
-  ]
+  ],
+  "storySoFar": string (REQUIRED for episodeIndex >= 1; 200 words max compressing
+                        EVERYTHING that happened in prior episodes, in present-tense,
+                        named-choice prose. Omit for episodeIndex 0.)
 }
 
-The scenes you outline must:
-- Pay off specific prior choices the player made (cite them in "hingesOn").
-- Build to a final beat that lets the ending classifier (hype + integrity) land cleanly.
-- Stay in archetype scope — do not invent new characters beyond the assigned 5.`
+Constraints by episode:
+- episodeIndex = 0: "recentChoices" comes from the player's authored onboarding scenes. No priorStorySoFar.
+- episodeIndex >= 1: "recentChoices" is just the last 5 (most recent episode's). Use "priorStorySoFar" for everything older. Your "storySoFar" output must extend the prior summary with the last episode's events.`
 
-function formatPriorChoices(choices: PriorChoiceSummary[]): string {
-  if (choices.length === 0) return '(no choices captured yet)'
+function formatRecentChoices(choices: PriorChoiceSummary[]): string {
+  if (choices.length === 0) return '(none)'
   return choices
     .map(
       (c) =>
@@ -105,6 +113,8 @@ function formatLoreBundle(input: BuildArcPromptInput): string {
 }
 
 export function buildArcPromptParts(input: BuildArcPromptInput) {
+  const isOpening = input.episodeIndex === 0
+
   const userPlayerBlock = `## PLAYER STATE
 Startup: ${input.startupName}
 Pitch: ${input.startupDescription || '(unstated)'}
@@ -114,16 +124,26 @@ Flavor tags: ${input.flavorTags.length ? input.flavorTags.join(', ') : '(none)'}
 
 Current stats — hype ${input.currentStats.hype}, integrity ${input.currentStats.integrity}.
 
-## PRIOR CHOICES (authored scenes 1-5)
-${formatPriorChoices(input.priorChoices)}
+## EPISODE
+episodeIndex: ${input.episodeIndex}
+
+## PRIOR STORY-SO-FAR (compressed, omit if episode 0)
+${input.priorStorySoFar ?? '(this is the opening episode)'}
+
+## RECENT CHOICES${isOpening ? ' (authored scenes 1-5)' : ' (most recent episode only)'}
+${formatRecentChoices(input.recentChoices)}
 
 ## TASK
-Produce a 5-scene arc that pays off these choices and lands an ending.`
+${
+  isOpening
+    ? 'Produce the OPENING episode (5 scenes). Land on a hook so the next episode has somewhere to go — do NOT resolve the arc.'
+    : `Produce episode ${input.episodeIndex} (5 more scenes). Continue from the prior storySoFar; pay off at least one beat from the most recent episode. End on a hook. Update storySoFar to cover everything before this episode.`
+}`
 
   return {
     systemBlocks: [
       { text: SYSTEM_RULES, cache: false },
-      { text: formatLoreBundle(input), cache: true }, // cached across the run
+      { text: formatLoreBundle(input), cache: true },
     ],
     userBlocks: [{ text: userPlayerBlock, cache: false }],
   }
