@@ -140,12 +140,6 @@ export default function DevPanel() {
     }
   };
 
-  const clear = () => {
-    window.localStorage.removeItem(DEV_OVERRIDE_KEY);
-    devSetPhase("welcome");
-    setTick((t) => t + 1);
-  };
-
   const wipeSession = () => {
     window.localStorage.removeItem(DEV_OVERRIDE_KEY);
     window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
@@ -431,13 +425,6 @@ export default function DevPanel() {
             title="Mark paid + add 3 plays without going through Stripe"
           >
             +3 PLAYS (NO PAYMENT)
-          </button>
-
-          <button
-            onClick={clear}
-            className="w-full text-[10px] text-white/40 hover:text-white/80 py-1 border border-white/10 rounded transition-colors"
-          >
-            CLEAR OVERRIDE
           </button>
         </div>
       )}
