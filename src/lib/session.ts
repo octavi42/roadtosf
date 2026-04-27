@@ -99,6 +99,7 @@ interface SessionState {
   arcReady: (arc: StoryArc) => void;
   arcSkeletonReady: (skeleton: ArcSkeleton) => void;
   dynamicSceneReady: (llmIndex: number, scene: Scene) => void;
+  sceneImageReady: (llmIndex: number, imageUrl: string) => void;
   setEpilogue: (epilogue: string) => void;
   enterGeneratingArc: () => void;
   exitGeneratingArc: () => void;
@@ -257,7 +258,31 @@ export const useSessionStore = create<SessionState>()(
               timeoutChoiceId: "a",
             });
           }
-          scenes[llmIndex] = scene;
+          // Preserve any imageUrl that landed before the scene text did.
+          const prior = scenes[llmIndex];
+          scenes[llmIndex] = prior?.imageUrl
+            ? { ...scene, imageUrl: prior.imageUrl }
+            : scene;
+          return { arc: { ...state.arc, scenes } };
+        }),
+
+      sceneImageReady: (llmIndex, imageUrl) =>
+        set((state) => {
+          if (!state.arc) return state;
+          const scenes = [...state.arc.scenes];
+          while (scenes.length <= llmIndex) {
+            scenes.push({
+              id: 0,
+              title: "",
+              archetype: "cofounder",
+              imagePrompt: "",
+              dialogue: [],
+              choices: [],
+              timeoutSeconds: 15,
+              timeoutChoiceId: "a",
+            });
+          }
+          scenes[llmIndex] = { ...scenes[llmIndex], imageUrl };
           return { arc: { ...state.arc, scenes } };
         }),
 

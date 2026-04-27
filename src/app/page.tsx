@@ -102,7 +102,9 @@ function adaptLLMScene(scene: LLMScene): UnifiedScene {
   return {
     id: scene.id,
     title: scene.title,
-    background: HOME_BACKGROUND,
+    // Generated scene image takes over once it lands; HOME_BACKGROUND is the
+    // placeholder while gpt-image-2 is still in flight.
+    background: scene.imageUrl ?? HOME_BACKGROUND,
     dialogue: scene.dialogue.map((d) => ({
       speaker: formatArchetypeSpeaker(d.speaker),
       text: d.text,
@@ -236,6 +238,7 @@ export default function HomePage() {
     paywallSatisfied,
     arcSkeletonReady,
     dynamicSceneReady,
+    sceneImageReady,
     enterGeneratingArc,
     exitGeneratingArc,
     endRun,
@@ -253,6 +256,7 @@ export default function HomePage() {
       paywallSatisfied: s.paywallSatisfied,
       arcSkeletonReady: s.arcSkeletonReady,
       dynamicSceneReady: s.dynamicSceneReady,
+      sceneImageReady: s.sceneImageReady,
       enterGeneratingArc: s.enterGeneratingArc,
       exitGeneratingArc: s.exitGeneratingArc,
       endRun: s.endRun,
@@ -391,6 +395,8 @@ export default function HomePage() {
   // Reset all per-run refs when playthroughId changes (new run)
   const arcGenFiredRef = useRef<Set<number>>(new Set()); // episodes already requested
   const sceneGenFiredRef = useRef<Set<number>>(new Set()); // global llm indices already requested
+  const imageGenFiredRef = useRef<Set<number>>(new Set()); // llm indices whose image gen was requested
+  const arcPersistedRef = useRef<number>(-1); // last episodeIndex whose skeleton was PATCHed
   const extractFiredForRef = useRef<string | null>(null); // last startupDescription extracted for
   // Flips true once extraction has settled (success or failure). Arc-gen is
   // gated on this so Sonnet never receives a half-populated player facts block
@@ -399,6 +405,8 @@ export default function HomePage() {
   useEffect(() => {
     arcGenFiredRef.current = new Set();
     sceneGenFiredRef.current = new Set();
+    imageGenFiredRef.current = new Set();
+    arcPersistedRef.current = -1;
     extractFiredForRef.current = null;
     setExtractionResolved(false);
   }, [playthroughId]);
@@ -616,6 +624,67 @@ export default function HomePage() {
     integrity,
     dynamicSceneReady,
   ]);
+
+  // Arc persistence: each time a new episode skeleton lands, PATCH the
+  // playthrough so we have the arc on the server (for replay, share cards,
+  // analytics). One write per episode; per-scene data already lives in
+  // scene_events. Base64 imageUrls are stripped — they're a runtime concern
+  // and would otherwise inflate the row by ~100KB per scene.
+  useEffect(() => {
+    if (!playthroughId) return;
+    if (!arc) return;
+    const skeleton = arc.arcSkeleton;
+    if (!skeleton) return;
+    if (arcPersistedRef.current === skeleton.episodeIndex) return;
+    arcPersistedRef.current = skeleton.episodeIndex;
+
+    const arcForWire = {
+      ...arc,
+      scenes: arc.scenes.map(({ imageUrl: _imageUrl, ...rest }) => rest),
+    };
+
+    fetch(`/api/playthroughs/${playthroughId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ arcJson: arcForWire }),
+    }).catch((err) => console.error("persistArc failed", err));
+  }, [playthroughId, arc]);
+
+  // Image generation watcher: any LLM scene with text but no imageUrl gets
+  // its gpt-image-2 render kicked off. Runs in parallel with scene/audio gen
+  // so the image lands while the player is reading prior dialogue. Failures
+  // are silent — the placeholder background stays in place.
+  useEffect(() => {
+    const scenes = arc?.scenes;
+    if (!scenes) return;
+    scenes.forEach((scene, idx) => {
+      if (!scene || scene.dialogue.length === 0) return;
+      if (scene.imageUrl) return;
+      if (!scene.imagePrompt) return;
+      if (imageGenFiredRef.current.has(idx)) return;
+      imageGenFiredRef.current.add(idx);
+
+      fetch("/api/generate-image", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode: "scene",
+          scenePrompt: scene.imagePrompt,
+          archetype: scene.archetype,
+          quality: "medium",
+        }),
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+        .then((data: { dataUrl?: string }) => {
+          if (data.dataUrl) sceneImageReady(idx, data.dataUrl);
+        })
+        .catch((err) => {
+          // Allow a retry on the next scene-state change.
+          imageGenFiredRef.current.delete(idx);
+          console.error(`generate-image[${idx}] failed`, err);
+        });
+    });
+  }, [arc?.scenes, sceneImageReady]);
 
   // Episode regeneration: when the current LLM scene is the SECOND-TO-LAST of
   // its episode, kick off generation of the next episode's skeleton in the
