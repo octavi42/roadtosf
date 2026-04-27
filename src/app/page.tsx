@@ -98,26 +98,19 @@ function adaptLLMScene(scene: LLMScene): UnifiedScene {
       speaker: formatArchetypeSpeaker(d.speaker),
       text: d.text,
     })),
-    choices: [
-      ...scene.choices.map((c) => ({
-        id: c.id,
-        label: c.label,
-        hype: c.hype,
-        integrity: c.integrity,
-      })),
-      // Always-present "End my run" exit on every LLM scene. UI-injected, not
-      // produced by the LLM. Stat-neutral; ending classifier reads cumulative
-      // hype/integrity from history at endRun() time.
-      {
-        id: END_RUN_CHOICE_ID,
-        label: "End my run.",
-        hype: 0,
-        integrity: 0,
-      },
-    ],
+    choices: scene.choices.map((c) => ({
+      id: c.id,
+      label: c.label,
+      hype: c.hype,
+      integrity: c.integrity,
+    })),
     isLLM: true,
   };
 }
+
+// Show the "End my run" exit only after the player has finished one full LLM
+// episode. Keeps short runs from ending prematurely.
+const END_RUN_VISIBLE_FROM_SCENE_INDEX = AUTHORED_SCENE_COUNT + EPISODE_LENGTH;
 
 function authoredAsUnified(scene: SceneData): UnifiedScene {
   return {
@@ -620,40 +613,39 @@ export default function HomePage() {
     window.open(intent, "_blank", "noopener,noreferrer");
   }, [ending, startupName]);
 
+  const handleEndRun = useCallback(() => {
+    if (!currentScene) return;
+    chooseOption(END_RUN_CHOICE_ID, "End my run", 0, 0);
+    if (playthroughId) {
+      fetch(`/api/playthroughs/${playthroughId}/scenes`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sceneNumber: currentScene.id,
+          dialogue: currentScene.dialogue
+            .map((d) => `${d.speaker ?? ""}: ${d.text}`)
+            .join("\n"),
+          choicesShown: (currentScene.choices ?? []).map((c) => ({
+            id: c.id,
+            label: c.label,
+          })),
+          choicePicked: END_RUN_CHOICE_ID,
+          freeText: null,
+          wasTimeout: false,
+          timeToChooseMs:
+            choiceShownAtRef.current !== null
+              ? Date.now() - choiceShownAtRef.current
+              : null,
+          statDeltas: { hype: 0, integrity: 0 },
+        }),
+      }).catch((err) => console.error("logSceneEvent failed", err));
+    }
+    setTimeout(() => endRun(), 600);
+  }, [currentScene, chooseOption, endRun, playthroughId]);
+
   const handleChoice = useCallback(
     (choiceId: string) => {
       if (!currentScene) return;
-
-      // "End my run" — UI-injected exit. Logs as a no-op stat-wise, then ends.
-      if (choiceId === END_RUN_CHOICE_ID) {
-        chooseOption(choiceId, "End my run", 0, 0);
-        if (playthroughId) {
-          fetch(`/api/playthroughs/${playthroughId}/scenes`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              sceneNumber: currentScene.id,
-              dialogue: currentScene.dialogue
-                .map((d) => `${d.speaker ?? ""}: ${d.text}`)
-                .join("\n"),
-              choicesShown: (currentScene.choices ?? []).map((c) => ({
-                id: c.id,
-                label: c.label,
-              })),
-              choicePicked: choiceId,
-              freeText: null,
-              wasTimeout: false,
-              timeToChooseMs:
-                choiceShownAtRef.current !== null
-                  ? Date.now() - choiceShownAtRef.current
-                  : null,
-              statDeltas: { hype: 0, integrity: 0 },
-            }),
-          }).catch((err) => console.error("logSceneEvent failed", err));
-        }
-        setTimeout(() => endRun(), 600);
-        return;
-      }
 
       const choice = currentScene.choices?.find((c) => c.id === choiceId);
       if (!choice) return;
@@ -690,7 +682,7 @@ export default function HomePage() {
         advanceScene();
       }, 600);
     },
-    [currentScene, chooseOption, advanceScene, endRun, playthroughId],
+    [currentScene, chooseOption, advanceScene, playthroughId],
   );
 
   const handleCTA = useCallback(() => {
@@ -831,18 +823,31 @@ export default function HomePage() {
     if (phase !== "scene" || !showChoices) return null;
     if (!currentScene) return null;
 
+    const showEndRun =
+      currentScene.isLLM &&
+      sceneIndex >= END_RUN_VISIBLE_FROM_SCENE_INDEX &&
+      choiceMade === null;
+
+    const endRunLink = showEndRun ? (
+      <button
+        onClick={handleEndRun}
+        className="font-sans text-xs text-[var(--color-ink)]/40 hover:text-[var(--color-ink)]/70 transition-colors py-1 self-center"
+      >
+        End my run →
+      </button>
+    ) : null;
+
+    let panel: React.ReactNode;
     if (currentScene.textInput) {
-      return (
+      panel = (
         <TextInputPanel
           placeholder={currentScene.textInput.placeholder}
           onSubmit={handleSceneTextSubmit}
           disabled={choiceMade !== null}
         />
       );
-    }
-
-    if (currentScene.ctaLabel) {
-      return (
+    } else if (currentScene.ctaLabel) {
+      panel = (
         <div className="w-full max-w-md mx-auto animate-bounce-in">
           <button
             onClick={handleCTA}
@@ -857,14 +862,22 @@ export default function HomePage() {
           </button>
         </div>
       );
+    } else {
+      panel = (
+        <ChoicePanel
+          choices={currentScene.choices ?? []}
+          onChoice={handleChoice}
+          disabled={choiceMade !== null}
+        />
+      );
     }
 
+    if (!endRunLink) return panel;
     return (
-      <ChoicePanel
-        choices={currentScene.choices ?? []}
-        onChoice={handleChoice}
-        disabled={choiceMade !== null}
-      />
+      <div className="flex flex-col gap-2">
+        {panel}
+        {endRunLink}
+      </div>
     );
   })();
 
