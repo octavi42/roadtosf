@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
+import path from "node:path";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Prefer this app as the tracing root when multiple lockfiles exist (e.g. ~/package-lock.json).
+  outputFileTracingRoot: path.join(__dirname),
 };
 
 export default nextConfig;
