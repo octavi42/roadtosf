@@ -34,7 +34,8 @@ export interface SceneOutline {
   index: number // 0-indexed within the *current episode* (0..EPISODE_LENGTH-1)
   archetype: Archetype
   beat: string
-  hingesOn?: string
+  // Sonnet sometimes emits explicit null. Readers must short-circuit on falsy.
+  hingesOn?: string | null
 }
 
 // One episode = one /api/generate-arc call. Episodes are regenerated as the

@@ -6,7 +6,9 @@ export const sceneOutlineSchema = z.object({
   index: z.number().int().min(0).max(20),
   archetype: z.enum(ARCHETYPE_VALUES),
   beat: z.string().min(8).max(400),
-  hingesOn: z.string().max(280).optional(),
+  // Sonnet 4.6 emits explicit `null` instead of omitting optional fields, so
+  // accept null here. Downstream readers already short-circuit on falsy.
+  hingesOn: z.string().max(280).nullable().optional(),
 })
 
 export const arcSkeletonSchema = z.object({
