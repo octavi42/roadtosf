@@ -1,8 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSessionStore, type Phase } from "@/lib/session";
+import { useShallow } from "zustand/react/shallow";
+import {
+  useSessionStore,
+  AUTHORED_SCENE_COUNT,
+  LLM_SCENE_COUNT,
+  type Phase,
+} from "@/lib/session";
 import { SCENES } from "@/lib/scenes";
+import { ARCHETYPES } from "@/lib/archetypes";
+import type { Scene as LLMScene } from "@/lib/types";
 
 const DEV_OVERRIDE_KEY = "rtsf_dev_phase";
 
@@ -10,9 +18,12 @@ interface DevTarget {
   label: string;
   phase: Phase;
   sceneIndex?: number;
+  // Whether this target is reachable right now (e.g. LLM scene 8 is only
+  // reachable after the arc has been generated and scene 8 has come back).
+  available?: boolean;
 }
 
-const TARGETS: DevTarget[] = [
+const STATIC_TARGETS_HEAD: DevTarget[] = [
   { label: "Welcome", phase: "welcome" },
   { label: "Onboarding", phase: "onboarding" },
   { label: "Scene 1", phase: "scene", sceneIndex: 0 },
@@ -21,13 +32,20 @@ const TARGETS: DevTarget[] = [
   { label: "Paywall", phase: "paywall" },
   { label: "Scene 4", phase: "scene", sceneIndex: 3 },
   { label: "Scene 5", phase: "scene", sceneIndex: 4 },
-  { label: "Ending", phase: "ending" },
+  { label: "Generating Arc", phase: "generating-arc" },
 ];
 
-// Phases where downstream code (paywall, scene capture) assumes a playthrough
-// row exists. When the dev jumps directly to one of these we backfill a stub
-// row so the rest of the flow has something to attach to.
+const STATIC_TARGETS_TAIL: DevTarget[] = [{ label: "Ending", phase: "ending" }];
+
 const PHASES_REQUIRING_PLAYTHROUGH: Phase[] = ["scene", "paywall", "ending"];
+
+function formatArchetypeSpeaker(speaker: string): string {
+  if (speaker === "player") return "You";
+  if (speaker === "narrator") return "";
+  const def = ARCHETYPES[speaker as keyof typeof ARCHETYPES];
+  if (!def) return speaker;
+  return `${def.name} · ${def.title}`;
+}
 
 export default function DevPanel() {
   const [open, setOpen] = useState(false);
@@ -37,6 +55,10 @@ export default function DevPanel() {
   const devSetPhase = useSessionStore((s) => s.devSetPhase);
   const playthroughId = useSessionStore((s) => s.playthroughId);
   const setPlaythroughId = useSessionStore((s) => s.setPlaythroughId);
+  const arcSkeleton = useSessionStore((s) => s.arc?.arcSkeleton);
+  const dynamicScenes = useSessionStore(
+    useShallow((s) => s.arc?.scenes ?? []),
+  );
 
   const [, setTick] = useState(0);
 
@@ -48,7 +70,28 @@ export default function DevPanel() {
 
   if (process.env.NODE_ENV !== "development") return null;
 
+  // LLM scene targets — present even when not yet ready so the dev sees the
+  // pipeline shape, but disabled until the scene has been generated.
+  const llmTargets: DevTarget[] = Array.from({ length: LLM_SCENE_COUNT }, (_, i) => {
+    const llmIndex = i;
+    const scene = dynamicScenes[llmIndex];
+    const ready = !!scene && scene.dialogue.length > 0;
+    return {
+      label: `Scene ${AUTHORED_SCENE_COUNT + i + 1}${ready ? "" : " ·"}`,
+      phase: "scene",
+      sceneIndex: AUTHORED_SCENE_COUNT + i,
+      available: ready,
+    };
+  });
+
+  const targets: DevTarget[] = [
+    ...STATIC_TARGETS_HEAD,
+    ...llmTargets,
+    ...STATIC_TARGETS_TAIL,
+  ];
+
   const goTo = async (target: DevTarget) => {
+    if (target.available === false) return;
     window.localStorage.setItem(
       DEV_OVERRIDE_KEY,
       JSON.stringify({ phase: target.phase, sceneIndex: target.sceneIndex }),
@@ -116,22 +159,37 @@ export default function DevPanel() {
           </div>
 
           <div className="grid grid-cols-2 gap-1 mb-2">
-            {TARGETS.map((t) => {
+            {targets.map((t) => {
               const active = isActive(t);
+              const disabled = t.available === false;
               return (
                 <button
-                  key={t.label}
+                  key={t.label + t.phase + (t.sceneIndex ?? "")}
                   onClick={() => goTo(t)}
+                  disabled={disabled}
                   className={`text-[11px] py-1 px-2 rounded transition-colors ${
                     active
                       ? "bg-white text-black"
-                      : "bg-white/5 text-white/70 hover:bg-white/10"
+                      : disabled
+                        ? "bg-white/[0.02] text-white/25 cursor-not-allowed"
+                        : "bg-white/5 text-white/70 hover:bg-white/10"
                   }`}
+                  title={disabled ? "not yet generated" : undefined}
                 >
                   {t.label}
                 </button>
               );
             })}
+          </div>
+
+          <div className="text-[9px] text-white/30 mb-2 leading-tight">
+            <span className="text-white/50">·</span> = LLM scene not yet
+            generated
+            {arcSkeleton ? (
+              <span className="ml-1 text-emerald-400/60">arc ✓</span>
+            ) : (
+              <span className="ml-1 text-white/30">arc pending</span>
+            )}
           </div>
 
           <button
@@ -146,11 +204,12 @@ export default function DevPanel() {
             <div className="max-h-[60vh] overflow-y-auto pr-1 mb-2 space-y-3">
               {SCENES.map((scene) => (
                 <div
-                  key={scene.id}
+                  key={`auth-${scene.id}`}
                   className="border border-white/10 rounded p-2 bg-white/[0.03]"
                 >
-                  <div className="text-[10px] tracking-widest uppercase text-white/60 mb-1.5">
-                    {scene.title}
+                  <div className="text-[10px] tracking-widest uppercase text-white/60 mb-1.5 flex justify-between gap-2">
+                    <span>{scene.title}</span>
+                    <span className="text-emerald-400/50">authored</span>
                   </div>
                   <div className="space-y-1.5">
                     {scene.dialogue.map((line, i) => (
@@ -212,6 +271,49 @@ export default function DevPanel() {
                   )}
                 </div>
               ))}
+
+              {/* Arc skeleton (one-line outline of all 5 LLM scenes) */}
+              {arcSkeleton && (
+                <div className="border border-amber-400/30 rounded p-2 bg-amber-400/[0.04]">
+                  <div className="text-[10px] tracking-widest uppercase text-amber-400/70 mb-1.5">
+                    Arc Skeleton
+                  </div>
+                  <div className="text-[11px] text-white/75 italic mb-2 leading-snug">
+                    {arcSkeleton.premise}
+                  </div>
+                  <div className="space-y-0.5">
+                    {arcSkeleton.scenes.map((s) => (
+                      <div
+                        key={s.index}
+                        className="text-[10px] text-white/60 leading-snug"
+                      >
+                        <span className="text-white/40">
+                          {s.index + 1}. {s.archetype} —
+                        </span>{" "}
+                        {s.beat}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Dynamic LLM scenes — render only those that have arrived */}
+              {dynamicScenes
+                .map((scene, llmIndex) => ({ scene, llmIndex }))
+                .filter(({ scene }) => scene && scene.dialogue.length > 0)
+                .map(({ scene, llmIndex }) => (
+                  <DynamicSceneCard
+                    key={`llm-${llmIndex}`}
+                    scene={scene}
+                    llmIndex={llmIndex}
+                  />
+                ))}
+
+              {dynamicScenes.length === 0 && arcSkeleton && (
+                <div className="text-[10px] text-white/40 italic text-center py-2">
+                  Awaiting first LLM scene…
+                </div>
+              )}
             </div>
           )}
 
@@ -221,6 +323,56 @@ export default function DevPanel() {
           >
             CLEAR OVERRIDE
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DynamicSceneCard({ scene, llmIndex }: { scene: LLMScene; llmIndex: number }) {
+  return (
+    <div className="border border-sky-400/30 rounded p-2 bg-sky-400/[0.04]">
+      <div className="text-[10px] tracking-widest uppercase text-sky-400/70 mb-1.5 flex justify-between gap-2">
+        <span>{scene.title || `Scene ${AUTHORED_SCENE_COUNT + llmIndex + 1}`}</span>
+        <span>llm · {scene.archetype}</span>
+      </div>
+      <div className="space-y-1.5">
+        {scene.dialogue.map((line, i) => {
+          const formatted = formatArchetypeSpeaker(line.speaker);
+          return (
+            <div key={i} className="text-[11px] leading-snug">
+              {formatted ? (
+                <span className="text-white/40">{formatted}: </span>
+              ) : (
+                <span className="text-white/30 italic">(narration) </span>
+              )}
+              <span className="text-white/85">{line.text}</span>
+            </div>
+          );
+        })}
+      </div>
+      {scene.choices.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-white/10 space-y-0.5">
+          {scene.choices.map((c) => (
+            <div
+              key={c.id}
+              className="text-[10px] text-white/55 leading-snug"
+            >
+              <span className="text-white/35">{c.id.toUpperCase()}.</span>{" "}
+              {c.label}{" "}
+              <span className="text-white/35 tabular-nums">
+                (h{c.hype >= 0 ? "+" : ""}
+                {c.hype} · i{c.integrity >= 0 ? "+" : ""}
+                {c.integrity})
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {scene.imagePrompt && (
+        <div className="mt-2 pt-2 border-t border-white/10 text-[10px] text-white/45 leading-snug">
+          <span className="uppercase tracking-widest text-white/35">img →</span>{" "}
+          <span className="italic">{scene.imagePrompt}</span>
         </div>
       )}
     </div>

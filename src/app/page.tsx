@@ -10,14 +10,21 @@ import DialogueSubtitle from "@/components/DialogueSubtitle";
 import DialogueSpeaker from "@/components/DialogueSpeaker";
 import PaywallPanel from "@/components/PaywallPanel";
 import LoginModal from "@/components/LoginModal";
-import { useSessionStore } from "@/lib/session";
-import type { EndingKey } from "@/lib/types";
+import {
+  useSessionStore,
+  AUTHORED_SCENE_COUNT,
+  TOTAL_SCENE_COUNT,
+} from "@/lib/session";
+import { ARCHETYPES } from "@/lib/archetypes";
+import type { ArcSkeleton, EndingKey, Scene as LLMScene } from "@/lib/types";
 import type { IntroData } from "@/lib/session";
-import { SCENES, HOME_BACKGROUND } from "@/lib/scenes";
-
-// ---------------------------------------------------------------------------
-// Welcome narration — pre-trip, before the player has booked the flight
-// ---------------------------------------------------------------------------
+import {
+  SCENES,
+  HOME_BACKGROUND,
+  type SceneData,
+  type DialogueLine as AuthoredDialogueLine,
+  type Choice as AuthoredChoice,
+} from "@/lib/scenes";
 
 const WELCOME_LINES = [
   "You've been thinking about San Francisco for two years.",
@@ -34,19 +41,19 @@ const ENDING_COPY: Record<
   ipo: {
     label: "IPO",
     subtitle:
-      "Wagr rang the bell at NYSE on a Tuesday. You cried. Maya didn't come. The Bloomberg headline called you 'the unlikely conscience of fintech.' You framed it.",
+      "You rang the bell at NYSE on a Tuesday. You cried. Maya didn't come. The Bloomberg headline called you 'the unlikely conscience of fintech.' You framed it.",
     bg: "var(--color-mint)",
   },
   indicted: {
     label: "INDICTED",
     subtitle:
-      "The SEC opened an inquiry in November. You're on your third podcast apology tour. Wagr pivoted to compliance software. It still has twelve employees.",
+      "The SEC opened an inquiry in November. You're on your third podcast apology tour. The company pivoted to compliance software. It still has twelve employees.",
     bg: "var(--color-cable)",
   },
   "ai-wrapper": {
     label: "AI-WRAPPER PIVOT",
     subtitle:
-      "You quietly rebranded to WagrAI, laid off four people, and wrote a Substack post called 'Why We're Going Back to Basics.' It got three thousand likes.",
+      "You quietly rebranded with an AI suffix, laid off four people, and wrote a Substack post called 'Why We're Going Back to Basics.' It got three thousand likes.",
     bg: "var(--color-karl)",
   },
   acquihire: {
@@ -58,14 +65,97 @@ const ENDING_COPY: Record<
   ghosted: {
     label: "GHOSTED",
     subtitle:
-      "Wagr never quite registered. The algorithm didn't notice. The co-working space lease expired. You still have the hoodie.",
+      "The company never quite registered. The algorithm didn't notice. The co-working space lease expired. You still have the hoodie.",
     bg: "var(--color-fog-soft)",
   },
 };
 
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
+interface UnifiedScene {
+  id: number;
+  title: string;
+  background?: string;
+  dialogue: AuthoredDialogueLine[];
+  choices?: AuthoredChoice[];
+  textInput?: SceneData["textInput"];
+  // Authored-only — the single-CTA dare → paywall scene relies on this.
+  // LLM scenes don't set it.
+  ctaLabel?: string;
+  isLLM: boolean;
+}
+
+function formatArchetypeSpeaker(speaker: string): string {
+  if (speaker === "player") return "You";
+  if (speaker === "narrator") return "";
+  const def = ARCHETYPES[speaker as keyof typeof ARCHETYPES];
+  if (!def) return speaker;
+  return `${def.name} · ${def.title}`;
+}
+
+function adaptLLMScene(scene: LLMScene): UnifiedScene {
+  return {
+    id: scene.id,
+    title: scene.title,
+    background: HOME_BACKGROUND,
+    dialogue: scene.dialogue.map((d) => ({
+      speaker: formatArchetypeSpeaker(d.speaker),
+      text: d.text,
+    })),
+    choices: scene.choices.map((c) => ({
+      id: c.id,
+      label: c.label,
+      hype: c.hype,
+      integrity: c.integrity,
+    })),
+    isLLM: true,
+  };
+}
+
+function authoredAsUnified(scene: SceneData): UnifiedScene {
+  return {
+    id: scene.id,
+    title: scene.title,
+    background: scene.background,
+    dialogue: scene.dialogue,
+    choices: scene.choices,
+    textInput: scene.textInput,
+    ctaLabel: scene.ctaLabel,
+    isLLM: false,
+  };
+}
+
+const ARC_GEN_TIMEOUT_MS = 25000;
+const SCENE_GEN_TIMEOUT_MS = 15000;
+
+interface ArcGenResponse {
+  skeleton: ArcSkeleton;
+  source: "llm" | "fallback";
+}
+
+interface SceneGenResponse {
+  scene: LLMScene;
+  source: "llm" | "fallback";
+}
+
+async function postWithTimeout<T>(
+  url: string,
+  body: unknown,
+  timeoutMs: number,
+): Promise<T> {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`${url} ${res.status}`);
+    return (await res.json()) as T;
+  } finally {
+    clearTimeout(t);
+  }
+}
 
 export default function HomePage() {
   const phase = useSessionStore((s) => s.phase);
@@ -76,13 +166,21 @@ export default function HomePage() {
   const ending = useSessionStore((s) => s.ending);
   const historyCount = useSessionStore((s) => s.history.length);
   const playthroughId = useSessionStore((s) => s.playthroughId);
-  const startupName = useSessionStore((s) => s.intro.startupName);
+  const intro = useSessionStore(useShallow((s) => s.intro));
+  const arc = useSessionStore((s) => s.arc);
+  const history = useSessionStore((s) => s.history);
+  const startupName = intro.startupName;
 
   const {
     setPlaythroughId,
     welcomeStarted,
     captureIntro,
     paywallSatisfied,
+    arcSkeletonReady,
+    dynamicSceneReady,
+    enterGeneratingArc,
+    exitGeneratingArc,
+    setEpilogue,
     advanceLine,
     chooseOption,
     advanceScene,
@@ -93,6 +191,11 @@ export default function HomePage() {
       welcomeStarted: s.welcomeStarted,
       captureIntro: s.captureIntro,
       paywallSatisfied: s.paywallSatisfied,
+      arcSkeletonReady: s.arcSkeletonReady,
+      dynamicSceneReady: s.dynamicSceneReady,
+      enterGeneratingArc: s.enterGeneratingArc,
+      exitGeneratingArc: s.exitGeneratingArc,
+      setEpilogue: s.setEpilogue,
       advanceLine: s.advanceLine,
       chooseOption: s.chooseOption,
       advanceScene: s.advanceScene,
@@ -144,11 +247,18 @@ export default function HomePage() {
     });
   }, []);
 
-  // -------------------------------------------------------------------------
-  // DB capture
-  // -------------------------------------------------------------------------
+  const currentScene: UnifiedScene | null = (() => {
+    if (sceneIndex < AUTHORED_SCENE_COUNT) {
+      const a = SCENES[sceneIndex];
+      return a ? authoredAsUnified(a) : null;
+    }
+    const llmIndex = sceneIndex - AUTHORED_SCENE_COUNT;
+    const s = arc?.scenes[llmIndex];
+    if (!s || s.dialogue.length === 0) return null;
+    return adaptLLMScene(s);
+  })();
+  const currentLine = currentScene?.dialogue[currentLineIndex] ?? null;
 
-  // Tracks when the choice panel became visible, for time_to_choose_ms.
   const choiceShownAtRef = useRef<number | null>(null);
   useEffect(() => {
     if (showChoices) {
@@ -160,7 +270,161 @@ export default function HomePage() {
     }
   }, [showChoices]);
 
-  // Finalize the playthrough exactly once when the ending lands.
+  // Arc-skeleton generation: fire when entering authored scene 5 (last
+  // authored). The Sonnet call runs while the player reads / types, so by the
+  // time scene 5 finishes the skeleton is hopefully ready.
+  const arcGenFiredRef = useRef(false);
+  useEffect(() => {
+    if (phase !== "scene") return;
+    if (sceneIndex !== AUTHORED_SCENE_COUNT - 1) return;
+    if (arc?.arcSkeleton) return;
+    if (arcGenFiredRef.current) return;
+    arcGenFiredRef.current = true;
+
+    postWithTimeout<ArcGenResponse>(
+      "/api/generate-arc",
+      {
+        startupName: intro.startupName ?? "the startup",
+        startupDescription: intro.startupDescription ?? "",
+        founderPersona: intro.selfDescription ?? "",
+        stage: intro.stage,
+        flavorTags: intro.flavorTags,
+        priorChoices: history.map((h) => ({
+          sceneId: h.sceneId,
+          choiceLabel: h.choiceLabel,
+          hypeDelta: h.hypeDelta,
+          integrityDelta: h.integrityDelta,
+        })),
+        currentStats: { hype, integrity },
+        seed: playthroughId ?? `local-${Date.now()}`,
+      },
+      ARC_GEN_TIMEOUT_MS,
+    )
+      .then((data) => arcSkeletonReady(data.skeleton))
+      .catch((err) => console.error("generate-arc failed", err));
+  }, [
+    phase,
+    sceneIndex,
+    arc?.arcSkeleton,
+    intro,
+    history,
+    hype,
+    integrity,
+    playthroughId,
+    arcSkeletonReady,
+  ]);
+
+  // generating-arc phase: when skeleton is ready, fire the first LLM scene
+  // generation, then exit into 'scene' phase at sceneIndex = AUTHORED_SCENE_COUNT.
+  const firstSceneFiredRef = useRef(false);
+  useEffect(() => {
+    if (phase !== "generating-arc") {
+      firstSceneFiredRef.current = false;
+      return;
+    }
+    if (!arc?.arcSkeleton) return;
+    if (firstSceneFiredRef.current) return;
+    firstSceneFiredRef.current = true;
+
+    postWithTimeout<SceneGenResponse>(
+      "/api/generate-scene",
+      {
+        llmIndex: 0,
+        arcSkeleton: arc.arcSkeleton,
+        startupName: arc.startupName,
+        startupDescription: intro.startupDescription ?? "",
+        founderPersona: arc.founderPersona,
+        stage: arc.stage,
+        flavorTags: arc.flavorTags,
+        priorChoices: history.map((h) => ({
+          sceneId: h.sceneId,
+          choiceLabel: h.choiceLabel,
+          hypeDelta: h.hypeDelta,
+          integrityDelta: h.integrityDelta,
+        })),
+        currentStats: { hype, integrity },
+      },
+      SCENE_GEN_TIMEOUT_MS,
+    )
+      .then((data) => {
+        dynamicSceneReady(0, data.scene);
+        exitGeneratingArc();
+      })
+      .catch((err) => {
+        console.error("generate-scene[0] failed", err);
+        exitGeneratingArc();
+      });
+  }, [
+    phase,
+    arc,
+    intro.startupDescription,
+    history,
+    hype,
+    integrity,
+    dynamicSceneReady,
+    exitGeneratingArc,
+  ]);
+
+  // Eager next-scene generation: when an LLM scene mounts, kick off the next
+  // scene's generation so it's ready when the player picks.
+  const sceneGenFiredRef = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    if (phase !== "scene") return;
+    if (sceneIndex < AUTHORED_SCENE_COUNT) return;
+    const llmIndex = sceneIndex - AUTHORED_SCENE_COUNT;
+    const nextLLMIndex = llmIndex + 1;
+    if (nextLLMIndex >= 5) return; // LLM_SCENE_COUNT
+    if (!arc?.arcSkeleton) return;
+    const nextStored = arc.scenes[nextLLMIndex];
+    if (nextStored && nextStored.dialogue.length > 0) return;
+    if (sceneGenFiredRef.current.has(nextLLMIndex)) return;
+    sceneGenFiredRef.current.add(nextLLMIndex);
+
+    postWithTimeout<SceneGenResponse>(
+      "/api/generate-scene",
+      {
+        llmIndex: nextLLMIndex,
+        arcSkeleton: arc.arcSkeleton,
+        startupName: arc.startupName,
+        startupDescription: intro.startupDescription ?? "",
+        founderPersona: arc.founderPersona,
+        stage: arc.stage,
+        flavorTags: arc.flavorTags,
+        priorChoices: history.map((h) => ({
+          sceneId: h.sceneId,
+          choiceLabel: h.choiceLabel,
+          hypeDelta: h.hypeDelta,
+          integrityDelta: h.integrityDelta,
+        })),
+        currentStats: { hype, integrity },
+      },
+      SCENE_GEN_TIMEOUT_MS,
+    )
+      .then((data) => dynamicSceneReady(nextLLMIndex, data.scene))
+      .catch((err) =>
+        console.error(`generate-scene[${nextLLMIndex}] failed`, err),
+      );
+  }, [
+    phase,
+    sceneIndex,
+    arc,
+    intro.startupDescription,
+    history,
+    hype,
+    integrity,
+    dynamicSceneReady,
+  ]);
+
+  // Safety: if the player jumps directly to generating-arc via dev panel and
+  // there's no skeleton yet, kick the same effect that would normally fire.
+  useEffect(() => {
+    if (phase !== "generating-arc") return;
+    if (!arc?.arcSkeleton) {
+      enterGeneratingArc();
+    }
+  }, [phase, arc?.arcSkeleton, enterGeneratingArc]);
+
+  // Generate epilogue + finalize playthrough at ending.
   const finalizedRef = useRef(false);
   useEffect(() => {
     if (phase !== "ending") {
@@ -168,17 +432,29 @@ export default function HomePage() {
       return;
     }
     if (finalizedRef.current) return;
-    if (!playthroughId || !ending) return;
+    if (!ending) return;
     finalizedRef.current = true;
-    fetch(`/api/playthroughs/${playthroughId}`, {
-      method: "PATCH",
+
+    const epilogueP = fetch("/api/generate-epilogue", {
+      method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        ending: ending.key,
-        epilogue: null,
-        achievements: ending.achievementsUnlocked,
+        startupName: arc?.startupName ?? startupName ?? "the startup",
+        endingKey: ending.key,
+        flavorTags: arc?.flavorTags ?? intro.flavorTags ?? [],
+        choiceHistory: history.map((h) => ({
+          sceneId: h.sceneId,
+          choiceLabel: h.choiceLabel,
+        })),
       }),
-    }).catch((err) => console.error("finalizePlaythrough failed", err));
+    })
+      .then((r) => r.json() as Promise<{ epilogue: string }>)
+      .then((data) => {
+        setEpilogue(data.epilogue);
+        return data.epilogue;
+      })
+      .catch(() => null);
+
     // Paywall verify auto-issued a session cookie a few seconds ago — re-probe
     // /api/auth/me so the ending screen can show "Past flights" without a
     // full reload. setState happens after the async fetch resolves, not in
@@ -186,11 +462,31 @@ export default function HomePage() {
     // doesn't apply here.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchSessionEmail();
-  }, [phase, playthroughId, ending, fetchSessionEmail]);
 
-  // -------------------------------------------------------------------------
-  // Handlers
-  // -------------------------------------------------------------------------
+    if (playthroughId) {
+      epilogueP.then((epilogue) => {
+        fetch(`/api/playthroughs/${playthroughId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            ending: ending.key,
+            epilogue,
+            achievements: ending.achievementsUnlocked,
+          }),
+        }).catch((err) => console.error("finalizePlaythrough failed", err));
+      });
+    }
+  }, [
+    phase,
+    ending,
+    playthroughId,
+    arc,
+    intro.flavorTags,
+    history,
+    startupName,
+    setEpilogue,
+    fetchSessionEmail,
+  ]);
 
   const handleStart = useCallback(() => {
     setPlaythroughId(undefined);
@@ -211,10 +507,9 @@ export default function HomePage() {
   }, [welcomeStarted, setPlaythroughId]);
 
   const handleLineComplete = useCallback(() => {
-    const scene = SCENES[sceneIndex];
-    if (!scene) return;
-    advanceLine(scene.dialogue.length);
-  }, [sceneIndex, advanceLine]);
+    if (!currentScene) return;
+    advanceLine(currentScene.dialogue.length);
+  }, [currentScene, advanceLine]);
 
   const handleShareX = useCallback(() => {
     if (!ending) return;
@@ -233,13 +528,14 @@ export default function HomePage() {
 
   const handleChoice = useCallback(
     (choiceId: string) => {
-      const scene = SCENES[sceneIndex];
-      const choice = scene?.choices?.find((c) => c.id === choiceId);
-      const hypeDelta = choice?.hype ?? 0;
-      const integrityDelta = choice?.integrity ?? 0;
-      chooseOption(choiceId, hypeDelta, integrityDelta);
+      if (!currentScene) return;
+      const choice = currentScene.choices?.find((c) => c.id === choiceId);
+      if (!choice) return;
+      const hypeDelta = choice.hype;
+      const integrityDelta = choice.integrity;
+      chooseOption(choiceId, choice.label, hypeDelta, integrityDelta);
 
-      if (playthroughId && scene) {
+      if (playthroughId) {
         const startedAt = choiceShownAtRef.current;
         const timeToChooseMs =
           startedAt !== null ? Date.now() - startedAt : null;
@@ -247,11 +543,11 @@ export default function HomePage() {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            sceneNumber: scene.id,
-            dialogue: scene.dialogue
+            sceneNumber: currentScene.id,
+            dialogue: currentScene.dialogue
               .map((d) => `${d.speaker ?? ""}: ${d.text}`)
               .join("\n"),
-            choicesShown: (scene.choices ?? []).map((c) => ({
+            choicesShown: (currentScene.choices ?? []).map((c) => ({
               id: c.id,
               label: c.label,
             })),
@@ -265,19 +561,18 @@ export default function HomePage() {
       }
 
       setTimeout(() => {
-        advanceScene(SCENES.length);
+        advanceScene(TOTAL_SCENE_COUNT);
       }, 600);
     },
-    [sceneIndex, chooseOption, advanceScene, playthroughId],
+    [currentScene, chooseOption, advanceScene, playthroughId],
   );
 
   const handleSceneTextSubmit = useCallback(
     (text: string) => {
-      const scene = SCENES[sceneIndex];
-      if (!scene?.textInput) return;
+      if (!currentScene?.textInput) return;
 
       const updates: Partial<IntroData> = { transcript: text };
-      switch (scene.textInput.extractAs) {
+      switch (currentScene.textInput.extractAs) {
         case "startupDescription":
           updates.startupDescription = text;
           break;
@@ -285,12 +580,12 @@ export default function HomePage() {
           updates.selfDescription = text;
           break;
         case "stage":
-          updates.flavorTags = [`stage:${text}`];
+          updates.stage = text;
           break;
       }
       captureIntro(updates);
 
-      chooseOption("text", 0, 0);
+      chooseOption("text", text, 0, 0);
 
       if (playthroughId) {
         const startedAt = choiceShownAtRef.current;
@@ -300,8 +595,8 @@ export default function HomePage() {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            sceneNumber: scene.id,
-            dialogue: scene.dialogue
+            sceneNumber: currentScene.id,
+            dialogue: currentScene.dialogue
               .map((d) => `${d.speaker ?? ""}: ${d.text}`)
               .join("\n"),
             choicesShown: [],
@@ -315,18 +610,11 @@ export default function HomePage() {
       }
 
       setTimeout(() => {
-        advanceScene(SCENES.length);
+        advanceScene(TOTAL_SCENE_COUNT);
       }, 600);
     },
-    [sceneIndex, captureIntro, chooseOption, advanceScene, playthroughId],
+    [currentScene, captureIntro, chooseOption, advanceScene, playthroughId],
   );
-
-  // -------------------------------------------------------------------------
-  // Derived slots
-  // -------------------------------------------------------------------------
-
-  const currentScene = SCENES[sceneIndex] ?? null;
-  const currentLine = currentScene?.dialogue[currentLineIndex] ?? null;
 
   const dialogueSlot = (() => {
     if (phase === "welcome" && !welcomeDone) {
@@ -400,8 +688,9 @@ export default function HomePage() {
     }
 
     if (phase !== "scene" || !showChoices) return null;
+    if (!currentScene) return null;
 
-    if (currentScene?.textInput) {
+    if (currentScene.textInput) {
       return (
         <TextInputPanel
           placeholder={currentScene.textInput.placeholder}
@@ -431,16 +720,12 @@ export default function HomePage() {
 
     return (
       <ChoicePanel
-        choices={currentScene?.choices ?? []}
+        choices={currentScene.choices ?? []}
         onChoice={handleChoice}
         disabled={choiceMade !== null}
       />
     );
   })();
-
-  // -------------------------------------------------------------------------
-  // Center content by phase
-  // -------------------------------------------------------------------------
 
   const centerContent = (() => {
     switch (phase) {
@@ -451,9 +736,35 @@ export default function HomePage() {
         return null;
 
       case "onboarding":
-        // Vestigial — current flow goes welcome → scene directly. Kept so
-        // any persisted sessions on the old phase don't crash the renderer.
         return null;
+
+      case "generating-arc":
+        return (
+          <div
+            className="comic-outline animate-bounce-in rounded-2xl p-8 max-w-md w-full text-center flex flex-col gap-4"
+            style={{ background: "var(--color-fog)" }}
+          >
+            <div className="flex justify-center gap-1.5">
+              {[0, 1, 2].map((i) => (
+                <span
+                  key={i}
+                  className="w-2 h-2 rounded-full"
+                  style={{
+                    background: "var(--color-ink)",
+                    opacity: 0.5,
+                    animation: "pulse 1.6s ease-in-out infinite",
+                    animationDelay: `${i * 0.2}s`,
+                  }}
+                />
+              ))}
+            </div>
+            <p className="font-sans text-[var(--color-ink)]/80 text-sm leading-relaxed">
+              The city&apos;s still loading.
+              <br />
+              Five more scenes between you and the rest of your life.
+            </p>
+          </div>
+        );
 
       case "scene":
         return (
@@ -500,7 +811,7 @@ export default function HomePage() {
               {e?.label ?? "UNKNOWN"}
             </h2>
             <p className="font-sans text-[var(--color-ink)]/80 text-sm leading-relaxed">
-              {e?.subtitle}
+              {ending?.epilogue ?? e?.subtitle}
             </p>
             <div
               className="font-pixel pt-4 flex flex-col gap-1 text-base text-[var(--color-ink)]/60"
@@ -551,10 +862,6 @@ export default function HomePage() {
     }
   })();
 
-  // -------------------------------------------------------------------------
-  // Render
-  // -------------------------------------------------------------------------
-
   if (!hasHydrated) return null;
 
   return (
@@ -580,7 +887,9 @@ export default function HomePage() {
             ? WELCOME_BACKGROUND
             : phase === "scene"
               ? (currentScene?.background ?? HOME_BACKGROUND)
-              : "/intro-v2/01-departure-board.png"
+              : phase === "generating-arc"
+                ? HOME_BACKGROUND
+                : "/intro-v2/01-departure-board.png"
         }
         dialogueSlot={dialogueSlot}
         bottomPanel={bottomPanel}
