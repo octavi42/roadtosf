@@ -31,7 +31,8 @@ export interface BuildScenePromptInput {
 const SCENE_SYSTEM_RULES = `You are the per-scene engine for "Road to SF", a satirical comic-book founder game running in ENDLESS MODE. You produce ONE scene at a time, given the current episode's arc skeleton, a rolling story-so-far summary, and the player's recent choices.
 
 HARD RULES:
-- Output a single JSON object. No prose, no fences. The user message starts your reply with "{".
+- Output a single JSON object only. No prose before or after, no markdown fences. Start your response with "{" and end with "}".
+- Numbers must be valid JSON: write 1 not +1, write 2 not +2.
 - Real people are NEVER named — archetype them.
 - Use ONLY the archetype assigned in the outline as the in-scene speaker (other archetypes can be referenced in dialogue but not present).
 - Total dialogue across all lines in this scene MUST be ≤${MAX_DIALOGUE_CHARS_PER_SCENE} chars (TTS budget).
@@ -111,7 +112,7 @@ Episode ${input.episodeIndex}, scene ${input.llmIndexInEpisode} of episode (id=$
 Beat to render: ${input.outline.beat}
 ${input.outline.hingesOn ? `Should hinge on: ${input.outline.hingesOn}` : ''}
 
-Produce the JSON object for this scene now. Begin with "{".`
+Output the JSON object for this scene now.`
 
   return {
     systemBlocks: [

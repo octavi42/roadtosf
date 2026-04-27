@@ -559,6 +559,9 @@ export default function HomePage() {
         startupName: arc?.startupName ?? startupName ?? "the startup",
         endingKey: ending.key,
         flavorTags: arc?.flavorTags ?? intro.flavorTags ?? [],
+        team: intro.team,
+        fundingModel: intro.fundingModel,
+        concern: intro.concern,
         choiceHistory: history.map((h) => ({
           sceneId: h.sceneId,
           choiceLabel: h.choiceLabel,

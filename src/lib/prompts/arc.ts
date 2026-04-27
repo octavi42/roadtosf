@@ -37,7 +37,8 @@ export interface BuildArcPromptInput {
 const SYSTEM_RULES = `You are the arc-skeleton engine for "Road to SF", a satirical comic-book founder game running in ENDLESS MODE. The story is delivered as 5-scene episodes; you produce one episode at a time.
 
 HARD RULES:
-- Output a single JSON object. No prose, no fences. The user message will start your response with "{".
+- Output a single JSON object only. No prose before or after, no markdown fences. Start your response with "{" and end with "}".
+- Numbers must be valid JSON: write 1 not +1, write 2 not +2.
 - Real people are NEVER named — archetype them ("a Thiel-coded VC", "a YC partner with the blog", "a Sam-coded accelerator partner").
 - Each scene has ONE archetype as the speaker. Use the assigned archetype list verbatim — do not reorder or substitute.
 - Tone: comic, biting, cinematic. Each beat lands like a graphic novel panel.
@@ -148,7 +149,9 @@ ${
   isOpening
     ? 'Produce the OPENING episode (5 scenes). Land on a hook so the next episode has somewhere to go — do NOT resolve the arc.'
     : `Produce episode ${input.episodeIndex} (5 more scenes). Continue from the prior storySoFar; pay off at least one beat from the most recent episode. End on a hook. Update storySoFar to cover everything before this episode.`
-}`
+}
+
+Output the JSON object now.`
 
   return {
     systemBlocks: [
