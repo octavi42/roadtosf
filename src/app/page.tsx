@@ -361,15 +361,21 @@ export default function HomePage() {
   const arcGenFiredRef = useRef<Set<number>>(new Set()); // episodes already requested
   const sceneGenFiredRef = useRef<Set<number>>(new Set()); // global llm indices already requested
   const extractFiredForRef = useRef<string | null>(null); // last startupDescription extracted for
+  // Flips true once extraction has settled (success or failure). Arc-gen is
+  // gated on this so Sonnet never receives a half-populated player facts block
+  // — the cause of the "Maya in The Uninvited Cofounder" bleed.
+  const [extractionResolved, setExtractionResolved] = useState(false);
   useEffect(() => {
     arcGenFiredRef.current = new Set();
     sceneGenFiredRef.current = new Set();
     extractFiredForRef.current = null;
+    setExtractionResolved(false);
   }, [playthroughId]);
 
   // Smart Q&A extraction: once the player submits the scene-2 pitch, fire one
   // Haiku call that extracts the canonical facts AND generates Jordan-voice
-  // follow-ups for whatever's missing. Result drives scene 4.
+  // follow-ups for whatever's missing. Result drives scene 4. Always flip
+  // extractionResolved so arc-gen is unblocked even on failure.
   useEffect(() => {
     const desc = intro.startupDescription?.trim();
     if (!desc) return;
@@ -413,16 +419,26 @@ export default function HomePage() {
       .catch((err) => {
         console.warn("extract-facts failed", err);
         extractFiredForRef.current = null;
+      })
+      .finally(() => {
+        setExtractionResolved(true);
       });
   }, [intro.startupDescription, intro.selfDescription, factsExtracted]);
 
   // Episode 0 generation: fire when entering authored scene 5 (the last
   // authored). Sonnet runs in the background while the player reads / types.
+  // Gated on extraction having resolved — otherwise Sonnet receives an
+  // undefined team and falls back to inventing a cofounder (the Maya bleed).
+  // Safety bypass: if the player jumped straight here via the dev panel and
+  // never submitted scene 2, extraction will never fire — fall back to firing
+  // arc-gen anyway so the run isn't soft-locked.
   useEffect(() => {
     if (phase !== "scene") return;
     if (sceneIndex !== AUTHORED_SCENE_COUNT - 1) return;
     if (arc?.arcSkeleton?.episodeIndex === 0) return;
     if (arcGenFiredRef.current.has(0)) return;
+    const noPitchSubmitted = !intro.startupDescription?.trim();
+    if (!extractionResolved && !noPitchSubmitted) return;
     arcGenFiredRef.current.add(0);
 
     postWithTimeout<ArcGenResponse>(
@@ -432,7 +448,15 @@ export default function HomePage() {
     )
       .then((data) => arcSkeletonReady(data.skeleton))
       .catch((err) => console.error("generate-arc[0] failed", err));
-  }, [phase, sceneIndex, arc?.arcSkeleton, buildArcRequestBody, arcSkeletonReady]);
+  }, [
+    phase,
+    sceneIndex,
+    arc?.arcSkeleton,
+    extractionResolved,
+    intro.startupDescription,
+    buildArcRequestBody,
+    arcSkeletonReady,
+  ]);
 
   // generating-arc phase: when the *current* skeleton is ready, fire the
   // first LLM scene of that episode and exit into 'scene' phase.
