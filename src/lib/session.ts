@@ -99,6 +99,14 @@ interface SessionState {
    * triggers paywall via creditsExhausted().
    */
   creditsRemaining: number;
+  /**
+   * Mirror of /api/auth/me's `email` field — null when the user is not
+   * logged in. Lives in zustand (instead of page.tsx local state) so any
+   * code path that changes auth (LoginModal success, /history logout) can
+   * fan-out to the balance refetch effect by simply updating this value.
+   * NOT persisted: the source of truth is the iron-session cookie.
+   */
+  sessionEmail: string | null;
   // Tracks which sceneIndex already fired its share moment in the current
   // episode. Reset to null on each new arc skeleton (= new episode) and on
   // reset. Acts both as the per-episode frequency cap (max 1) and the
@@ -111,6 +119,7 @@ interface SessionState {
 
   setPlaythroughId: (id: string | undefined) => void;
   setCreditsRemaining: (n: number) => void;
+  setSessionEmail: (email: string | null) => void;
   decrementCredits: (n?: number) => void;
   /**
    * Server-mediated paywall re-entry: called when the user has paid before
@@ -181,6 +190,7 @@ export const useSessionStore = create<SessionState>()(
       ending: undefined,
       paid: false,
       creditsRemaining: 0,
+      sessionEmail: null,
       shareMomentFiredInEpisode: null,
 
       markShareMomentFired: (sceneIndex) =>
@@ -191,6 +201,7 @@ export const useSessionStore = create<SessionState>()(
 
       setPlaythroughId: (id) => set({ playthroughId: id }),
       setCreditsRemaining: (n) => set({ creditsRemaining: Math.max(0, n) }),
+      setSessionEmail: (email) => set({ sessionEmail: email }),
       decrementCredits: (n = 1) =>
         set((state) => ({
           creditsRemaining: Math.max(0, state.creditsRemaining - Math.max(0, n)),

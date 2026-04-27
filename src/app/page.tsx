@@ -288,6 +288,7 @@ export default function HomePage() {
     markShareMomentFired,
     setCreditsRemaining,
     creditsExhausted,
+    setSessionEmail,
   } = useSessionStore(
     useShallow((s) => ({
       setPlaythroughId: s.setPlaythroughId,
@@ -309,22 +310,26 @@ export default function HomePage() {
       markShareMomentFired: s.markShareMomentFired,
       setCreditsRemaining: s.setCreditsRemaining,
       creditsExhausted: s.creditsExhausted,
+      setSessionEmail: s.setSessionEmail,
     })),
   );
+  // Read sessionEmail directly off the store so any code path that flips
+  // it (LoginModal success, /history logout) re-renders this component
+  // and re-runs the balance refetch effect without depending on Next.js's
+  // router cache to remount the page.
+  const sessionEmail = useSessionStore((s) => s.sessionEmail);
 
   const router = useRouter();
   const [welcomeLineIndex, setWelcomeLineIndex] = useState(0);
   const [welcomeDone, setWelcomeDone] = useState(false);
   const welcomeCompleteRef = useRef(false);
   const [loginOpen, setLoginOpen] = useState(false);
-  // Tracks the email currently logged in, for showing/hiding "Past flights"
-  // CTAs without flashing them while we're still fetching /api/auth/me.
-  const [sessionEmail, setSessionEmail] = useState<string | null>(null);
 
   // Best-effort session probe — runs once on mount, again after a successful
   // login, again when arriving at the ending screen (paywall verify auto-
   // issues a session cookie, so we want to surface the "Past flights" CTA
-  // without needing a page reload).
+  // without needing a page reload). Writes to zustand sessionEmail so any
+  // component reading it re-renders.
   const fetchSessionEmail = useCallback(async () => {
     try {
       const r = await fetch("/api/auth/me", { cache: "no-store" });
@@ -334,7 +339,7 @@ export default function HomePage() {
     } catch {
       /* network blip — leave previous value */
     }
-  }, []);
+  }, [setSessionEmail]);
 
   useEffect(() => {
     // setState happens inside the async fetch resolution, not during the

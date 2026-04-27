@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ENDING_COPY, isEndingKey } from "@/lib/ending-copy";
 import type { EndingKey } from "@/lib/types";
+import { useSessionStore } from "@/lib/session";
 
 interface PlaythroughItem {
   id: string;
@@ -67,6 +68,14 @@ export default function HistoryPage() {
     } catch (err) {
       console.error("logout failed", err);
     }
+    // Mirror the server-side logout in the client store so the home page
+    // widget reflects the change instantly. Without this, Next.js's router
+    // cache may keep page.tsx mounted with the stale sessionEmail/credits,
+    // and the widget would keep showing the prior balance until the next
+    // hard refresh.
+    const store = useSessionStore.getState();
+    store.setSessionEmail(null);
+    store.setCreditsRemaining(0);
     router.push("/");
   }, [loggingOut, router]);
 
