@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { redeemPlaythroughByEmail } from '@/lib/playthroughs'
 import { checkAndConsumeEmailCode } from '@/lib/email-codes'
 import { setSessionEmail } from '@/lib/auth'
+import { readAnonId } from '@/lib/anon-id'
+import { bindAnonToEmail, getBalance } from '@/lib/credits'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -66,7 +68,27 @@ export async function POST(request: Request) {
       console.error('paywall/email/verify-code: setSessionEmail failed', err)
     }
 
-    return NextResponse.json({ paid: true })
+    // Bind any anon-only balance (e.g. dev grants in this session) into the
+    // email row before reading the post-bind balance. Without this, an OTP
+    // login from a freshly-anon session would leave anon credits orphaned
+    // and the response below would report a stale "0" balance.
+    const anonId = await readAnonId()
+    if (anonId) {
+      try {
+        await bindAnonToEmail(anonId, email)
+      } catch (err) {
+        console.error('paywall/email/verify-code: bindAnonToEmail failed', err)
+      }
+    }
+
+    let creditsRemaining = 0
+    try {
+      creditsRemaining = await getBalance({ anonId, email })
+    } catch (err) {
+      console.error('paywall/email/verify-code: getBalance failed', err)
+    }
+
+    return NextResponse.json({ paid: true, creditsRemaining })
   } catch (err) {
     console.error('paywall/email/verify-code failed', err)
     return NextResponse.json({ error: 'verify failed' }, { status: 500 })

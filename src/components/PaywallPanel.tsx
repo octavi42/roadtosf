@@ -117,13 +117,28 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
   const [error, setError] = useState<string | null>(null);
 
   const [returningUser, setReturningUser] = useState<boolean | null>(null);
+  // Mirror of the email's credit balance from /api/paywall/check-email.
+  // Used together with `returningUser` to decide which branch to show:
+  //   returningUser=true && returningCredits>0  → OTP login (claim credits)
+  //   returningUser=true && returningCredits=0  → payment form (top up)
+  //   returningUser=false                       → payment form (new user)
+  // Without the credits gate, OTP login lets a returning user re-enter the
+  // game without a fresh charge — bypassing the paywall for content paid
+  // by their prior pack but already exhausted.
+  const [returningCredits, setReturningCredits] = useState<number>(0);
   const [checkingEmail, setCheckingEmail] = useState(false);
   const returningUserRef = useRef<boolean | null>(null);
+  const returningCreditsRef = useRef<number>(0);
   const checkInFlightRef = useRef<Promise<void> | null>(null);
 
   const [codeSent, setCodeSent] = useState(false);
   const [code, setCode] = useState("");
   const [sendingCode, setSendingCode] = useState(false);
+
+  // Drives UI routing — kept as a single derived value so handlers and the
+  // render below can't disagree on which branch is active.
+  const showOtpPath = returningUser === true && returningCredits > 0;
+  const returningButEmpty = returningUser === true && returningCredits === 0;
 
   useEffect(() => {
     if (!playthroughId) return;
@@ -184,16 +199,24 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
             body: JSON.stringify({ email: trimmed }),
             signal: ctrl.signal,
           });
-          const data = (await r.json()) as { paid?: boolean };
+          const data = (await r.json()) as { paid?: boolean; credits?: number };
           if (ctrl.signal.aborted) return;
-          const result = Boolean(data.paid);
-          returningUserRef.current = result;
-          setReturningUser(result);
+          const paid = Boolean(data.paid);
+          const credits =
+            typeof data.credits === "number" && data.credits > 0
+              ? data.credits
+              : 0;
+          returningUserRef.current = paid;
+          returningCreditsRef.current = credits;
+          setReturningUser(paid);
+          setReturningCredits(credits);
         } catch (err) {
           if (ctrl.signal.aborted) return;
           console.error("paywall check-email failed", err);
           returningUserRef.current = null;
+          returningCreditsRef.current = 0;
           setReturningUser(null);
+          setReturningCredits(0);
         } finally {
           if (!ctrl.signal.aborted) setCheckingEmail(false);
         }
@@ -252,14 +275,40 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
           code: code.trim(),
         }),
       });
-      const data = (await r.json()) as { paid?: boolean; error?: string };
+      const data = (await r.json()) as {
+        paid?: boolean;
+        creditsRemaining?: number;
+        error?: string;
+      };
       if (!r.ok || !data.paid) {
         setError(data.error ?? "Could not verify code.");
         setSubmitting(false);
         return;
       }
-      // OTP login is "I already paid before" — no fresh charge, no new plays.
-      onSatisfied(0);
+      // The whole point of OTP-as-paywall-exit is that the email has
+      // unspent credits. If the server reports 0 (race: spent in another
+      // tab, or the credits were never granted because the prior $5 was
+      // pre-credit-system), force them onto the payment form rather than
+      // letting them in for free.
+      const remaining =
+        typeof data.creditsRemaining === "number" ? data.creditsRemaining : 0;
+      if (remaining <= 0) {
+        setError(
+          "No credits left on this email — pick a pack to keep flying.",
+        );
+        // Flip into the "returning but empty" branch so the next render
+        // shows the payment form instead of the OTP UI.
+        returningCreditsRef.current = 0;
+        setReturningCredits(0);
+        setCodeSent(false);
+        setCode("");
+        setSubmitting(false);
+        return;
+      }
+      // Server-authoritative balance — bumps the client mirror in
+      // session.ts via paywallSatisfied(remaining), so the next group fire
+      // sees the right number without an extra round-trip.
+      onSatisfied(remaining);
     } catch (err) {
       console.error("paywall verify-code failed", err);
       setError("Network error during verify.");
@@ -282,7 +331,14 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
     if (checkInFlightRef.current) {
       await checkInFlightRef.current;
     }
-    if (returningUserRef.current === true) {
+    // A returning user with unspent credits should be claiming via OTP, not
+    // paying again. Block the Stripe path only in that case. A returning
+    // user with 0 credits is allowed to top up — that's the whole point of
+    // the new "log in then pay if needed" flow.
+    if (
+      returningUserRef.current === true &&
+      returningCreditsRef.current > 0
+    ) {
       return;
     }
 
@@ -448,6 +504,8 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
               setEmail(e.target.value);
               if (returningUser !== null) setReturningUser(null);
               returningUserRef.current = null;
+              returningCreditsRef.current = 0;
+              setReturningCredits(0);
               if (codeSent) {
                 setCodeSent(false);
                 setCode("");
@@ -465,17 +523,26 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
               Cross-checking the manifest…
             </p>
           )}
-          {returningUser === true && (
+          {showOtpPath && (
             <p
               className="text-[11px] mt-1.5 font-bold"
               style={{ color: "var(--color-bay)" }}
             >
-              ★ Frequent flyer found. Skip the line.
+              ★ Frequent flyer found · {returningCredits} credit
+              {returningCredits === 1 ? "" : "s"} on file. Skip the line.
+            </p>
+          )}
+          {returningButEmpty && (
+            <p
+              className="text-[11px] mt-1.5 font-bold"
+              style={{ color: "var(--color-cable)" }}
+            >
+              ★ Welcome back · no credits left on this email. Top up below.
             </p>
           )}
         </div>
 
-        {!returningUser && (
+        {!showOtpPath && (
           <>
             <div className="mb-3">
               <FieldLabel>Card</FieldLabel>
@@ -546,7 +613,7 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
           </p>
         )}
 
-        {returningUser ? (
+        {showOtpPath ? (
           <ReturningUserPanel
             codeSent={codeSent}
             code={code}
@@ -575,7 +642,9 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
           >
             {submitting
               ? "Boarding…"
-              : `Board the flight · ${formatUsd(selectedPack.priceCents)}`}
+              : returningButEmpty
+                ? `Top up · ${formatUsd(selectedPack.priceCents)}`
+                : `Board the flight · ${formatUsd(selectedPack.priceCents)}`}
           </button>
         )}
 
