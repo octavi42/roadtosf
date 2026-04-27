@@ -54,30 +54,37 @@ export function ShareNotification({
   const isCard = state === "peek" || state === "expanded";
 
   // Single fixed box morphs between three layouts.
-  //  - peek: top-center toast (the initial entry — only state that's centered)
+  //  - peek: dead-center on first appearance
   //  - docked: small pill in the top-left, stacked under the scene-title pill
-  //  - expanded: full card, anchored at the docked pill's position so re-opening
+  //  - expanded: full card anchored at the docked pill's position so re-opening
   //    from the dock grows in place instead of jumping to viewport-center
   const positionByState: Record<
     Exclude<ShareNotificationState, "hidden">,
     Pick<React.CSSProperties, "left" | "top" | "transform">
   > = {
-    peek: { left: "50%", top: 84, transform: "translateX(-50%)" },
+    peek: { left: "50%", top: "50%", transform: "translate(-50%, -50%)" },
     docked: { left: 24, top: 108, transform: "none" },
     expanded: { left: 24, top: 108, transform: "none" },
   };
+  // Explicit heights for both modes — `height: auto` can't be animated, which
+  // is what made the height pop before the width caught up. Card content
+  // sits inside an overflow-hidden container so the fixed 224px clips
+  // gracefully if the blurb runs long.
+  const CARD_HEIGHT = 224;
+  const DOCKED_HEIGHT = 32;
+  const EASE = "cubic-bezier(0.32, 1.05, 0.6, 1)";
+  const DUR = "380ms";
+  const props = ["width", "height", "padding", "border-radius", "left", "top", "transform", "background-color"];
   const containerStyle: React.CSSProperties = {
     background: isCard ? "var(--color-fog)" : "var(--color-mustard)",
     color: "var(--color-ink)",
     width: isCard ? 340 : 110,
-    minHeight: isCard ? 56 : 32,
-    height: isCard ? "auto" : 32,
+    height: isCard ? CARD_HEIGHT : DOCKED_HEIGHT,
     padding: isCard ? "1rem 1.1rem" : "0",
     borderRadius: isCard ? 14 : 8,
     ...positionByState[state],
     opacity: entered ? 1 : 0,
-    transition:
-      "opacity 220ms ease, width 360ms cubic-bezier(0.34, 1.56, 0.64, 1), height 360ms cubic-bezier(0.34, 1.56, 0.64, 1), padding 360ms ease, border-radius 360ms ease, background-color 240ms ease, left 360ms cubic-bezier(0.34, 1.56, 0.64, 1), top 360ms cubic-bezier(0.34, 1.56, 0.64, 1), transform 360ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+    transition: `opacity 220ms ease, ${props.map((p) => `${p} ${DUR} ${EASE}`).join(", ")}`,
     overflow: "hidden",
     cursor: state === "docked" ? "pointer" : "default",
   };
