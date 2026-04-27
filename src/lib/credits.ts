@@ -46,6 +46,13 @@ function normalizeEmail(email: string | null): string | null {
 /**
  * Returns 0 when no balance row exists for the caller. Caller's email wins
  * over anon_id when both are present.
+ *
+ * Anon-id-only lookups are restricted to rows where `email IS NULL` —
+ * "truly anonymous" credits (e.g. dev grants on a fresh cookie). Once a
+ * row has been bound to an email (via bindAnonToEmail at payment or OTP
+ * login), it can only be reached by authenticating with that email. This
+ * is what makes logout actually log you out: even though the anon cookie
+ * survives, the bound credits become unreachable until you sign back in.
  */
 export async function getBalance(key: BalanceKey): Promise<number> {
   const email = normalizeEmail(key.email)
@@ -60,7 +67,7 @@ export async function getBalance(key: BalanceKey): Promise<number> {
       `
     : await sql`
         SELECT credits_remaining FROM user_balance
-        WHERE anon_id = ${anonId}
+        WHERE anon_id = ${anonId} AND email IS NULL
         LIMIT 1
       `
   if (rows.length === 0) return 0
@@ -99,6 +106,7 @@ export async function debitCredit(
           SET credits_remaining = credits_remaining - ${amount},
               updated_at = NOW()
           WHERE anon_id = ${anonId}
+            AND email IS NULL
             AND credits_remaining >= ${amount}
           RETURNING id, credits_remaining
         `
@@ -181,7 +189,7 @@ export async function grantCredits(
       SET credits_remaining = credits_remaining + ${opts.amount},
           total_credits_purchased = total_credits_purchased + ${opts.amount},
           updated_at = NOW()
-      WHERE anon_id = ${anonId}
+      WHERE anon_id = ${anonId} AND email IS NULL
       RETURNING id, credits_remaining
     `
     if (updated.length > 0) {
@@ -250,10 +258,15 @@ export async function bindAnonToEmail(
   `
 
   if (emailRows.length === 0) {
-    // No email row yet — claim this anon row as the email row.
+    // No email row yet — claim this anon row as the email row AND release
+    // the anon_id. After this, getBalance({email}) finds the credits via
+    // email; getBalance({anonId}) does not (email IS NULL filter), which
+    // is what makes logout actually log out. The cookie can also be
+    // reused for a fresh anon-only grant later without colliding with
+    // the unique anon_id index.
     await sql`
       UPDATE user_balance
-      SET email = ${normEmail}, updated_at = NOW()
+      SET email = ${normEmail}, anon_id = NULL, updated_at = NOW()
       WHERE id = ${anonRow.id}
     `
     return
@@ -265,13 +278,14 @@ export async function bindAnonToEmail(
   // Move credits + ledger references onto the email row, then drop the
   // anon-only row. Done in two statements: the email row update first (so
   // ledger rows still resolve through CASCADE if anything fails before the
-  // delete), then the anon delete.
+  // delete), then the anon delete. The email row deliberately does NOT
+  // pick up the anon_id — bound credits stay reachable only via email
+  // auth, which is the contract the rest of the lookup logic relies on.
   await sql`
     UPDATE user_balance
     SET credits_remaining = credits_remaining + ${anonRow.credits_remaining},
         total_credits_purchased = total_credits_purchased
                                  + ${anonRow.total_credits_purchased},
-        anon_id = COALESCE(anon_id, ${anonId}),
         updated_at = NOW()
     WHERE id = ${emailRowId}
   `
