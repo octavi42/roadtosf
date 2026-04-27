@@ -23,7 +23,6 @@ interface DevTarget {
 
 const STATIC_TARGETS_HEAD: DevTarget[] = [
   { label: "Welcome", phase: "welcome" },
-  { label: "Onboarding", phase: "onboarding" },
   { label: "Scene 1", phase: "scene", sceneIndex: 0 },
   { label: "Scene 2", phase: "scene", sceneIndex: 1 },
   { label: "Scene 3", phase: "scene", sceneIndex: 2 },

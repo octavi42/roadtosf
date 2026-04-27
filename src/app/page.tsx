@@ -1220,9 +1220,6 @@ export default function HomePage() {
       case "paywall":
         return null;
 
-      case "onboarding":
-        return null;
-
       case "generating-arc":
         return (
           <div

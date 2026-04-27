@@ -4,7 +4,6 @@ import type { ArcSkeleton, EndingKey, Scene, StoryArc } from "./types";
 
 export type Phase =
   | "welcome"
-  | "onboarding"
   | "scene"
   | "paywall"
   | "generating-arc"
@@ -91,10 +90,6 @@ interface SessionState {
 
   setPlaythroughId: (id: string | undefined) => void;
   welcomeStarted: () => void;
-  introSubmitted: (
-    transcript: string,
-    extracted?: Partial<Omit<IntroData, "transcript">>,
-  ) => void;
   captureIntro: (updates: Partial<IntroData>) => void;
   factsExtracted: (payload: {
     extracted: Partial<IntroData>;
@@ -164,21 +159,6 @@ export const useSessionStore = create<SessionState>()(
         set((state) => {
           if (state.phase !== "welcome") return state;
           return { phase: "scene", progress: INITIAL_PROGRESS };
-        }),
-
-      introSubmitted: (transcript, extracted) =>
-        set((state) => {
-          if (state.phase !== "onboarding") return state;
-          return {
-            phase: "scene",
-            progress: INITIAL_PROGRESS,
-            intro: {
-              ...state.intro,
-              transcript,
-              ...extracted,
-              flavorTags: extracted?.flavorTags ?? state.intro.flavorTags,
-            },
-          };
         }),
 
       captureIntro: (updates) =>
@@ -442,7 +422,7 @@ export const useSessionStore = create<SessionState>()(
 
       reset: () =>
         set({
-          phase: "onboarding",
+          phase: "welcome",
           intro: INITIAL_INTRO,
           arc: undefined,
           progress: INITIAL_PROGRESS,
