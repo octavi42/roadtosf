@@ -15,7 +15,11 @@ export const arcSkeletonSchema = z.object({
   episodeIndex: z.number().int().min(0).max(50).default(0),
   premise: z.string().min(10).max(280),
   scenes: z.array(sceneOutlineSchema).length(5),
-  storySoFar: z.string().min(20).max(700).optional(),
+  // Prompt asks for ~200 words (≈1000–1500 chars). The 700 cap was rejecting
+  // legitimate Sonnet output by episode 1, forcing a 37s retry-then-fallback
+  // chain that landed the skeleton after the player had already advanced past
+  // the new episode boundary.
+  storySoFar: z.string().min(20).max(1500).optional(),
 })
 
 export type ParsedArcSkeleton = z.infer<typeof arcSkeletonSchema>

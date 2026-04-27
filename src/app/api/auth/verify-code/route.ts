@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { checkAndConsumeEmailCode } from '@/lib/email-codes'
 import { hasPaidPlaythroughForEmail } from '@/lib/playthroughs'
 import { setSessionEmail } from '@/lib/auth'
+import { readAnonId } from '@/lib/anon-id'
+import { bindAnonToEmail } from '@/lib/credits'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const CODE_RE = /^\d{6}$/
@@ -51,6 +53,20 @@ export async function POST(request: Request) {
     }
 
     await setSessionEmail(email)
+
+    // Pull any anon-only credits (e.g. dev grants from this device) into
+    // the email row so they're not orphaned by the new lookup contract
+    // (anon-id-only queries skip rows that have an email). Best effort:
+    // login should not fail if the merge step blows up.
+    const anonId = await readAnonId()
+    if (anonId) {
+      try {
+        await bindAnonToEmail(anonId, email)
+      } catch (err) {
+        console.error('auth/verify-code: bindAnonToEmail failed', err)
+      }
+    }
+
     return NextResponse.json({ ok: true, email: email.toLowerCase() })
   } catch (err) {
     console.error('auth/verify-code failed', err)

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { getStripe, getPack, PACKS } from '@/lib/stripe'
 import { markPlaythroughPaid } from '@/lib/playthroughs'
 import { setSessionEmail } from '@/lib/auth'
+import { readAnonId } from '@/lib/anon-id'
+import { grantCredits, REASONS } from '@/lib/credits'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -85,10 +87,31 @@ export async function POST(request: Request) {
       }
     }
 
+    // Credit the user's balance for this pack. Best-effort error logging
+    // here too — if the credit grant fails, the player has already been
+    // charged and we'd rather return paid:true than retry-loop the client.
+    // Operator can hand-fix from the credit_ledger if it ever happens.
+    const anonId = await readAnonId()
+    let creditsRemaining: number | null = null
+    try {
+      const granted = await grantCredits(
+        { anonId, email },
+        {
+          amount: pack.credits,
+          reason: REASONS.STRIPE_PURCHASE,
+          playthroughId,
+        },
+      )
+      creditsRemaining = granted.remaining
+    } catch (err) {
+      console.error('paywall/verify: grantCredits failed', err)
+    }
+
     return NextResponse.json({
       paid: true,
       packId: pack.id,
-      playsGranted: pack.plays,
+      creditsGranted: pack.credits,
+      creditsRemaining,
     })
   } catch (err) {
     console.error('paywall/verify failed', err)

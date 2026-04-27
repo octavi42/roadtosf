@@ -2,17 +2,17 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { ArcSkeleton, EndingKey, Scene, StoryArc } from "./types";
 
+// Phase no longer includes "paywall" — the paywall is now an overlay
+// (paywallOpen: boolean) that floats on top of whatever phase the player
+// is in. Driven by /api/generate-scene 402 responses, not by scene index,
+// so a returning user with credits walks straight from scene 2 to scene 3
+// and a new user only meets the paywall when the LLM tail can't fund a
+// group it's about to generate.
 export type Phase =
   | "welcome"
   | "scene"
-  | "paywall"
   | "generating-arc"
   | "ending";
-
-/**
- * Paywall fires when this scene index has just been completed.
- */
-export const PAYWALL_AFTER_SCENE_INDEX = 2;
 
 /**
  * Authored scenes (src/lib/scenes.ts) cover indices 0..AUTHORED_SCENE_COUNT-1:
@@ -91,7 +91,30 @@ interface SessionState {
   ending?: EndingData;
   playthroughId?: string;
   paid: boolean;
-  playsRemaining: number;
+  /**
+   * Number of LLM-generated groups (each = 4 sub-scenes sharing one image)
+   * the user can still spawn. Server is authoritative; this field mirrors
+   * the value returned by /api/credits/balance and the creditsRemaining
+   * field on /api/generate-scene responses. Hits 0 → next group attempt
+   * triggers paywall via creditsExhausted().
+   */
+  creditsRemaining: number;
+  /**
+   * Mirror of /api/auth/me's `email` field — null when the user is not
+   * logged in. Lives in zustand (instead of page.tsx local state) so any
+   * code path that changes auth (LoginModal success, /history logout) can
+   * fan-out to the balance refetch effect by simply updating this value.
+   * NOT persisted: the source of truth is the iron-session cookie.
+   */
+  sessionEmail: string | null;
+  /**
+   * The paywall is a modal overlay, not a phase. Set true when a generation
+   * call returns 402 (creditsExhausted) or by the dev tools for testing.
+   * Independent of `phase` so opening it doesn't disrupt the underlying
+   * scene/generating-arc state — when the user pays, paywallSatisfied
+   * closes the overlay and the existing flow resumes from where it was.
+   */
+  paywallOpen: boolean;
   // Tracks which sceneIndex already fired its share moment in the current
   // episode. Reset to null on each new arc skeleton (= new episode) and on
   // reset. Acts both as the per-episode frequency cap (max 1) and the
@@ -103,16 +126,24 @@ interface SessionState {
   setHasHydrated: (value: boolean) => void;
 
   setPlaythroughId: (id: string | undefined) => void;
-  setPlaysRemaining: (n: number) => void;
-  decrementPlay: () => void;
-  devGrantPlays: (n: number) => void;
+  setCreditsRemaining: (n: number) => void;
+  setSessionEmail: (email: string | null) => void;
+  setPaywallOpen: (open: boolean) => void;
+  decrementCredits: (n?: number) => void;
+  /**
+   * Called when /api/generate-scene returns 402 (server-side debit found
+   * an empty balance). Opens the paywall overlay and zeroes the local
+   * mirror so the widget reflects the depleted state behind the modal.
+   */
+  creditsExhausted: () => void;
+  devGrantCredits: (n: number) => void;
   welcomeStarted: () => void;
   captureIntro: (updates: Partial<IntroData>) => void;
   factsExtracted: (payload: {
     extracted: Partial<IntroData>;
     missing: MissingQuestion[];
   }) => void;
-  paywallSatisfied: (playsGranted?: number) => void;
+  paywallSatisfied: (creditsGranted?: number) => void;
   arcReady: (arc: StoryArc) => void;
   arcSkeletonReady: (skeleton: ArcSkeleton) => void;
   dynamicSceneReady: (llmIndex: number, scene: Scene) => void;
@@ -131,7 +162,19 @@ interface SessionState {
     timedOut?: boolean,
   ) => void;
   advanceScene: () => void;
+  /**
+   * Resets the in-progress playthrough so a fresh run can start, but
+   * deliberately preserves identity + payment state (paid, creditsRemaining,
+   * sessionEmail, paywallOpen). Used by the end-of-game "play again" CTA
+   * and the dev SKIP ONBOARDING shortcut — both expect credits to carry
+   * over to the new run.
+   */
   reset: () => void;
+  /**
+   * Total wipe — playthrough, identity, payment. The dev WIPE SESSION
+   * button. Should not be wired into normal user flows.
+   */
+  wipeAll: () => void;
 }
 
 const INITIAL_INTRO: IntroData = {
@@ -167,7 +210,9 @@ export const useSessionStore = create<SessionState>()(
       stats: { hype: 0, integrity: 0 },
       ending: undefined,
       paid: false,
-      playsRemaining: 0,
+      creditsRemaining: 0,
+      sessionEmail: null,
+      paywallOpen: false,
       shareMomentFiredInEpisode: null,
 
       markShareMomentFired: (sceneIndex) =>
@@ -177,15 +222,22 @@ export const useSessionStore = create<SessionState>()(
       setHasHydrated: (value) => set({ hasHydrated: value }),
 
       setPlaythroughId: (id) => set({ playthroughId: id }),
-      setPlaysRemaining: (n) => set({ playsRemaining: Math.max(0, n) }),
-      decrementPlay: () =>
+      setCreditsRemaining: (n) => set({ creditsRemaining: Math.max(0, n) }),
+      setSessionEmail: (email) => set({ sessionEmail: email }),
+      setPaywallOpen: (open) => set({ paywallOpen: open }),
+      decrementCredits: (n = 1) =>
         set((state) => ({
-          playsRemaining: Math.max(0, state.playsRemaining - 1),
+          creditsRemaining: Math.max(0, state.creditsRemaining - Math.max(0, n)),
         })),
-      devGrantPlays: (n) =>
+      creditsExhausted: () =>
+        set((state) => {
+          if (state.paywallOpen) return state;
+          return { paywallOpen: true, creditsRemaining: 0 };
+        }),
+      devGrantCredits: (n) =>
         set((state) => ({
           paid: true,
-          playsRemaining: state.playsRemaining + Math.max(0, n),
+          creditsRemaining: state.creditsRemaining + Math.max(0, n),
         })),
 
       welcomeStarted: () =>
@@ -415,24 +467,26 @@ export const useSessionStore = create<SessionState>()(
             showChoices: false,
             choiceMade: null,
           };
-          // Paywall after the configured authored scene
-          if (currentIndex === PAYWALL_AFTER_SCENE_INDEX && !state.paid) {
-            return { phase: "paywall", progress: nextProgress };
-          }
-          // After the last authored scene, hand off to LLM via generating-arc
+          // No more scene-2 paywall gate — the paywall is now driven by
+          // /api/generate-scene 402s only. A new user walks free through
+          // scenes 0–7 (authored) and hits the paywall the first time the
+          // LLM tail can't fund a group it's about to generate.
           if (currentIndex === AUTHORED_SCENE_COUNT - 1) {
             return { phase: "generating-arc", progress: nextProgress };
           }
           return { progress: nextProgress };
         }),
 
-      paywallSatisfied: (playsGranted = 3) =>
+      paywallSatisfied: (creditsGranted = 0) =>
         set((state) => {
-          if (state.phase !== "paywall") return state;
+          // Close the overlay regardless of phase — the user paid, they're
+          // free to keep playing wherever they were. paid stays true once
+          // set so the widget keeps surfacing post-purchase even at
+          // creditsRemaining=0.
           return {
-            phase: "scene",
+            paywallOpen: false,
             paid: true,
-            playsRemaining: state.playsRemaining + Math.max(0, playsGranted),
+            creditsRemaining: state.creditsRemaining + Math.max(0, creditsGranted),
           };
         }),
 
@@ -443,18 +497,6 @@ export const useSessionStore = create<SessionState>()(
               phase,
               progress: {
                 sceneIndex,
-                currentLineIndex: 0,
-                showChoices: false,
-                choiceMade: null,
-              },
-              ending: undefined,
-            };
-          }
-          if (phase === "paywall") {
-            return {
-              phase,
-              progress: {
-                sceneIndex: PAYWALL_AFTER_SCENE_INDEX + 1,
                 currentLineIndex: 0,
                 showChoices: false,
                 choiceMade: null,
@@ -494,8 +536,25 @@ export const useSessionStore = create<SessionState>()(
           stats: { hype: 0, integrity: 0 },
           ending: undefined,
           playthroughId: undefined,
+          shareMomentFiredInEpisode: null,
+          // paid, creditsRemaining, sessionEmail, paywallOpen preserved
+          // — those belong to the player, not the run.
+        }),
+
+      wipeAll: () =>
+        set({
+          phase: "welcome",
+          intro: INITIAL_INTRO,
+          arc: undefined,
+          progress: INITIAL_PROGRESS,
+          history: [],
+          stats: { hype: 0, integrity: 0 },
+          ending: undefined,
+          playthroughId: undefined,
           paid: false,
-          playsRemaining: 0,
+          creditsRemaining: 0,
+          sessionEmail: null,
+          paywallOpen: false,
           shareMomentFiredInEpisode: null,
         }),
     }),
@@ -508,14 +567,26 @@ export const useSessionStore = create<SessionState>()(
       partialize: (state) => ({
         phase: state.phase,
         intro: state.intro,
-        arc: state.arc,
+        // Strip base64 imageUrls — they're hundreds of KB each and would blow
+        // past sessionStorage's ~5MB quota after a dozen or so scenes in
+        // endless mode. They regenerate on rehydrate via the image-gen
+        // watcher in page.tsx; until then the placeholder background renders.
+        arc: state.arc
+          ? {
+              ...state.arc,
+              scenes: state.arc.scenes.map(
+                ({ imageUrl: _imageUrl, ...rest }) => rest,
+              ),
+            }
+          : undefined,
         progress: state.progress,
         history: state.history,
         stats: state.stats,
         ending: state.ending,
         playthroughId: state.playthroughId,
         paid: state.paid,
-        playsRemaining: state.playsRemaining,
+        creditsRemaining: state.creditsRemaining,
+        paywallOpen: state.paywallOpen,
         shareMomentFiredInEpisode: state.shareMomentFiredInEpisode,
       }),
       onRehydrateStorage: () => (state) => {
