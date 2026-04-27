@@ -11,7 +11,7 @@ import { buildScenePromptParts, type PriorChoiceSummary } from '@/lib/prompts/sc
 import type { Archetype } from '@/lib/types'
 import fallbackScenes from '@/lib/fallback/scenes.json'
 
-const AUTHORED_SCENE_COUNT = 4
+const AUTHORED_SCENE_COUNT = 5
 const EPISODE_LENGTH = 5
 
 type Body = {

@@ -95,6 +95,22 @@ export const SCENES: SceneData[] = [
       },
     ],
   },
+  // -------- DEV scaffold: share-notification scene --------
+  // Sits between The Call and The Pitch. Used to iterate on the
+  // ShareNotification overlay UI in isolation. id=99 so it doesn't collide
+  // with the id===4 car-ride special case in page.tsx.
+  {
+    id: 99,
+    title: "Share Moment · Dev Scaffold",
+    background: HOME_BACKGROUND,
+    dialogue: [
+      {
+        speaker: "Narrator",
+        text: "[DEV] You crushed your first call. A share moment just fired — try it out.",
+      },
+    ],
+    ctaLabel: "Continue →",
+  },
   {
     id: 2,
     title: "Scene 2 · The Pitch",
