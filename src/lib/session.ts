@@ -105,6 +105,7 @@ interface SessionState {
   setPlaythroughId: (id: string | undefined) => void;
   setPlaysRemaining: (n: number) => void;
   decrementPlay: () => void;
+  devGrantPlays: (n: number) => void;
   welcomeStarted: () => void;
   captureIntro: (updates: Partial<IntroData>) => void;
   factsExtracted: (payload: {
@@ -180,6 +181,11 @@ export const useSessionStore = create<SessionState>()(
       decrementPlay: () =>
         set((state) => ({
           playsRemaining: Math.max(0, state.playsRemaining - 1),
+        })),
+      devGrantPlays: (n) =>
+        set((state) => ({
+          paid: true,
+          playsRemaining: state.playsRemaining + Math.max(0, n),
         })),
 
       welcomeStarted: () =>

@@ -69,6 +69,8 @@ export default function DevPanel() {
   const setPlaythroughId = useSessionStore((s) => s.setPlaythroughId);
   const captureIntro = useSessionStore((s) => s.captureIntro);
   const reset = useSessionStore((s) => s.reset);
+  const devGrantPlays = useSessionStore((s) => s.devGrantPlays);
+  const paywallSatisfied = useSessionStore((s) => s.paywallSatisfied);
   const arcSkeleton = useSessionStore((s) => s.arc?.arcSkeleton);
   const storySoFar = useSessionStore((s) => s.arc?.storySoFar);
   const dynamicScenes = useSessionStore(
@@ -148,6 +150,18 @@ export default function DevPanel() {
     window.localStorage.removeItem(DEV_OVERRIDE_KEY);
     window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
     reset();
+    setTick((t) => t + 1);
+  };
+
+  const grantThreePlays = () => {
+    if (phase === "paywall") {
+      // paywallSatisfied already grants 3 plays + transitions to "scene".
+      // Also drop the dev override so a refresh doesn't bounce back here.
+      window.localStorage.removeItem(DEV_OVERRIDE_KEY);
+      paywallSatisfied();
+    } else {
+      devGrantPlays(3);
+    }
     setTick((t) => t + 1);
   };
 
@@ -410,6 +424,14 @@ export default function DevPanel() {
               WIPE SESSION
             </button>
           </div>
+
+          <button
+            onClick={grantThreePlays}
+            className="w-full text-[10px] text-emerald-200/80 hover:text-emerald-100 py-1 border border-emerald-300/30 rounded transition-colors mb-1"
+            title="Mark paid + add 3 plays without going through Stripe"
+          >
+            +3 PLAYS (NO PAYMENT)
+          </button>
 
           <button
             onClick={clear}
