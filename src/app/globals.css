@@ -165,6 +165,43 @@ body {
 }
 
 /* ----------------------------------------------------------------------------
+ * Boarding-pass paywall — ink-on-fog inputs with comic-press focus
+ * --------------------------------------------------------------------------*/
+.ticket-input {
+    background: var(--color-fog);
+    border: 2px solid var(--color-ink);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--color-ink);
+    outline: none;
+    transition: box-shadow 90ms ease, transform 90ms ease;
+}
+
+.ticket-input::placeholder {
+    color: rgba(32, 32, 31, 0.35);
+}
+
+.ticket-input:focus {
+    box-shadow: var(--ink-shadow-sm);
+    transform: translate(-1px, -1px);
+}
+
+.ticket-stripe-wrap {
+    background: var(--color-fog);
+    border: 2px solid var(--color-ink);
+    border-radius: 10px;
+    padding: 12px;
+    transition: box-shadow 90ms ease, transform 90ms ease;
+}
+
+.ticket-stripe-wrap:focus-within {
+    box-shadow: var(--ink-shadow-sm);
+    transform: translate(-1px, -1px);
+}
+
+/* ----------------------------------------------------------------------------
  * Legacy frosted panel — kept around in case any view still uses it
  * --------------------------------------------------------------------------*/
 .backdrop-panel {

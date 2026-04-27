@@ -31,18 +31,19 @@ function getStripePromise(): Promise<Stripe | null> {
   return stripePromiseCache;
 }
 
-// Stripe-managed inputs render inside iframes; this style config makes the
-// rendered text inside those iframes match the surrounding white-on-glass UI.
+// Stripe-managed inputs render inside iframes; this matches the ink-on-fog
+// palette of the boarding pass so the card fields don't look like an alien
+// element pasted on top.
 const STRIPE_ELEMENT_STYLE = {
   base: {
-    color: "#ffffff",
-    fontFamily: "inherit",
-    fontSize: "14px",
-    fontWeight: "400",
-    "::placeholder": { color: "rgba(255,255,255,0.25)" },
-    iconColor: "rgba(255,255,255,0.5)",
+    color: "#20201f",
+    fontFamily: "monospace, Menlo, Consolas",
+    fontSize: "16px",
+    fontWeight: "500",
+    "::placeholder": { color: "rgba(32,32,31,0.35)" },
+    iconColor: "rgba(32,32,31,0.55)",
   },
-  invalid: { color: "#fca5a5", iconColor: "#fca5a5" },
+  invalid: { color: "#b8273a", iconColor: "#b8273a" },
 };
 
 export default function PaywallPanel({ onSatisfied }: PaywallPanelProps) {
@@ -51,7 +52,10 @@ export default function PaywallPanel({ onSatisfied }: PaywallPanelProps) {
   if (!STRIPE_PUBLISHABLE_KEY) {
     return (
       <PaywallShell>
-        <p className="text-red-300 text-sm text-center py-6">
+        <p
+          className="text-center py-6 text-base"
+          style={{ color: "var(--color-cable)" }}
+        >
           Stripe publishable key not configured.
         </p>
       </PaywallShell>
@@ -70,6 +74,7 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
   const elements = useElements();
   const playthroughId = useSessionStore((s) => s.playthroughId);
   const setPlaythroughId = useSessionStore((s) => s.setPlaythroughId);
+  const startupName = useSessionStore((s) => s.intro.startupName);
 
   // If we land on the paywall with no playthrough (refresh after dev-jump,
   // or any future state-loss path), backfill a stub row inline so the rest
@@ -108,27 +113,15 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Returning-user lookup. null = not yet checked, true/false = result for the
-  // last fully-typed email. Recomputed on blur so we don't hammer the endpoint
-  // on every keystroke.
   const [returningUser, setReturningUser] = useState<boolean | null>(null);
   const [checkingEmail, setCheckingEmail] = useState(false);
-
-  // Mirror returningUser in a ref so handleSubmit can read the latest value
-  // after awaiting an in-flight check (state from the closure is stale).
   const returningUserRef = useRef<boolean | null>(null);
-  // Track an in-flight /check-email call so handleSubmit can await it before
-  // charging — closes the race where blur (triggered by the Pay click)
-  // starts a check that hasn't resolved yet.
   const checkInFlightRef = useRef<Promise<void> | null>(null);
 
-  // OTP state for the returning-user flow.
   const [codeSent, setCodeSent] = useState(false);
   const [code, setCode] = useState("");
   const [sendingCode, setSendingCode] = useState(false);
 
-  // Fetch a PaymentIntent the moment the panel mounts so the form is ready
-  // to submit by the time the player has finished typing.
   useEffect(() => {
     if (!playthroughId) return;
     let cancelled = false;
@@ -270,15 +263,10 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
       return;
     }
 
-    // Settle any in-flight /check-email so a returning user is never charged.
-    // If the user clicks Pay before tabbing out, the click event fires the
-    // blur handler synchronously; without this await, the charge could run
-    // before the lookup resolves.
     if (checkInFlightRef.current) {
       await checkInFlightRef.current;
     }
     if (returningUserRef.current === true) {
-      // The returning-user OTP UI should already be on screen.
       return;
     }
 
@@ -311,8 +299,6 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
       return;
     }
 
-    // Server-side verification — the trust gate. Don't flip session state
-    // until the server confirms with Stripe directly.
     try {
       const r = await fetch("/api/paywall/verify", {
         method: "POST",
@@ -343,147 +329,228 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
     submitting ||
     checkingEmail ||
     !emailValid ||
-    // Wait for /check-email to confirm yes/no before allowing a charge —
-    // prevents the double-charge race if the user clicks Pay before blur
-    // resolves.
     returningUser === null;
+
+  // Boarding-pass top half — flight info, always visible.
+  const passengerName = startupName ? `Founder · ${startupName}` : "Founder";
 
   return (
     <PaywallShell>
-      <div className="mb-3">
-        <label className="block text-white/55 text-[11px] uppercase tracking-wider mb-1">
-          Email
-        </label>
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => {
-            setEmail(e.target.value);
-            // Invalidate any prior lookup as soon as the email changes —
-            // we'll re-check on blur once they stop typing.
-            if (returningUser !== null) setReturningUser(null);
-            returningUserRef.current = null;
-            if (codeSent) {
-              setCodeSent(false);
-              setCode("");
-            }
-          }}
-          onBlur={handleEmailBlur}
-          placeholder="you@example.com"
-          autoComplete="email"
-          className="w-full bg-white/5 border border-white/10 rounded-lg px-3.5 py-2.5 text-white text-sm placeholder-white/25 focus:outline-none focus:border-white/30 transition-colors"
-        />
-        {checkingEmail && (
-          <p className="text-white/40 text-[10px] mt-1.5">Checking…</p>
+      {/* Top half — flight stub */}
+      <div className="px-5 pt-5 pb-4">
+        <div className="flex items-baseline justify-between mb-3">
+          <p
+            className="text-[10px] font-bold tracking-[0.28em] uppercase"
+            style={{ color: "var(--color-bay)" }}
+          >
+            Road to SF · Airways
+          </p>
+          <p
+            className="text-[9px] font-bold tracking-[0.22em] uppercase"
+            style={{ color: "var(--color-cable)" }}
+          >
+            Test mode
+          </p>
+        </div>
+
+        <div className="flex items-end justify-between gap-3 mb-2">
+          <div>
+            <p
+              className="text-[9px] tracking-[0.24em] uppercase mb-0.5"
+              style={{ color: "rgba(32,32,31,0.55)" }}
+            >
+              From
+            </p>
+            <p
+              className="text-2xl font-bold leading-none"
+              style={{ color: "var(--color-ink)" }}
+            >
+              ANYWHERE
+            </p>
+          </div>
+          <PlaneIcon />
+          <div className="text-right">
+            <p
+              className="text-[9px] tracking-[0.24em] uppercase mb-0.5"
+              style={{ color: "rgba(32,32,31,0.55)" }}
+            >
+              To
+            </p>
+            <p
+              className="text-2xl font-bold leading-none"
+              style={{ color: "var(--color-ink)" }}
+            >
+              SFO
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 mt-4 text-[10px] tracking-[0.18em] uppercase">
+          <StubField label="Flight" value="RTSF · 001" />
+          <StubField label="Gate" value="A04" />
+          <StubField label="Fare" value={`$${PRICE_USD}`} highlight />
+        </div>
+
+        <p
+          className="mt-3 text-[10px] tracking-[0.18em] uppercase"
+          style={{ color: "rgba(32,32,31,0.6)" }}
+        >
+          Passenger · <span style={{ color: "var(--color-ink)" }}>{passengerName}</span>
+        </p>
+      </div>
+
+      {/* Perforation */}
+      <Perforation />
+
+      {/* Bottom half — passenger / payment / OTP */}
+      <div className="px-5 pt-4 pb-5">
+        <div className="mb-3">
+          <FieldLabel>Email · receipt</FieldLabel>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              if (returningUser !== null) setReturningUser(null);
+              returningUserRef.current = null;
+              if (codeSent) {
+                setCodeSent(false);
+                setCode("");
+              }
+            }}
+            onBlur={handleEmailBlur}
+            placeholder="you@example.com"
+            autoComplete="email"
+            className="ticket-input w-full"
+          />
+          {checkingEmail && (
+            <p
+              className="text-[10px] mt-1.5 tracking-wide"
+              style={{ color: "rgba(32,32,31,0.55)" }}
+            >
+              Cross-checking the manifest…
+            </p>
+          )}
+          {returningUser === true && (
+            <p
+              className="text-[11px] mt-1.5 font-bold"
+              style={{ color: "var(--color-bay)" }}
+            >
+              ★ Frequent flyer found. Skip the line.
+            </p>
+          )}
+        </div>
+
+        {!returningUser && (
+          <>
+            <div className="mb-3">
+              <FieldLabel>Card</FieldLabel>
+              <div className="ticket-stripe-wrap relative">
+                <CardNumberElement
+                  options={{
+                    style: STRIPE_ELEMENT_STYLE,
+                    placeholder: "1234 1234 1234 1234",
+                    showIcon: false,
+                  }}
+                />
+                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                  <CardBadge label="VISA" />
+                  <CardBadge label="MC" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <div className="ticket-stripe-wrap">
+                  <CardExpiryElement
+                    options={{
+                      style: STRIPE_ELEMENT_STYLE,
+                      placeholder: "MM / YY",
+                    }}
+                  />
+                </div>
+                <div className="ticket-stripe-wrap">
+                  <CardCvcElement
+                    options={{
+                      style: STRIPE_ELEMENT_STYLE,
+                      placeholder: "CVC",
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <FieldLabel>Billing</FieldLabel>
+              <div className="grid grid-cols-[1fr_auto] gap-2">
+                <select
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                  className="ticket-input appearance-none"
+                >
+                  <option value="US">United States</option>
+                  <option value="CA">Canada</option>
+                  <option value="GB">United Kingdom</option>
+                </select>
+                <input
+                  value={zip}
+                  onChange={(e) => setZip(e.target.value)}
+                  placeholder="ZIP"
+                  inputMode="numeric"
+                  autoComplete="postal-code"
+                  className="ticket-input w-24"
+                />
+              </div>
+            </div>
+          </>
         )}
-        {returningUser === true && (
-          <p className="text-emerald-300 text-[11px] mt-1.5">
-            Welcome back. We found a previous payment for this email.
+
+        {error && (
+          <p
+            className="text-[12px] text-center mb-3 font-bold"
+            style={{ color: "var(--color-cable)" }}
+          >
+            {error}
           </p>
         )}
-      </div>
 
-      <div className={`mb-3 ${returningUser ? "hidden" : ""}`}>
-        <label className="block text-white/55 text-[11px] uppercase tracking-wider mb-1">
-          Card information
-        </label>
-        <div className="relative">
-          <div className="w-full bg-white/5 border border-white/10 rounded-t-lg px-3.5 py-3 pr-20 focus-within:border-white/30 transition-colors">
-            <CardNumberElement
-              options={{
-                style: STRIPE_ELEMENT_STYLE,
-                placeholder: "1234 1234 1234 1234",
-                showIcon: false,
-              }}
-            />
-          </div>
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
-            <CardBadge label="VISA" />
-            <CardBadge label="MC" />
-            <CardBadge label="AMEX" muted />
-          </div>
-        </div>
-        <div className="flex">
-          <div className="flex-1 bg-white/5 border border-white/10 border-t-0 rounded-bl-lg px-3.5 py-3 focus-within:border-white/30 transition-colors">
-            <CardExpiryElement
-              options={{
-                style: STRIPE_ELEMENT_STYLE,
-                placeholder: "MM / YY",
-              }}
-            />
-          </div>
-          <div className="flex-1 bg-white/5 border border-white/10 border-t-0 border-l-0 rounded-br-lg px-3.5 py-3 focus-within:border-white/30 transition-colors">
-            <CardCvcElement
-              options={{
-                style: STRIPE_ELEMENT_STYLE,
-                placeholder: "CVC",
-              }}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className={`mb-5 ${returningUser ? "hidden" : ""}`}>
-        <label className="block text-white/55 text-[11px] uppercase tracking-wider mb-1">
-          Billing address
-        </label>
-        <div className="flex">
-          <select
-            value={country}
-            onChange={(e) => setCountry(e.target.value)}
-            className="flex-1 bg-white/5 border border-white/10 rounded-l-lg px-3.5 py-2.5 text-white text-sm focus:outline-none focus:border-white/30 transition-colors appearance-none"
-          >
-            <option value="US" className="bg-black">
-              United States
-            </option>
-            <option value="CA" className="bg-black">
-              Canada
-            </option>
-            <option value="GB" className="bg-black">
-              United Kingdom
-            </option>
-          </select>
-          <input
-            value={zip}
-            onChange={(e) => setZip(e.target.value)}
-            placeholder="ZIP"
-            inputMode="numeric"
-            autoComplete="postal-code"
-            className="w-28 bg-white/5 border border-white/10 border-l-0 rounded-r-lg px-3.5 py-2.5 text-white text-sm placeholder-white/25 focus:outline-none focus:border-white/30 transition-colors"
+        {returningUser ? (
+          <ReturningUserPanel
+            codeSent={codeSent}
+            code={code}
+            onCodeChange={setCode}
+            sendingCode={sendingCode}
+            submitting={submitting}
+            onSendCode={handleSendCode}
+            onVerify={handleVerifyCode}
+            canSubmit={Boolean(playthroughId)}
           />
-        </div>
+        ) : (
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={buttonDisabled}
+            data-pressed={submitting}
+            className={[
+              "comic-outline comic-press w-full",
+              "rounded-xl py-3 text-base font-bold uppercase tracking-[0.18em]",
+              "disabled:opacity-50 disabled:cursor-not-allowed",
+            ].join(" ")}
+            style={{
+              background: "var(--color-cable)",
+              color: "var(--color-fog)",
+            }}
+          >
+            {submitting ? "Boarding…" : `Board the flight · $${PRICE_USD}`}
+          </button>
+        )}
+
+        <p
+          className="text-[10px] text-center mt-3 tracking-[0.18em] uppercase"
+          style={{ color: "rgba(32,32,31,0.5)" }}
+        >
+          Stripe test · 4242 4242 4242 4242
+        </p>
       </div>
 
-      {error && (
-        <p className="text-red-300 text-xs text-center mb-3">{error}</p>
-      )}
-
-      {returningUser ? (
-        <ReturningUserPanel
-          codeSent={codeSent}
-          code={code}
-          onCodeChange={setCode}
-          sendingCode={sendingCode}
-          submitting={submitting}
-          onSendCode={handleSendCode}
-          onVerify={handleVerifyCode}
-          canSubmit={Boolean(playthroughId)}
-        />
-      ) : (
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={buttonDisabled}
-          className="w-full bg-white text-black font-semibold rounded-lg py-3 hover:bg-white/90 transition-colors text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <LockIcon />
-          {submitting ? "Processing…" : `Pay $${PRICE_USD}`}
-        </button>
-      )}
-
-      <p className="text-white/30 text-[10px] text-center mt-4 tracking-wide">
-        Stripe test mode — use 4242 4242 4242 4242
-      </p>
     </PaywallShell>
   );
 }
@@ -513,17 +580,23 @@ function ReturningUserPanel({
         type="button"
         onClick={onSendCode}
         disabled={sendingCode || !canSubmit}
-        className="w-full bg-emerald-400 text-black font-semibold rounded-lg py-3 hover:bg-emerald-300 transition-colors text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        className={[
+          "comic-outline comic-press w-full",
+          "rounded-xl py-3 text-base font-bold uppercase tracking-[0.18em]",
+          "disabled:opacity-50 disabled:cursor-not-allowed",
+        ].join(" ")}
+        style={{
+          background: "var(--color-mustard)",
+          color: "var(--color-ink)",
+        }}
       >
-        {sendingCode ? "Sending…" : "Send code to email →"}
+        {sendingCode ? "Sending…" : "Send confirmation code →"}
       </button>
     );
   }
   return (
     <div className="flex flex-col gap-2">
-      <label className="block text-white/55 text-[11px] uppercase tracking-wider">
-        Enter the 6-digit code
-      </label>
+      <FieldLabel>Confirmation code</FieldLabel>
       <input
         value={code}
         onChange={(e) =>
@@ -533,21 +606,31 @@ function ReturningUserPanel({
         inputMode="numeric"
         maxLength={6}
         autoComplete="one-time-code"
-        className="w-full bg-white/5 border border-white/10 rounded-lg px-3.5 py-2.5 text-white text-base tracking-[0.4em] text-center placeholder-white/25 focus:outline-none focus:border-white/30 transition-colors"
+        className="ticket-input w-full text-center"
+        style={{ letterSpacing: "0.45em", fontSize: "18px" }}
       />
       <button
         type="button"
         onClick={onVerify}
         disabled={submitting || !canSubmit || code.length !== 6}
-        className="w-full bg-emerald-400 text-black font-semibold rounded-lg py-3 hover:bg-emerald-300 transition-colors text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        className={[
+          "comic-outline comic-press w-full mt-1",
+          "rounded-xl py-3 text-base font-bold uppercase tracking-[0.18em]",
+          "disabled:opacity-50 disabled:cursor-not-allowed",
+        ].join(" ")}
+        style={{
+          background: "var(--color-mint)",
+          color: "var(--color-ink)",
+        }}
       >
-        {submitting ? "Verifying…" : "Verify and continue →"}
+        {submitting ? "Boarding…" : "Verify and board →"}
       </button>
       <button
         type="button"
         onClick={onSendCode}
         disabled={sendingCode}
-        className="text-white/40 text-[11px] hover:text-white/70 transition-colors mt-1"
+        className="text-[11px] mt-1 hover:underline"
+        style={{ color: "rgba(32,32,31,0.55)" }}
       >
         {sendingCode ? "Resending…" : "Resend code"}
       </button>
@@ -557,69 +640,126 @@ function ReturningUserPanel({
 
 function PaywallShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8 bg-black/65 backdrop-blur-sm overflow-y-auto">
-      <div className="flex flex-col items-center gap-4 w-full max-w-md animate-fade-slide-up">
-        <p className="text-white/40 text-[11px] font-medium tracking-[0.28em] uppercase">
-          Word travels fast in SF
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8 overflow-y-auto"
+      style={{ background: "rgba(32,32,31,0.55)", backdropFilter: "blur(2px)" }}
+    >
+      <div className="w-full max-w-md animate-fade-slide-up flex flex-col items-center gap-4">
+        <p
+          className="text-[10px] font-bold tracking-[0.32em] uppercase"
+          style={{ color: "var(--color-fog)" }}
+        >
+          Your flight to SFO departs now
         </p>
 
-        <div className="backdrop-panel rounded-2xl p-6 w-full">
-          <div className="flex items-baseline justify-between mb-1">
-            <p className="text-amber-400 text-xs font-semibold tracking-widest uppercase">
-              Capital for the trip
-            </p>
-            <span className="text-white/40 text-[10px] tracking-wider uppercase">
-              Test mode
-            </span>
-          </div>
-          <h2 className="text-white text-xl font-semibold mb-1">
-            ${PRICE_USD} once. Rest of the trip on us.
-          </h2>
-          <p className="text-white/45 text-sm mb-5">
-            One charge unlocks the next two acts.
-          </p>
-
-          {children}
+        <div
+          className="comic-outline w-full overflow-hidden"
+          style={{
+            background: "var(--color-fog)",
+            borderRadius: "18px",
+            transform: "rotate(-0.4deg)",
+          }}
+        >
+          <div className="paper-grain">{children}</div>
         </div>
       </div>
     </div>
   );
 }
 
-function CardBadge({
+function StubField({
   label,
-  muted = false,
+  value,
+  highlight = false,
 }: {
   label: string;
-  muted?: boolean;
+  value: string;
+  highlight?: boolean;
 }) {
   return (
+    <div>
+      <p
+        className="tracking-[0.18em] uppercase mb-0.5"
+        style={{ color: "rgba(32,32,31,0.55)" }}
+      >
+        {label}
+      </p>
+      <p
+        className="text-base font-bold tracking-wide"
+        style={{
+          color: highlight ? "var(--color-cable)" : "var(--color-ink)",
+        }}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <label
+      className="block text-[10px] tracking-[0.22em] uppercase mb-1.5 font-bold"
+      style={{ color: "rgba(32,32,31,0.6)" }}
+    >
+      {children}
+    </label>
+  );
+}
+
+function Perforation() {
+  return (
+    <div className="relative h-4">
+      <div
+        className="absolute inset-x-0 top-1/2 -translate-y-1/2 border-t-2"
+        style={{
+          borderTopStyle: "dashed",
+          borderColor: "rgba(32,32,31,0.45)",
+        }}
+      />
+      <div
+        className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full"
+        style={{ background: "rgba(32,32,31,0.55)" }}
+      />
+      <div
+        className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full"
+        style={{ background: "rgba(32,32,31,0.55)" }}
+      />
+    </div>
+  );
+}
+
+function CardBadge({ label }: { label: string }) {
+  return (
     <span
-      className={`text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded border ${
-        muted
-          ? "border-white/10 text-white/25"
-          : "border-white/30 text-white/70"
-      }`}
+      className="text-[8px] font-bold tracking-[0.15em] px-1.5 py-0.5 rounded border-2"
+      style={{
+        borderColor: "var(--color-ink)",
+        color: "var(--color-ink)",
+        background: "var(--color-fog-soft)",
+      }}
     >
       {label}
     </span>
   );
 }
 
-function LockIcon() {
+function PlaneIcon() {
   return (
     <svg
-      width="13"
-      height="13"
+      width="32"
+      height="32"
       viewBox="0 0 24 24"
       fill="none"
-      stroke="currentColor"
-      strokeWidth="2.2"
+      stroke="var(--color-ink)"
+      strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
+      style={{ marginBottom: 2 }}
     >
-      <rect x="3" y="11" width="18" height="11" rx="2" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+      <path d="M2 12h20" />
+      <path d="M14 5l5 7-5 7" />
+      <path d="M9 5l-2 7 2 7" />
     </svg>
   );
 }
