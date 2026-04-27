@@ -1,0 +1,35 @@
+{
+  "premise": "The cofounder relationship that started cracking at baggage claim is about to open up wider; the city has receipts and is ready to file them.",
+  "scenes": [
+    {
+      "index": 0,
+      "archetype": "reporter",
+      "beat": "A TechCrunch reporter corners the founder at a Mission cafe, claiming three sources confirm the cofounder is on her way out.",
+      "hingesOn": "the cofounder being mid-tantrum from the baggage-claim arc"
+    },
+    {
+      "index": 1,
+      "archetype": "vc",
+      "beat": "A Thiel-coded VC offers a pre-empt term sheet at Rosewood Sand Hill, conditional on the cofounder moving to advisory.",
+      "hingesOn": "what the founder told the reporter"
+    },
+    {
+      "index": 2,
+      "archetype": "hater",
+      "beat": "A competing-startup CEO drops a thread about the founder's pivot; the timeline doubles down within an hour.",
+      "hingesOn": "whether the founder accepted the term sheet"
+    },
+    {
+      "index": 3,
+      "archetype": "cofounder",
+      "beat": "The cofounder confronts the founder over the term sheet language she found in her email this morning.",
+      "hingesOn": "the integrity score so far"
+    },
+    {
+      "index": 4,
+      "archetype": "mentor",
+      "beat": "A YC partner with the blog gives the founder one last piece of advice in a Palo Alto office before Demo Day.",
+      "hingesOn": "the cumulative trajectory across the 4 prior scenes"
+    }
+  ]
+}

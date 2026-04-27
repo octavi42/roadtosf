@@ -1,12 +1,13 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { EndingKey, StoryArc } from "./types";
+import type { ArcSkeleton, EndingKey, Scene, StoryArc } from "./types";
 
 export type Phase =
   | "welcome"
   | "onboarding"
   | "scene"
   | "paywall"
+  | "generating-arc"
   | "ending";
 
 /**
@@ -16,11 +17,21 @@ export type Phase =
  */
 export const PAYWALL_AFTER_SCENE_INDEX = 2;
 
+/**
+ * Authored scenes (src/lib/scenes.ts) cover indices 0..AUTHORED_SCENE_COUNT-1.
+ * After that the LLM tail takes over and runs for LLM_SCENE_COUNT scenes.
+ * Total playthrough = AUTHORED + LLM scenes.
+ */
+export const AUTHORED_SCENE_COUNT = 5;
+export const LLM_SCENE_COUNT = 5;
+export const TOTAL_SCENE_COUNT = AUTHORED_SCENE_COUNT + LLM_SCENE_COUNT;
+
 export interface IntroData {
   transcript: string;
   startupName?: string;
   startupDescription?: string;
   selfDescription?: string;
+  stage?: string;
   flavorTags: string[];
 }
 
@@ -34,6 +45,7 @@ export interface SceneProgress {
 export interface SceneOutcome {
   sceneId: number;
   choiceId: string;
+  choiceLabel: string;
   timedOut: boolean;
   hypeDelta: number;
   integrityDelta: number;
@@ -68,10 +80,16 @@ interface SessionState {
   captureIntro: (updates: Partial<IntroData>) => void;
   paywallSatisfied: () => void;
   arcReady: (arc: StoryArc) => void;
+  arcSkeletonReady: (skeleton: ArcSkeleton) => void;
+  dynamicSceneReady: (llmIndex: number, scene: Scene) => void;
+  setEpilogue: (epilogue: string) => void;
+  enterGeneratingArc: () => void;
+  exitGeneratingArc: () => void;
   devSetPhase: (phase: Phase, sceneIndex?: number) => void;
   advanceLine: (totalLines: number) => void;
   chooseOption: (
     choiceId: string,
+    choiceLabel: string,
     hypeDelta: number,
     integrityDelta: number,
     timedOut?: boolean,
@@ -159,6 +177,75 @@ export const useSessionStore = create<SessionState>()(
 
       arcReady: (arc) => set({ arc }),
 
+      arcSkeletonReady: (skeleton) =>
+        set((state) => {
+          if (!state.arc) {
+            return {
+              arc: {
+                startupName: state.intro.startupName ?? "the startup",
+                founderPersona: state.intro.selfDescription ?? "",
+                stage: state.intro.stage,
+                flavorTags: state.intro.flavorTags,
+                arcSkeleton: skeleton,
+                scenes: [],
+                stats: {
+                  firedCofounder: false,
+                  tookVCMoney: false,
+                  leakedToPress: false,
+                  playedSafeDemoDay: false,
+                },
+              },
+            };
+          }
+          return { arc: { ...state.arc, arcSkeleton: skeleton } };
+        }),
+
+      dynamicSceneReady: (llmIndex, scene) =>
+        set((state) => {
+          if (!state.arc) return state;
+          const scenes = [...state.arc.scenes];
+          while (scenes.length <= llmIndex) {
+            scenes.push({
+              id: 0,
+              title: "",
+              archetype: "cofounder",
+              imagePrompt: "",
+              dialogue: [],
+              choices: [],
+              timeoutSeconds: 15,
+              timeoutChoiceId: "a",
+            });
+          }
+          scenes[llmIndex] = scene;
+          return { arc: { ...state.arc, scenes } };
+        }),
+
+      setEpilogue: (epilogue) =>
+        set((state) => {
+          if (!state.ending) return state;
+          return { ending: { ...state.ending, epilogue } };
+        }),
+
+      enterGeneratingArc: () =>
+        set((state) => {
+          if (state.phase === "generating-arc") return state;
+          return { phase: "generating-arc" };
+        }),
+
+      exitGeneratingArc: () =>
+        set((state) => {
+          if (state.phase !== "generating-arc") return state;
+          return {
+            phase: "scene",
+            progress: {
+              sceneIndex: AUTHORED_SCENE_COUNT,
+              currentLineIndex: 0,
+              showChoices: false,
+              choiceMade: null,
+            },
+          };
+        }),
+
       advanceLine: (totalLines) =>
         set((state) => {
           if (state.phase !== "scene") return state;
@@ -174,7 +261,7 @@ export const useSessionStore = create<SessionState>()(
           };
         }),
 
-      chooseOption: (choiceId, hypeDelta, integrityDelta, timedOut = false) =>
+      chooseOption: (choiceId, choiceLabel, hypeDelta, integrityDelta, timedOut = false) =>
         set((state) => {
           if (state.phase !== "scene") return state;
           if (state.progress.choiceMade !== null) return state;
@@ -182,7 +269,14 @@ export const useSessionStore = create<SessionState>()(
           return {
             history: [
               ...state.history,
-              { sceneId, choiceId, timedOut, hypeDelta, integrityDelta },
+              {
+                sceneId,
+                choiceId,
+                choiceLabel,
+                timedOut,
+                hypeDelta,
+                integrityDelta,
+              },
             ],
             stats: {
               hype: state.stats.hype + hypeDelta,
@@ -211,11 +305,16 @@ export const useSessionStore = create<SessionState>()(
             showChoices: false,
             choiceMade: null,
           };
+          // Paywall after the configured authored scene
           if (
             state.progress.sceneIndex === PAYWALL_AFTER_SCENE_INDEX &&
             !state.paid
           ) {
             return { phase: "paywall", progress: nextProgress };
+          }
+          // After the last authored scene, hand off to LLM via generating-arc
+          if (state.progress.sceneIndex === AUTHORED_SCENE_COUNT - 1) {
+            return { phase: "generating-arc", progress: nextProgress };
           }
           return { progress: nextProgress };
         }),
@@ -245,6 +344,18 @@ export const useSessionStore = create<SessionState>()(
               phase,
               progress: {
                 sceneIndex: PAYWALL_AFTER_SCENE_INDEX + 1,
+                currentLineIndex: 0,
+                showChoices: false,
+                choiceMade: null,
+              },
+              ending: undefined,
+            };
+          }
+          if (phase === "generating-arc") {
+            return {
+              phase,
+              progress: {
+                sceneIndex: AUTHORED_SCENE_COUNT,
                 currentLineIndex: 0,
                 showChoices: false,
                 choiceMade: null,

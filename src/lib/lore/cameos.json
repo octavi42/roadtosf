@@ -1,0 +1,86 @@
+[
+  {
+    "id": "thiel-coded-vc",
+    "archetype": "the Thiel-coded VC",
+    "vibe": "speaks in koans about civilizational decline; will fund you over Yamazaki and expect a blood oath",
+    "role": "vc"
+  },
+  {
+    "id": "sand-hill-partner",
+    "archetype": "the Sand Hill Road partner",
+    "vibe": "gray hair, navy quarter-zip, asks about TAM in the first three minutes; ghosts via EA",
+    "role": "vc"
+  },
+  {
+    "id": "a16z-podcaster",
+    "archetype": "the a16z partner with the podcast",
+    "vibe": "quotes their own tweet at you across the table, ratios you publicly six months later",
+    "role": "vc"
+  },
+  {
+    "id": "solo-capitalist",
+    "archetype": "the solo capitalist",
+    "vibe": "writes $25M angel checks on Substack-only term sheets and expects you to fly to Tokyo with him next week",
+    "role": "vc"
+  },
+  {
+    "id": "ghost-cto",
+    "archetype": "the ghost CTO",
+    "vibe": "pushes 200 commits a week, hasn't been in the office since the seed round, will quit by DM",
+    "role": "cofounder"
+  },
+  {
+    "id": "hype-cofounder",
+    "archetype": "the hype cofounder",
+    "vibe": "runs the company Twitter, has not opened a code editor since pre-seed, calls themselves a 'storyteller'",
+    "role": "cofounder"
+  },
+  {
+    "id": "college-cofounder",
+    "archetype": "the college-roommate cofounder",
+    "vibe": "no chemistry left, no shared vision, but the cap table is locked and you both know it",
+    "role": "cofounder"
+  },
+  {
+    "id": "yc-blog-partner",
+    "archetype": "the YC partner with the blog",
+    "vibe": "calls everything 'wild' or 'unhinged'; writes 800-word essays about your cold email",
+    "role": "mentor"
+  },
+  {
+    "id": "repeat-founder",
+    "archetype": "the second-time founder with the podcast",
+    "vibe": "sold a company in 2017 for $40M, mentions it twice a sentence, has opinions about your seed round",
+    "role": "mentor"
+  },
+  {
+    "id": "sam-coded-oracle",
+    "archetype": "the Sam-coded oracle",
+    "vibe": "speaks in two-word sentences, owns a small nuclear reactor, follows you on X mid-meeting",
+    "role": "mentor"
+  },
+  {
+    "id": "tc-deadline",
+    "archetype": "the TechCrunch reporter on deadline",
+    "vibe": "needs a quote by 5pm, will paraphrase you wrong, will DM apologies at 11pm and ask for another",
+    "role": "reporter"
+  },
+  {
+    "id": "substack-teardown",
+    "archetype": "the Substack independent",
+    "vibe": "used to be at The Information; will publish 8000 words about your fundraise without permission",
+    "role": "reporter"
+  },
+  {
+    "id": "anon-twitter-hater",
+    "archetype": "the anon Twitter hater",
+    "vibe": "47k followers, Renaissance-painting avatar, has decided you specifically are a fraud",
+    "role": "hater"
+  },
+  {
+    "id": "ex-google-l7",
+    "archetype": "the ex-Google L7 in your replies",
+    "vibe": "has opinions about your stack you did not ask for; LinkedIn says 'open to next adventure' since 2024",
+    "role": "hater"
+  }
+]

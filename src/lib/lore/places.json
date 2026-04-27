@@ -1,0 +1,116 @@
+[
+  {
+    "id": "rosewood-bar",
+    "name": "the bar at Rosewood Sand Hill",
+    "vibe": "where Series A whispers turn into wires; everyone is pretending not to overhear",
+    "affinityTags": ["vc", "fundraising", "hype"]
+  },
+  {
+    "id": "tartine-mission",
+    "name": "Tartine Bakery in the Mission",
+    "vibe": "soft morning light, $9 morning bun, three pitch decks open at adjacent tables",
+    "affinityTags": ["founder", "press", "community"]
+  },
+  {
+    "id": "yc-house",
+    "name": "the YC batch house in Mountain View",
+    "vibe": "fluorescent lights, whiteboards covered in crossed-out TAM numbers, someone is always crying in the bathroom",
+    "affinityTags": ["founder", "mentor", "hype"]
+  },
+  {
+    "id": "philz-24th",
+    "name": "Philz Coffee on 24th and Mission",
+    "vibe": "dollar bills tipped on the counter, two AI cofounders breaking up at the corner table",
+    "affinityTags": ["founder", "ai", "community"]
+  },
+  {
+    "id": "caltrain-platform",
+    "name": "the southbound Caltrain platform at 4th & King",
+    "vibe": "the 7:42am pilgrimage; nobody makes eye contact; everyone has the same backpack",
+    "affinityTags": ["founder", "defeat", "recovery"]
+  },
+  {
+    "id": "sfo-international",
+    "name": "the international terminal at SFO",
+    "vibe": "the airport where every founder has either landed reborn or left defeated; United Polaris lounge optional",
+    "affinityTags": ["founder", "defeat", "recovery"]
+  },
+  {
+    "id": "battery-club",
+    "name": "the Battery, members-only",
+    "vibe": "exposed brick, $24 cocktails, the kind of room where the deal closes before the appetizers arrive",
+    "affinityTags": ["vc", "fundraising", "partying"]
+  },
+  {
+    "id": "dolores-park",
+    "name": "Dolores Park on a 70-degree Sunday",
+    "vibe": "competing picnics of seed-stage founders; someone is selling THC gummies; the 24-year-old with $2M ARR is shirtless",
+    "affinityTags": ["founder", "community", "hype"]
+  },
+  {
+    "id": "sightglass",
+    "name": "Sightglass Coffee in SoMa",
+    "vibe": "industrial ceiling, third-wave espresso, two-person standups happening at every other table",
+    "affinityTags": ["founder", "product", "community"]
+  },
+  {
+    "id": "buena-vista",
+    "name": "Buena Vista Cafe at Ghirardelli",
+    "vibe": "Irish coffee, ironic founder destination; you came here to feel like a tourist in your own city",
+    "affinityTags": ["recovery", "defeat", "community"]
+  },
+  {
+    "id": "mannys-mission",
+    "name": "Manny's in the Mission",
+    "vibe": "political-civic cafe-bar where founders cosplay as policy wonks and a city-supervisor staffer is always at the next table",
+    "affinityTags": ["community", "founder", "mentor"]
+  },
+  {
+    "id": "ritual-valencia",
+    "name": "Ritual Coffee on Valencia",
+    "vibe": "the original third-wave pulpit; a hardware founder is sketching on a napkin and refusing to make eye contact with their cofounder",
+    "affinityTags": ["founder", "product", "community"]
+  },
+  {
+    "id": "bluebottle-hayes",
+    "name": "Blue Bottle in Hayes Valley",
+    "vibe": "minimalist cube of guilt where pre-seed founders meet ex-Stripe PMs to 'just catch up'",
+    "affinityTags": ["founder", "fundraising", "recovery"]
+  },
+  {
+    "id": "founders-inc",
+    "name": "Founders Inc on the Marina",
+    "vibe": "a converted pier with a yacht out back; pitch decks open on every couch, somebody's robot dog is loose",
+    "affinityTags": ["founder", "hype", "ai"]
+  },
+  {
+    "id": "agi-house",
+    "name": "AGI House in Hillsborough",
+    "vibe": "hacker-house mansion where every weekend is a hackathon and every demo claims to be sentient",
+    "affinityTags": ["ai", "hype", "community"]
+  },
+  {
+    "id": "trick-dog",
+    "name": "Trick Dog in the Mission",
+    "vibe": "menus printed like pamphlets; where a Series B implodes over the third mezcal cocktail and someone live-tweets it",
+    "affinityTags": ["partying", "defeat", "press"]
+  },
+  {
+    "id": "crissy-field",
+    "name": "the Crissy Field running path",
+    "vibe": "golden-hour cardio for VCs who do their best thinking at 7-minute miles; deals get verbally confirmed near the Warming Hut",
+    "affinityTags": ["vc", "fundraising", "recovery"]
+  },
+  {
+    "id": "zeitgeist-bar",
+    "name": "Zeitgeist beer garden",
+    "vibe": "the punishment bar; where you go after the term sheet falls through to drink a Pabst with people who don't know what an SAFE is",
+    "affinityTags": ["defeat", "recovery", "community"]
+  },
+  {
+    "id": "ferry-building",
+    "name": "the Ferry Building on a Saturday",
+    "vibe": "farmers-market cosplay for founders pretending to have a personal life; a journalist is always at Acme Bread",
+    "affinityTags": ["founder", "press", "recovery"]
+  }
+]

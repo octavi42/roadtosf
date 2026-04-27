@@ -1,0 +1,83 @@
+[
+  {
+    "id": 6,
+    "title": "Scene 6 · The Scoop",
+    "archetype": "reporter",
+    "imagePrompt": "a Mission cafe, exposed brick, a male tech reporter holding a notepad leaning across a small table, founder's hands wrapped around a coffee cup, two-shot, mid-morning soft light",
+    "dialogue": [
+      { "speaker": "reporter", "text": "Three sources say your cofounder's already drafting a goodbye thread. Want to confirm or correct it?" },
+      { "speaker": "reporter", "text": "I'm running it either way. Your version, or the one that bleeds." }
+    ],
+    "choices": [
+      { "id": "a", "label": "No comment.", "consequence": "Story runs harsher.", "hype": -1, "integrity": 1 },
+      { "id": "b", "label": "Trade for a better angle.", "consequence": "A competitor's leak takes the slot.", "hype": 1, "integrity": -1 }
+    ],
+    "timeoutSeconds": 15,
+    "timeoutChoiceId": "a"
+  },
+  {
+    "id": 7,
+    "title": "Scene 7 · The Term Sheet",
+    "archetype": "vc",
+    "imagePrompt": "the bar at Rosewood Sand Hill at golden hour, a patrician VC in a tailored blazer across a marble table, founder's hands clasped, a leather portfolio between them, cinematic two-shot",
+    "dialogue": [
+      { "speaker": "vc", "text": "Three million, fifteen percent. Maya goes advisory. Offer expires when the bill comes." },
+      { "speaker": "vc", "text": "Tell me something true that almost nobody agrees with you on." }
+    ],
+    "choices": [
+      { "id": "a", "label": "Take it.", "consequence": "Maya isn't told tonight.", "hype": 1, "integrity": -1 },
+      { "id": "b", "label": "Counter — keep Maya in.", "consequence": "Offer collapses by Friday.", "hype": 0, "integrity": 1 },
+      { "id": "c", "label": "Walk away.", "consequence": "The check goes to a competitor.", "hype": -1, "integrity": 1 }
+    ],
+    "timeoutSeconds": 15,
+    "timeoutChoiceId": "c"
+  },
+  {
+    "id": 8,
+    "title": "Scene 8 · The Hater Tweet",
+    "archetype": "hater",
+    "imagePrompt": "rooftop bar in SoMa at golden hour, a competing-startup CEO in expensive streetwear leaning on a railing, phone in hand showing a tweet, founder's silhouette half-turned, two-shot, smug condescension",
+    "dialogue": [
+      { "speaker": "hater", "text": "Big fan. Just posted a thread. Bold of you to brand a pivot like that." },
+      { "speaker": "hater", "text": "My Series B closed at four-fifty post. Just so you know what real numbers look like." }
+    ],
+    "choices": [
+      { "id": "a", "label": "Block him publicly.", "consequence": "His army doubles overnight.", "hype": 1, "integrity": -1 },
+      { "id": "b", "label": "Eat the dunk.", "consequence": "Timeline moves on by lunch.", "hype": 0, "integrity": 1 }
+    ],
+    "timeoutSeconds": 15,
+    "timeoutChoiceId": "b"
+  },
+  {
+    "id": 9,
+    "title": "Scene 9 · The Reckoning",
+    "archetype": "cofounder",
+    "imagePrompt": "founder's apartment kitchen at midnight, cofounder standing across the counter holding a phone, screen glow lighting her face, founder seated, two-shot, raw confrontation",
+    "dialogue": [
+      { "speaker": "cofounder", "text": "I saw the term sheet. The advisory clause with my name on it." },
+      { "speaker": "cofounder", "text": "I have thirty percent. Whatever you say next — choose carefully." }
+    ],
+    "choices": [
+      { "id": "a", "label": "Lie. You never saw it.", "consequence": "She pretends to believe you.", "hype": 0, "integrity": -2 },
+      { "id": "b", "label": "Level with her.", "consequence": "One of you leaves by morning.", "hype": 0, "integrity": 2 }
+    ],
+    "timeoutSeconds": 15,
+    "timeoutChoiceId": "b"
+  },
+  {
+    "id": 10,
+    "title": "Scene 10 · Last Office Hours",
+    "archetype": "mentor",
+    "imagePrompt": "a Palo Alto cafe at 8am, a YC partner pouring coffee from a French press, founder seated across with a closed laptop, soft morning light, intimate two-shot",
+    "dialogue": [
+      { "speaker": "mentor", "text": "When the Bloomberg piece runs in eighteen months, what's the headline you want?" },
+      { "speaker": "mentor", "text": "Don't tell me. Tell yourself. Then ship something this week that proves it." }
+    ],
+    "choices": [
+      { "id": "a", "label": "Build quietly. No press.", "consequence": "Next news is a Series B.", "hype": -1, "integrity": 2 },
+      { "id": "b", "label": "Lean in. Be the story.", "consequence": "Podcast tour books out the month.", "hype": 2, "integrity": -1 }
+    ],
+    "timeoutSeconds": 18,
+    "timeoutChoiceId": "a"
+  }
+]
