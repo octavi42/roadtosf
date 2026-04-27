@@ -13,7 +13,7 @@ export type Phase =
 /**
  * Paywall fires when this scene index has just been completed.
  */
-export const PAYWALL_AFTER_SCENE_INDEX = 3;
+export const PAYWALL_AFTER_SCENE_INDEX = 2;
 
 /**
  * Authored scenes (src/lib/scenes.ts) cover indices 0..AUTHORED_SCENE_COUNT-1.
@@ -21,7 +21,7 @@ export const PAYWALL_AFTER_SCENE_INDEX = 3;
  * (one episode), regenerating a new skeleton when an episode finishes.
  * The run only ends when the player picks "End my run" or via reset.
  */
-export const AUTHORED_SCENE_COUNT = 5;
+export const AUTHORED_SCENE_COUNT = 4;
 export const EPISODE_LENGTH = 5;
 
 export type MissingQuestionField =

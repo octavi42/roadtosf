@@ -10,7 +10,6 @@ import DialogueSubtitle from "@/components/DialogueSubtitle";
 import DialogueSpeaker from "@/components/DialogueSpeaker";
 import PaywallPanel from "@/components/PaywallPanel";
 import LoginModal from "@/components/LoginModal";
-import { ShareNotification } from "@/components/ShareNotification";
 import {
   useSessionStore,
   AUTHORED_SCENE_COUNT,
@@ -1405,13 +1404,6 @@ export default function HomePage() {
       >
         {centerContent}
       </GameShell>
-
-      {/* DEV scaffold — share-notification overlay on the dummy scene (id=99). */}
-      <ShareNotification
-        visible={phase === "scene" && currentScene?.id === 99}
-        title="You crushed your first call."
-        blurb="Jordan's been watching you almost-do-this for two years. Tonight you finally said yes. Brag about it."
-      />
     </>
   );
 }
