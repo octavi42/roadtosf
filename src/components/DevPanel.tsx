@@ -151,16 +151,49 @@ export default function DevPanel() {
     setTick((t) => t + 1);
   };
 
-  const grantSixCredits = () => {
+  const grantSixCredits = async () => {
+    // Server-side grant first: writes a real user_balance row keyed by
+    // anon_id so /api/generate-scene has something to debit. Without this,
+    // the client mirror would say 6 but the very first group fire would
+    // 402 and bounce us back to the paywall. We use the absolute balance
+    // returned by the server rather than re-adding 6 client-side, so a
+    // user who's accumulated dev grants across multiple clicks doesn't see
+    // a stale optimistic count.
+    let serverBalance: number | null = null;
+    try {
+      const r = await fetch("/api/dev/grant-credits", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ amount: 6 }),
+      });
+      if (r.ok) {
+        const data = (await r.json()) as { creditsRemaining?: number };
+        if (typeof data.creditsRemaining === "number") {
+          serverBalance = data.creditsRemaining;
+        }
+      } else {
+        console.error("dev grant-credits returned", r.status);
+      }
+    } catch (err) {
+      console.error("dev grant-credits failed", err);
+    }
+
     if (phase === "paywall") {
-      // paywallSatisfied transitions to "scene" + flips paid=true. We pass
-      // an explicit credit grant so the local balance lines up with what a
-      // real Stripe verify would have done. Also drop the dev override so
-      // a refresh doesn't bounce back here.
       window.localStorage.removeItem(DEV_OVERRIDE_KEY);
-      paywallSatisfied(6);
+      // Pass 0 — we'll set the absolute balance below from the server
+      // response, so this just flips phase + paid=true.
+      paywallSatisfied(0);
     } else {
-      devGrantCredits(6);
+      // Client devGrantCredits flips paid=true; pass 0 for the same reason.
+      devGrantCredits(0);
+    }
+    if (serverBalance !== null) {
+      useSessionStore.getState().setCreditsRemaining(serverBalance);
+    } else {
+      // Server grant failed — fall back to client-only so the dev UX still
+      // unblocks; the user will hit a 402 on first group and we'll know to
+      // check server logs.
+      useSessionStore.getState().setCreditsRemaining(6);
     }
     setTick((t) => t + 1);
   };
