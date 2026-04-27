@@ -112,7 +112,7 @@ interface SessionState {
     extracted: Partial<IntroData>;
     missing: MissingQuestion[];
   }) => void;
-  paywallSatisfied: () => void;
+  paywallSatisfied: (playsGranted?: number) => void;
   arcReady: (arc: StoryArc) => void;
   arcSkeletonReady: (skeleton: ArcSkeleton) => void;
   dynamicSceneReady: (llmIndex: number, scene: Scene) => void;
@@ -426,13 +426,13 @@ export const useSessionStore = create<SessionState>()(
           return { progress: nextProgress };
         }),
 
-      paywallSatisfied: () =>
+      paywallSatisfied: (playsGranted = 3) =>
         set((state) => {
           if (state.phase !== "paywall") return state;
           return {
             phase: "scene",
             paid: true,
-            playsRemaining: state.playsRemaining + 3,
+            playsRemaining: state.playsRemaining + Math.max(0, playsGranted),
           };
         }),
 

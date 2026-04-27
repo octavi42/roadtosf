@@ -1556,7 +1556,7 @@ export default function HomePage() {
   return (
     <>
       {phase === "paywall" && (
-        <PaywallPanel onSatisfied={() => paywallSatisfied()} />
+        <PaywallPanel onSatisfied={(plays) => paywallSatisfied(plays)} />
       )}
 
       {loginOpen && (
