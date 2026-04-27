@@ -21,13 +21,13 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Only issue codes for emails that already have a paid playthrough.
-    // /check-email already exposed existence to the client, so there's no
-    // additional info leak here.
+    // Same gate as the paywall send-code: only emails with at least one
+    // completed paid run can request a login code. Prevents using this
+    // endpoint as a generic email-validation oracle.
     const paid = await hasPaidPlaythroughForEmail(email)
     if (!paid) {
       return NextResponse.json(
-        { error: 'no payment found for this email' },
+        { error: 'no past playthroughs found for this email' },
         { status: 404 },
       )
     }
@@ -40,15 +40,20 @@ export async function POST(request: Request) {
       )
     }
 
-    // Dev-only: same bypass as /api/auth/send-code. Gated on `=== 'development'`
-    // (only `next dev` sets that) so Vercel preview/prod stay silent.
+    // Dev-only: log the code so you can finish the OTP loop without
+    // depending on Resend (which only delivers to the account-owner email
+    // unless you've verified a domain). Gated on `=== 'development'` (only
+    // `next dev` sets that) — Vercel preview/prod both run with NODE_ENV
+    // 'production' so they never echo the code.
     if (process.env.NODE_ENV === 'development') {
-      console.log(`[dev] paywall OTP for ${email}: ${result.code}`)
+      console.log(`[dev] OTP for ${email}: ${result.code}`)
       try {
         await sendOtpEmail(email, result.code)
       } catch (err) {
+        // Resend rejection (e.g. unverified-recipient sandbox error) is
+        // non-fatal in dev — the code is in the server log already.
         console.warn(
-          `[dev] paywall sendOtpEmail failed (continuing — read code from log):`,
+          `[dev] sendOtpEmail failed (continuing — read code from log):`,
           err instanceof Error ? err.message : err,
         )
       }
@@ -58,7 +63,7 @@ export async function POST(request: Request) {
     await sendOtpEmail(email, result.code)
     return NextResponse.json({ sent: true })
   } catch (err) {
-    console.error('paywall/email/send-code failed', err)
+    console.error('auth/send-code failed', err)
     const message =
       err instanceof Error && err.message.startsWith('resend:')
         ? err.message

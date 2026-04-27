@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useShallow } from "zustand/react/shallow";
 import { GameShell } from "@/components/GameShell";
 import ChoicePanel from "@/components/ChoicePanel";
@@ -8,6 +9,7 @@ import TextInputPanel from "@/components/TextInputPanel";
 import DialogueSubtitle from "@/components/DialogueSubtitle";
 import DialogueSpeaker from "@/components/DialogueSpeaker";
 import PaywallPanel from "@/components/PaywallPanel";
+import LoginModal from "@/components/LoginModal";
 import {
   useSessionStore,
   AUTHORED_SCENE_COUNT,
@@ -78,6 +80,8 @@ interface UnifiedScene {
   choices?: AuthoredChoice[];
   textInput?: SceneData["textInput"];
   questions?: SceneData["questions"];
+  // Authored-only — the single-CTA dare → paywall scene relies on this.
+  // LLM scenes don't set it.
   ctaLabel?: string;
   isLLM: boolean;
 }
@@ -209,9 +213,36 @@ export default function HomePage() {
     })),
   );
 
+  const router = useRouter();
   const [welcomeLineIndex, setWelcomeLineIndex] = useState(0);
   const [welcomeDone, setWelcomeDone] = useState(false);
   const welcomeCompleteRef = useRef(false);
+  const [loginOpen, setLoginOpen] = useState(false);
+  // Tracks the email currently logged in, for showing/hiding "Past flights"
+  // CTAs without flashing them while we're still fetching /api/auth/me.
+  const [sessionEmail, setSessionEmail] = useState<string | null>(null);
+
+  // Best-effort session probe — runs once on mount, again after a successful
+  // login, again when arriving at the ending screen (paywall verify auto-
+  // issues a session cookie, so we want to surface the "Past flights" CTA
+  // without needing a page reload).
+  const fetchSessionEmail = useCallback(async () => {
+    try {
+      const r = await fetch("/api/auth/me", { cache: "no-store" });
+      if (!r.ok) return;
+      const data = (await r.json()) as { email?: string | null };
+      setSessionEmail(data.email ?? null);
+    } catch {
+      /* network blip — leave previous value */
+    }
+  }, []);
+
+  useEffect(() => {
+    // setState happens inside the async fetch resolution, not during the
+    // effect body — the cascading-render concern doesn't apply.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchSessionEmail();
+  }, [fetchSessionEmail]);
 
   // Q&A scenes (e.g. scene 4 car ride) walk through `scene.questions` after
   // the intro dialogue. Local state — resets when the player moves scenes.
@@ -575,6 +606,14 @@ export default function HomePage() {
       })
       .catch(() => null);
 
+    // Paywall verify auto-issued a session cookie a few seconds ago — re-probe
+    // /api/auth/me so the ending screen can show "Past flights" without a
+    // full reload. setState happens after the async fetch resolves, not in
+    // the effect body, so the lint rule's worry about cascading renders
+    // doesn't apply here.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchSessionEmail();
+
     if (playthroughId) {
       epilogueP.then((epilogue) => {
         fetch(`/api/playthroughs/${playthroughId}`, {
@@ -597,6 +636,7 @@ export default function HomePage() {
     history,
     startupName,
     setEpilogue,
+    fetchSessionEmail,
   ]);
 
   const handleStart = useCallback(() => {
@@ -672,10 +712,15 @@ export default function HomePage() {
       if (!currentScene) return;
 
       const choice = currentScene.choices?.find((c) => c.id === choiceId);
-      if (!choice) return;
-      const hypeDelta = choice.hype;
-      const integrityDelta = choice.integrity;
-      chooseOption(choiceId, choice.label, hypeDelta, integrityDelta);
+      // CTA-only scenes (Scene 3 — the dare → paywall) have no `choices`
+      // array; the click is a stat-neutral commit, labelled by the CTA copy.
+      // Without this fallback, handleChoice silently bails and the player
+      // can never advance past the paywall scene.
+      if (!choice && !currentScene.ctaLabel) return;
+      const choiceLabel = choice?.label ?? currentScene.ctaLabel ?? choiceId;
+      const hypeDelta = choice?.hype ?? 0;
+      const integrityDelta = choice?.integrity ?? 0;
+      chooseOption(choiceId, choiceLabel, hypeDelta, integrityDelta);
 
       if (playthroughId) {
         const startedAt = choiceShownAtRef.current;
@@ -921,7 +966,7 @@ export default function HomePage() {
     if (phase === "welcome") {
       if (!welcomeDone) return null;
       return (
-        <div className="w-full max-w-md mx-auto animate-bounce-in">
+        <div className="w-full max-w-md mx-auto animate-bounce-in flex flex-col gap-2">
           <button
             onClick={handleStart}
             className="comic-outline comic-press font-sans font-semibold w-full rounded-xl py-3 text-base text-[var(--color-ink)]"
@@ -931,6 +976,22 @@ export default function HomePage() {
             }}
           >
             Start →
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (sessionEmail) {
+                router.push("/history");
+              } else {
+                setLoginOpen(true);
+              }
+            }}
+            className="text-[12px] tracking-wide hover:underline self-center"
+            style={{ color: "rgba(32,32,31,0.65)" }}
+          >
+            {sessionEmail
+              ? "View past flights →"
+              : "Already played? Log in →"}
           </button>
         </div>
       );
@@ -1038,7 +1099,7 @@ export default function HomePage() {
               ))}
             </div>
             <p className="font-sans text-[var(--color-ink)]/80 text-sm leading-relaxed">
-              The city's still loading.
+              The city&apos;s still loading.
               <br />
               Pick your end whenever you're ready.
             </p>
@@ -1124,6 +1185,16 @@ export default function HomePage() {
               >
                 Play again →
               </button>
+              {sessionEmail && (
+                <button
+                  type="button"
+                  onClick={() => router.push("/history")}
+                  className="text-[12px] tracking-wide hover:underline self-center mt-1"
+                  style={{ color: "rgba(32,32,31,0.65)" }}
+                >
+                  View past flights →
+                </button>
+              )}
             </div>
           </div>
         );
@@ -1138,6 +1209,40 @@ export default function HomePage() {
       {phase === "paywall" && (
         <PaywallPanel onSatisfied={() => paywallSatisfied()} />
       )}
+
+      {loginOpen && (
+        <LoginModal
+          onClose={() => setLoginOpen(false)}
+          onSuccess={(emailFromServer) => {
+            setLoginOpen(false);
+            setSessionEmail(emailFromServer);
+            router.push("/history");
+          }}
+        />
+      )}
+
+      {/*
+        Top-right "Past flights" pill — appears whenever a player is logged in,
+        EXCEPT on welcome (already linked there), paywall (don't interrupt
+        payment), and ending (its own CTA covers it). Sits above the
+        GameShell header so it overlays the cinematic without nudging layout.
+      */}
+      {sessionEmail &&
+        phase !== "welcome" &&
+        phase !== "paywall" &&
+        phase !== "ending" && (
+          <button
+            type="button"
+            onClick={() => router.push("/history")}
+            className="fixed top-5 right-6 z-30 comic-outline-sm font-sans font-semibold rounded-md px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] hover:no-underline"
+            style={{
+              background: "var(--color-fog)",
+              color: "var(--color-ink)",
+            }}
+          >
+            Past flights →
+          </button>
+        )}
 
       <GameShell
         backgroundSrc={

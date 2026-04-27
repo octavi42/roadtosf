@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getStripe, PAYWALL_PRICE_USD_CENTS } from '@/lib/stripe'
 import { markPlaythroughPaid } from '@/lib/playthroughs'
+import { setSessionEmail } from '@/lib/auth'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -69,6 +70,17 @@ export async function POST(request: Request) {
         { error: 'playthrough not found' },
         { status: 404 },
       )
+    }
+
+    // Auto-issue a login session for the paying email so they can revisit
+    // their history later without going through the OTP flow. Best-effort:
+    // session-cookie failure must not roll back a successful payment.
+    if (email) {
+      try {
+        await setSessionEmail(email)
+      } catch (err) {
+        console.error('paywall/verify: setSessionEmail failed', err)
+      }
     }
 
     return NextResponse.json({ paid: true })

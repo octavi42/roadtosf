@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { redeemPlaythroughByEmail } from '@/lib/playthroughs'
 import { checkAndConsumeEmailCode } from '@/lib/email-codes'
+import { setSessionEmail } from '@/lib/auth'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -56,6 +57,15 @@ export async function POST(request: Request) {
         { status: 404 },
       )
     }
+
+    // Issue a login session — same email, OTP-verified, redemption succeeded.
+    // Best-effort: cookie failure must not undo the redemption.
+    try {
+      await setSessionEmail(email)
+    } catch (err) {
+      console.error('paywall/email/verify-code: setSessionEmail failed', err)
+    }
+
     return NextResponse.json({ paid: true })
   } catch (err) {
     console.error('paywall/email/verify-code failed', err)
