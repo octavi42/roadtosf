@@ -2,24 +2,29 @@
 
 import { useEffect, useState } from "react";
 
-export type ShareNotificationState = "hidden" | "peek" | "docked" | "expanded";
+export type ShareNotificationState = "hidden" | "docked" | "expanded";
 
 interface ShareNotificationProps {
   visible: boolean;
   title: string;
   blurb: string;
-  peekDurationMs?: number;
+  /** How long the auto-opened card stays expanded before collapsing back. */
+  expandedDurationMs?: number;
+  /** Delay before the docked pill auto-expands on first appearance. */
+  expandAfterMs?: number;
   onShare?: () => void;
   onDismiss?: () => void;
 }
 
-const PEEK_DURATION_DEFAULT = 4000;
+const EXPANDED_DURATION_DEFAULT = 2000;
+const EXPAND_AFTER_DEFAULT = 700;
 
 export function ShareNotification({
   visible,
   title,
   blurb,
-  peekDurationMs = PEEK_DURATION_DEFAULT,
+  expandedDurationMs = EXPANDED_DURATION_DEFAULT,
+  expandAfterMs = EXPAND_AFTER_DEFAULT,
   onShare,
   onDismiss,
 }: ShareNotificationProps) {
@@ -38,31 +43,35 @@ export function ShareNotification({
       setEntered(false);
       return setState("hidden");
     }
-    setState("peek");
+    // First-show sequence: appear docked at the left → auto-expand → auto-collapse.
+    // Manual dismiss/expand by the user short-circuits the auto timers via the
+    // setState callback guards below.
+    setState("docked");
     const raf = requestAnimationFrame(() => setEntered(true));
-    const t = setTimeout(() => {
-      setState((s) => (s === "peek" ? "docked" : s));
-    }, peekDurationMs);
+    const expandTimer = setTimeout(() => {
+      setState((s) => (s === "docked" ? "expanded" : s));
+    }, expandAfterMs);
+    const collapseTimer = setTimeout(() => {
+      setState((s) => (s === "expanded" ? "docked" : s));
+    }, expandAfterMs + expandedDurationMs);
     return () => {
       cancelAnimationFrame(raf);
-      clearTimeout(t);
+      clearTimeout(expandTimer);
+      clearTimeout(collapseTimer);
     };
-  }, [visible, peekDurationMs]);
+  }, [visible, expandAfterMs, expandedDurationMs]);
 
   if (state === "hidden") return null;
 
-  const isCard = state === "peek" || state === "expanded";
+  const isCard = state === "expanded";
 
-  // Single fixed box morphs between three layouts.
-  //  - peek: dead-center on first appearance
-  //  - docked: small pill in the top-left, stacked under the scene-title pill
-  //  - expanded: full card anchored at the docked pill's position so re-opening
-  //    from the dock grows in place instead of jumping to viewport-center
+  // Single fixed box morphs between two layouts, both anchored top-left:
+  //  - docked: small pill stacked under the scene-title pill
+  //  - expanded: full card growing in place from the docked position
   const positionByState: Record<
     Exclude<ShareNotificationState, "hidden">,
     Pick<React.CSSProperties, "left" | "top" | "transform">
   > = {
-    peek: { left: "50%", top: "50%", transform: "translate(-50%, -50%)" },
     docked: { left: 24, top: 108, transform: "none" },
     expanded: { left: 24, top: 108, transform: "none" },
   };
