@@ -1,33 +1,48 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { EndingKey, Group, StoryArc } from "./types";
+import type { ArcSkeleton, EndingKey, Scene, StoryArc } from "./types";
 
 export type Phase =
-  | "api-keys"
-  | "intro"
-  | "generating"
+  | "welcome"
+  | "onboarding"
   | "scene"
-  | "twist-card"
+  | "paywall"
+  | "generating-arc"
   | "ending";
+
+/**
+ * Paywall fires when this scene index has just been completed
+ * (i.e. the wall sits between scene N+1 and scene N+2 in player-facing terms).
+ * Single source of truth — move this to shift the wall.
+ */
+export const PAYWALL_AFTER_SCENE_INDEX = 2;
+
+/**
+ * Authored scenes (src/lib/scenes.ts) cover indices 0..AUTHORED_SCENE_COUNT-1.
+ * After that the LLM tail takes over and runs for LLM_SCENE_COUNT scenes.
+ * Total playthrough = AUTHORED + LLM scenes.
+ */
+export const AUTHORED_SCENE_COUNT = 5;
+export const LLM_SCENE_COUNT = 5;
+export const TOTAL_SCENE_COUNT = AUTHORED_SCENE_COUNT + LLM_SCENE_COUNT;
 
 export interface IntroData {
   transcript: string;
   startupName?: string;
   startupDescription?: string;
   selfDescription?: string;
+  stage?: string;
   flavorTags: string[];
 }
 
 export interface SceneProgress {
-  groupIndex: number; // 0, 1, 2 — index into arc.groups[]
-  sceneIndex: number; // index within the current group's scenes
+  sceneIndex: number;
   currentLineIndex: number;
   showChoices: boolean;
   choiceMade: string | null;
 }
 
 export interface SceneOutcome {
-  groupIndex: number; // 1, 2, 3 — matches Group.id
   sceneId: number;
   choiceId: string;
   choiceLabel: string;
@@ -51,21 +66,26 @@ interface SessionState {
   stats: { hype: number; integrity: number };
   ending?: EndingData;
   playthroughId?: string;
+  paid: boolean;
 
   hasHydrated: boolean;
   setHasHydrated: (value: boolean) => void;
 
   setPlaythroughId: (id: string | undefined) => void;
-  keysConfirmed: () => void;
+  welcomeStarted: () => void;
   introSubmitted: (
     transcript: string,
     extracted?: Partial<Omit<IntroData, "transcript">>,
   ) => void;
-  enterScenes: () => void;
+  captureIntro: (updates: Partial<IntroData>) => void;
+  paywallSatisfied: () => void;
   arcReady: (arc: StoryArc) => void;
-  groupReady: (groupIndex: number, group: Group) => void;
-  enterTwistCard: () => void;
-  exitTwistCard: () => void;
+  arcSkeletonReady: (skeleton: ArcSkeleton) => void;
+  dynamicSceneReady: (llmIndex: number, scene: Scene) => void;
+  setEpilogue: (epilogue: string) => void;
+  enterGeneratingArc: () => void;
+  exitGeneratingArc: () => void;
+  devSetPhase: (phase: Phase, sceneIndex?: number) => void;
   advanceLine: (totalLines: number) => void;
   chooseOption: (
     choiceId: string,
@@ -74,10 +94,8 @@ interface SessionState {
     integrityDelta: number,
     timedOut?: boolean,
   ) => void;
-  advanceScene: () => void;
-  setEpilogue: (epilogue: string) => void;
+  advanceScene: (totalScenes: number) => void;
   reset: () => void;
-  devSetPhase: (phase: Phase, sceneIndex?: number, groupIndex?: number) => void;
 }
 
 const INITIAL_INTRO: IntroData = {
@@ -86,7 +104,6 @@ const INITIAL_INTRO: IntroData = {
 };
 
 const INITIAL_PROGRESS: SceneProgress = {
-  groupIndex: 0,
   sceneIndex: 0,
   currentLineIndex: 0,
   showChoices: false,
@@ -106,30 +123,32 @@ function classifyEnding(hype: number, integrity: number): EndingKey {
 export const useSessionStore = create<SessionState>()(
   persist(
     (set) => ({
-      phase: "api-keys",
+      phase: "welcome",
       intro: INITIAL_INTRO,
       arc: undefined,
       progress: INITIAL_PROGRESS,
       history: [],
       stats: { hype: 0, integrity: 0 },
       ending: undefined,
+      paid: false,
 
       hasHydrated: false,
       setHasHydrated: (value) => set({ hasHydrated: value }),
 
       setPlaythroughId: (id) => set({ playthroughId: id }),
 
-      keysConfirmed: () =>
+      welcomeStarted: () =>
         set((state) => {
-          if (state.phase !== "api-keys") return state;
-          return { phase: "intro" };
+          if (state.phase !== "welcome") return state;
+          return { phase: "scene", progress: INITIAL_PROGRESS };
         }),
 
       introSubmitted: (transcript, extracted) =>
         set((state) => {
-          if (state.phase !== "intro") return state;
+          if (state.phase !== "onboarding") return state;
           return {
-            phase: "generating",
+            phase: "scene",
+            progress: INITIAL_PROGRESS,
             intro: {
               ...state.intro,
               transcript,
@@ -139,51 +158,87 @@ export const useSessionStore = create<SessionState>()(
           };
         }),
 
-      enterScenes: () =>
-        set((state) => {
-          if (state.phase !== "generating") return state;
-          return { phase: "scene", progress: INITIAL_PROGRESS };
-        }),
+      captureIntro: (updates) =>
+        set((state) => ({
+          intro: {
+            ...state.intro,
+            ...updates,
+            transcript:
+              updates.transcript !== undefined
+                ? `${state.intro.transcript}${state.intro.transcript ? "\n" : ""}${updates.transcript}`
+                : state.intro.transcript,
+            flavorTags: updates.flavorTags
+              ? Array.from(
+                  new Set([...state.intro.flavorTags, ...updates.flavorTags]),
+                )
+              : state.intro.flavorTags,
+          },
+        })),
 
       arcReady: (arc) => set({ arc }),
 
-      groupReady: (groupIndex, group) =>
+      arcSkeletonReady: (skeleton) =>
         set((state) => {
-          if (!state.arc) return state;
-          const groups = [...state.arc.groups];
-          // Pad with empty groups if needed so indexed assignment is safe.
-          while (groups.length <= groupIndex) {
-            groups.push({ id: groups.length + 1, twistCard: "", scenes: [], status: "pending" });
-          }
-          groups[groupIndex] = { ...group, status: "ready" };
-          return { arc: { ...state.arc, groups } };
-        }),
-
-      enterTwistCard: () =>
-        set((state) => {
-          if (state.phase !== "scene") return state;
-          return { phase: "twist-card" };
-        }),
-
-      exitTwistCard: () =>
-        set((state) => {
-          if (state.phase !== "twist-card") return state;
-          if (!state.arc) return state;
-          const nextGroupIndex = state.progress.groupIndex + 1;
-          if (nextGroupIndex >= state.arc.groups.length) {
+          if (!state.arc) {
             return {
-              phase: "ending",
-              ending: {
-                key: classifyEnding(state.stats.hype, state.stats.integrity),
-                achievementsUnlocked: [],
+              arc: {
+                startupName: state.intro.startupName ?? "the startup",
+                founderPersona: state.intro.selfDescription ?? "",
+                stage: state.intro.stage,
+                flavorTags: state.intro.flavorTags,
+                arcSkeleton: skeleton,
+                scenes: [],
+                stats: {
+                  firedCofounder: false,
+                  tookVCMoney: false,
+                  leakedToPress: false,
+                  playedSafeDemoDay: false,
+                },
               },
             };
           }
+          return { arc: { ...state.arc, arcSkeleton: skeleton } };
+        }),
+
+      dynamicSceneReady: (llmIndex, scene) =>
+        set((state) => {
+          if (!state.arc) return state;
+          const scenes = [...state.arc.scenes];
+          while (scenes.length <= llmIndex) {
+            scenes.push({
+              id: 0,
+              title: "",
+              archetype: "cofounder",
+              imagePrompt: "",
+              dialogue: [],
+              choices: [],
+              timeoutSeconds: 15,
+              timeoutChoiceId: "a",
+            });
+          }
+          scenes[llmIndex] = scene;
+          return { arc: { ...state.arc, scenes } };
+        }),
+
+      setEpilogue: (epilogue) =>
+        set((state) => {
+          if (!state.ending) return state;
+          return { ending: { ...state.ending, epilogue } };
+        }),
+
+      enterGeneratingArc: () =>
+        set((state) => {
+          if (state.phase === "generating-arc") return state;
+          return { phase: "generating-arc" };
+        }),
+
+      exitGeneratingArc: () =>
+        set((state) => {
+          if (state.phase !== "generating-arc") return state;
           return {
             phase: "scene",
             progress: {
-              groupIndex: nextGroupIndex,
-              sceneIndex: 0,
+              sceneIndex: AUTHORED_SCENE_COUNT,
               currentLineIndex: 0,
               showChoices: false,
               choiceMade: null,
@@ -210,15 +265,12 @@ export const useSessionStore = create<SessionState>()(
         set((state) => {
           if (state.phase !== "scene") return state;
           if (state.progress.choiceMade !== null) return state;
-          const group = state.arc?.groups[state.progress.groupIndex];
-          const scene = group?.scenes[state.progress.sceneIndex];
-          if (!scene) return state;
+          const sceneId = state.progress.sceneIndex + 1;
           return {
             history: [
               ...state.history,
               {
-                groupIndex: group.id,
-                sceneId: scene.id,
+                sceneId,
                 choiceId,
                 choiceLabel,
                 timedOut,
@@ -234,53 +286,76 @@ export const useSessionStore = create<SessionState>()(
           };
         }),
 
-      advanceScene: () =>
+      advanceScene: (totalScenes) =>
         set((state) => {
           if (state.phase !== "scene") return state;
-          if (!state.arc) return state;
-          const group = state.arc.groups[state.progress.groupIndex];
-          if (!group) return state;
-          const nextSceneIndex = state.progress.sceneIndex + 1;
-          if (nextSceneIndex >= group.scenes.length) {
-            return { phase: "twist-card" };
+          const nextIndex = state.progress.sceneIndex + 1;
+          if (nextIndex >= totalScenes) {
+            return {
+              phase: "ending",
+              ending: {
+                key: classifyEnding(state.stats.hype, state.stats.integrity),
+                achievementsUnlocked: [],
+              },
+            };
           }
-          return {
-            progress: {
-              ...state.progress,
-              sceneIndex: nextSceneIndex,
-              currentLineIndex: 0,
-              showChoices: false,
-              choiceMade: null,
-            },
+          const nextProgress = {
+            sceneIndex: nextIndex,
+            currentLineIndex: 0,
+            showChoices: false,
+            choiceMade: null,
           };
+          // Paywall after the configured authored scene
+          if (
+            state.progress.sceneIndex === PAYWALL_AFTER_SCENE_INDEX &&
+            !state.paid
+          ) {
+            return { phase: "paywall", progress: nextProgress };
+          }
+          // After the last authored scene, hand off to LLM via generating-arc
+          if (state.progress.sceneIndex === AUTHORED_SCENE_COUNT - 1) {
+            return { phase: "generating-arc", progress: nextProgress };
+          }
+          return { progress: nextProgress };
         }),
 
-      setEpilogue: (epilogue) =>
+      paywallSatisfied: () =>
         set((state) => {
-          if (!state.ending) return state;
-          return { ending: { ...state.ending, epilogue } };
+          if (state.phase !== "paywall") return state;
+          return { phase: "scene", paid: true };
         }),
 
-      reset: () =>
-        set({
-          phase: "intro",
-          intro: INITIAL_INTRO,
-          arc: undefined,
-          progress: INITIAL_PROGRESS,
-          history: [],
-          stats: { hype: 0, integrity: 0 },
-          ending: undefined,
-          playthroughId: undefined,
-        }),
-
-      devSetPhase: (phase, sceneIndex = 0, groupIndex = 0) =>
+      devSetPhase: (phase, sceneIndex = 0) =>
         set((state) => {
           if (phase === "scene") {
             return {
               phase,
               progress: {
-                groupIndex,
                 sceneIndex,
+                currentLineIndex: 0,
+                showChoices: false,
+                choiceMade: null,
+              },
+              ending: undefined,
+            };
+          }
+          if (phase === "paywall") {
+            return {
+              phase,
+              progress: {
+                sceneIndex: PAYWALL_AFTER_SCENE_INDEX + 1,
+                currentLineIndex: 0,
+                showChoices: false,
+                choiceMade: null,
+              },
+              ending: undefined,
+            };
+          }
+          if (phase === "generating-arc") {
+            return {
+              phase,
+              progress: {
+                sceneIndex: AUTHORED_SCENE_COUNT,
                 currentLineIndex: 0,
                 showChoices: false,
                 choiceMade: null,
@@ -296,6 +371,19 @@ export const useSessionStore = create<SessionState>()(
             };
           }
           return { phase, ending: undefined };
+        }),
+
+      reset: () =>
+        set({
+          phase: "onboarding",
+          intro: INITIAL_INTRO,
+          arc: undefined,
+          progress: INITIAL_PROGRESS,
+          history: [],
+          stats: { hype: 0, integrity: 0 },
+          ending: undefined,
+          playthroughId: undefined,
+          paid: false,
         }),
     }),
     {
@@ -313,6 +401,7 @@ export const useSessionStore = create<SessionState>()(
         stats: state.stats,
         ending: state.ending,
         playthroughId: state.playthroughId,
+        paid: state.paid,
       }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);

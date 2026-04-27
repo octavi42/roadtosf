@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { completeJson } from '@/lib/anthropic'
+import { completeJson, MODELS, extractJsonObject } from '@/lib/anthropic'
 
 type Body = {
   startupName?: unknown
@@ -22,7 +22,6 @@ function asStringArray(v: unknown): string[] {
 }
 
 interface ChoiceRecord {
-  groupIndex: number
   sceneId: number
   choiceLabel: string
 }
@@ -32,20 +31,16 @@ function asChoiceHistory(v: unknown): ChoiceRecord[] {
   return v.flatMap((item): ChoiceRecord[] => {
     if (!item || typeof item !== 'object') return []
     const o = item as Record<string, unknown>
-    const groupIndex = typeof o.groupIndex === 'number' ? Math.trunc(o.groupIndex) : 1
     const sceneId = typeof o.sceneId === 'number' ? Math.trunc(o.sceneId) : 0
     const choiceLabel = asString(o.choiceLabel, '(unspecified)')
-    return [{ groupIndex, sceneId, choiceLabel }]
+    return [{ sceneId, choiceLabel }]
   })
 }
 
-const SYSTEM = `You are writing the closing epilogue for "Road to SF", a satirical comic-book founder game. The player just finished. Produce one paragraph (~80 words, max 600 chars) that names specific choices the player made AND specific SF places/people referenced. Tone: present-tense, biting, like a Bloomberg lede, with a comic punchline at the end. Output a single JSON object: {"epilogue": "..."} — no prose, no fences. Do NOT name real people; use archetypes.`
+const SYSTEM = `You are writing the closing epilogue for "Road to SF", a satirical comic-book founder game. Output one paragraph (~80 words, max 600 chars) that names specific choices the player made AND specific SF places/people referenced. Tone: present-tense, biting, like a Bloomberg lede, with a comic punchline at the end. Output a single JSON object: {"epilogue": "..."} — no prose, no fences. Do NOT name real people; use archetypes.`
 
 function parseFromRaw(raw: string) {
-  const start = raw.indexOf('{')
-  const end = raw.lastIndexOf('}')
-  if (start < 0 || end < start) throw new Error('No JSON in response')
-  return epilogueSchema.parse(JSON.parse(raw.slice(start, end + 1)))
+  return epilogueSchema.parse(extractJsonObject(raw))
 }
 
 export async function POST(request: Request) {
@@ -61,8 +56,8 @@ export async function POST(request: Request) {
   const flavorTags = asStringArray(body.flavorTags)
   const history = asChoiceHistory(body.choiceHistory)
 
-  const formattedHistory = history.length > 0
-    ? history.map((h) => `Group ${h.groupIndex} Scene ${h.sceneId}: "${h.choiceLabel}"`).join('\n')
+  const formatted = history.length
+    ? history.map((h) => `Scene ${h.sceneId}: "${h.choiceLabel}"`).join('\n')
     : '(no recorded choices)'
 
   const user = `Startup: ${startupName}
@@ -70,13 +65,22 @@ Ending: ${endingKey}
 Flavor tags: ${flavorTags.join(', ') || '(none)'}
 
 Choices made (in order):
-${formattedHistory}
+${formatted}
 
 Write the epilogue now.`
 
   try {
     if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY missing')
-    const result = await completeJson({ system: SYSTEM, user, maxTokens: 400, temperature: 0.9 }, parseFromRaw)
+    const result = await completeJson(
+      {
+        model: MODELS.epilogue,
+        systemBlocks: [{ text: SYSTEM, cache: false }],
+        userBlocks: [{ text: user, cache: false }],
+        maxTokens: 400,
+        temperature: 0.9,
+      },
+      parseFromRaw,
+    )
     return NextResponse.json({ epilogue: result.epilogue, source: 'llm' as const })
   } catch (err) {
     console.warn('generate-epilogue: LLM path failed, returning fallback', err)

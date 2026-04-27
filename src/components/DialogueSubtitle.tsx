@@ -25,18 +25,15 @@ export default function DialogueSubtitle({
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
 
-  // Reset when text changes
   useEffect(() => {
     setVisibleCount(instant ? words.length : 0);
     setAnimPhase(instant ? "hold" : "in");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, instant]);
 
-  // Tick words in one at a time while in "in" phase
   useEffect(() => {
     if (animPhase !== "in") return;
     if (visibleCount >= words.length) {
-      // All words visible — hold briefly then fade out
       const holdId = setTimeout(() => setAnimPhase("out"), 820);
       return () => clearTimeout(holdId);
     }
@@ -46,7 +43,6 @@ export default function DialogueSubtitle({
     return () => clearTimeout(id);
   }, [visibleCount, words.length, wordInterval, animPhase]);
 
-  // When fade-out transition ends, mark done and fire onComplete
   const handleTransitionEnd = () => {
     if (animPhase === "out") {
       setAnimPhase("done");
@@ -58,41 +54,43 @@ export default function DialogueSubtitle({
 
   return (
     <div
+      className="w-full max-w-2xl mx-auto"
       style={{
         opacity: animPhase === "out" ? 0 : 1,
         transition: animPhase === "out" ? "opacity 0.5s ease" : "none",
       }}
       onTransitionEnd={handleTransitionEnd}
     >
-      {/* Subtitle line */}
-      <p
-        className="text-white text-lg leading-snug font-normal"
-        style={{
-          textShadow: "0 2px 12px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,1)",
-        }}
-        aria-live="polite"
-        aria-label={text}
-      >
-        {words.map((word, i) => {
-          const visible = i < visibleCount;
-          const isCurrent = i === visibleCount - 1;
-          return (
-            <span
-              key={`${text}-${i}`}
-              className="inline-block mr-[0.3em]"
-              style={{
-                opacity: visible ? 1 : 0,
-                filter: isCurrent ? "brightness(1.4)" : "brightness(1)",
-                transition: visible
-                  ? "opacity 0.12s ease, filter 0.35s ease"
-                  : "none",
-              }}
-            >
-              {word}
-            </span>
-          );
-        })}
-      </p>
+      <div className="speech-bubble px-6 py-4 animate-bounce-in">
+        <p
+          className="font-sans text-[var(--color-ink)] text-lg leading-snug"
+          style={{ letterSpacing: "-0.005em", fontWeight: 500 }}
+          aria-live="polite"
+          aria-label={text}
+        >
+          {words.map((word, i) => {
+            const visible = i < visibleCount;
+            const isCurrent = i === visibleCount - 1;
+            return (
+              <span
+                key={`${text}-${i}`}
+                className="inline-block mr-[0.3em]"
+                style={{
+                  opacity: visible ? 1 : 0,
+                  color: isCurrent
+                    ? "var(--color-sunset-deep)"
+                    : "var(--color-ink)",
+                  transition: visible
+                    ? "opacity 0.12s ease, color 0.5s ease"
+                    : "none",
+                }}
+              >
+                {word}
+              </span>
+            );
+          })}
+        </p>
+      </div>
     </div>
   );
 }

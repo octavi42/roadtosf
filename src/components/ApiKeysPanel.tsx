@@ -9,12 +9,12 @@ interface ApiKeysPanelProps {
 const EyeIcon = ({ visible }: { visible: boolean }) =>
   visible ? (
     <svg
-      width="16"
-      height="16"
+      width="18"
+      height="18"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="2.5"
       strokeLinecap="round"
       strokeLinejoin="round"
     >
@@ -23,12 +23,12 @@ const EyeIcon = ({ visible }: { visible: boolean }) =>
     </svg>
   ) : (
     <svg
-      width="16"
-      height="16"
+      width="18"
+      height="18"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="2.5"
       strokeLinecap="round"
       strokeLinejoin="round"
     >
@@ -71,28 +71,52 @@ export default function ApiKeysPanel({ onConfirm }: ApiKeysPanelProps) {
     if (e.key === "Enter") handleConfirm();
   };
 
+  const inputClasses =
+    "font-sans w-full bg-[var(--color-fog-soft)] rounded-lg px-4 py-3 text-[var(--color-ink)] text-sm placeholder-[var(--color-ink)]/30 focus:outline-none transition-colors pr-11";
+  const inputStyle: React.CSSProperties = {
+    border: "2px solid var(--color-ink)",
+  };
+
   return (
-    <div className="backdrop-panel animate-fade-slide-up rounded-2xl p-8 w-full max-w-md">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 paper-grain">
+      <div
+        className="absolute inset-0 halftone pointer-events-none"
+        style={{ opacity: 0.14, mixBlendMode: "multiply" }}
+      />
+      <div
+        className="comic-outline animate-bounce-in rounded-2xl p-8 w-full max-w-md relative"
+        style={{ background: "var(--color-fog)" }}
+      >
         {/* Overline */}
-        <p className="text-amber-400 text-xs font-semibold tracking-widest uppercase mb-4">
+        <p
+          className="font-display uppercase font-bold inline-block comic-outline-sm comic-tilt-l rounded-md px-3 py-1 mb-4"
+          style={{
+            background: "var(--color-mustard)",
+            color: "var(--color-ink)",
+            fontSize: "0.78rem",
+            letterSpacing: "0.18em",
+          }}
+        >
           Capital for the trip
         </p>
 
         {/* Title */}
-        <h2 className="text-white text-xl font-semibold mb-1">
-          Card on file, please
+        <h2
+          className="font-sans text-[var(--color-ink)] text-2xl font-bold mb-1 leading-tight"
+          style={{ letterSpacing: "-0.02em" }}
+        >
+          Card on file, please.
         </h2>
 
         {/* Subtitle */}
-        <p className="text-white/40 text-sm mb-6">
+        <p className="font-sans text-[var(--color-ink)]/60 text-sm mb-6 leading-relaxed">
           Stored on your device. Never sent to our servers.
         </p>
 
         {/* Fields */}
         <div className="flex flex-col gap-4">
-          {/* OpenAI Key */}
           <div>
-            <label className="block text-white/60 text-xs mb-1">
+            <label className="font-display block text-[var(--color-ink)] text-xs uppercase font-bold mb-1.5 tracking-wider">
               OpenAI API Key
             </label>
             <div className="relative">
@@ -105,14 +129,15 @@ export default function ApiKeysPanel({ onConfirm }: ApiKeysPanelProps) {
                 }}
                 onKeyDown={handleKeyDown}
                 placeholder="sk-..."
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white text-sm placeholder-white/20 focus:outline-none focus:border-white/30 transition-colors pr-11"
+                className={inputClasses}
+                style={inputStyle}
                 autoComplete="off"
                 spellCheck={false}
               />
               <button
                 type="button"
                 onClick={() => setShowOpenai((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-ink)]/50 hover:text-[var(--color-ink)] transition-colors"
                 tabIndex={-1}
                 aria-label={showOpenai ? "Hide key" : "Show key"}
               >
@@ -121,9 +146,8 @@ export default function ApiKeysPanel({ onConfirm }: ApiKeysPanelProps) {
             </div>
           </div>
 
-          {/* ElevenLabs Key */}
           <div>
-            <label className="block text-white/60 text-xs mb-1">
+            <label className="font-display block text-[var(--color-ink)] text-xs uppercase font-bold mb-1.5 tracking-wider">
               ElevenLabs API Key
             </label>
             <div className="relative">
@@ -136,14 +160,15 @@ export default function ApiKeysPanel({ onConfirm }: ApiKeysPanelProps) {
                 }}
                 onKeyDown={handleKeyDown}
                 placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white text-sm placeholder-white/20 focus:outline-none focus:border-white/30 transition-colors pr-11"
+                className={inputClasses}
+                style={inputStyle}
                 autoComplete="off"
                 spellCheck={false}
               />
               <button
                 type="button"
                 onClick={() => setShowElevenlabs((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-ink)]/50 hover:text-[var(--color-ink)] transition-colors"
                 tabIndex={-1}
                 aria-label={showElevenlabs ? "Hide key" : "Show key"}
               >
@@ -153,19 +178,27 @@ export default function ApiKeysPanel({ onConfirm }: ApiKeysPanelProps) {
           </div>
         </div>
 
-        {/* Confirm button */}
         <button
           type="button"
           onClick={handleConfirm}
-          className="w-full bg-white text-black font-semibold rounded-lg py-3 hover:bg-white/90 transition-colors mt-6"
+          className="comic-outline comic-press font-sans font-semibold w-full rounded-xl py-3 text-base mt-6 text-[var(--color-ink)]"
+          style={{
+            background: "var(--color-sunset)",
+            letterSpacing: "-0.005em",
+          }}
         >
           Charge card →
         </button>
 
-        {/* Error */}
         {error && (
-          <p className="text-red-400 text-xs mt-2 text-center">{error}</p>
+          <p
+            className="font-pixel text-[var(--color-cable)] text-sm mt-3 text-center"
+            style={{ letterSpacing: "0.04em" }}
+          >
+            {error}
+          </p>
         )}
       </div>
+    </div>
   );
 }
