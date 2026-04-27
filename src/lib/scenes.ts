@@ -32,6 +32,10 @@ export interface SceneData {
   dialogue: DialogueLine[];
   choices?: Choice[];
   textInput?: TextInputConfig;
+  // When the scene has no choices and no textInput, render a single CTA
+  // button that advances the scene. Used for cinematic-pivot beats like
+  // scene 3 (the dare → paywall).
+  ctaLabel?: string;
 }
 
 export const HOME_BACKGROUND = "/intro-v2/03-airport-bar.png";
@@ -108,21 +112,18 @@ export const SCENES: SceneData[] = [
     dialogue: [
       {
         speaker: "Jordan · Friend, SF",
-        text: "Real talk. Five years from now — the version where you didn't come.",
+        text: "Hey. I love you. So I'm gonna say it straight.",
       },
       {
         speaker: "Jordan · Friend, SF",
-        text: "Where are they? What are they doing on a Tuesday night?",
+        text: "Two years you've been not-doing this. Two.",
       },
       {
         speaker: "Jordan · Friend, SF",
-        text: "Tell me, then open the airline app. I'll wait.",
+        text: "Book the flight tonight. Or stop telling me about it.",
       },
     ],
-    textInput: {
-      placeholder: "The version of you that didn't come…",
-      extractAs: "selfDescription",
-    },
+    ctaLabel: "Book the flight →",
   },
   // -------- Paywall fires here: boarding pass to SFO --------
   // -------- Post-paywall: arrived in SF, the co-founder is waiting --------

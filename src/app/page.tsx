@@ -359,6 +359,24 @@ export default function HomePage() {
       );
     }
 
+    if (currentScene?.ctaLabel) {
+      return (
+        <div className="w-full max-w-md mx-auto animate-bounce-in">
+          <button
+            onClick={() => handleChoice("commit")}
+            disabled={choiceMade !== null}
+            className="comic-outline comic-press font-sans font-semibold w-full rounded-xl py-3 text-base text-[var(--color-ink)] disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              background: "var(--color-sunset)",
+              letterSpacing: "-0.005em",
+            }}
+          >
+            {currentScene.ctaLabel}
+          </button>
+        </div>
+      );
+    }
+
     return (
       <ChoicePanel
         choices={currentScene?.choices ?? []}

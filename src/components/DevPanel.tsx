@@ -182,6 +182,14 @@ export default function DevPanel() {
                       </span>
                     </div>
                   )}
+                  {scene.ctaLabel && (
+                    <div className="mt-2 pt-2 border-t border-white/10 text-[10px] text-white/50">
+                      <span className="uppercase tracking-widest text-white/40">
+                        cta →
+                      </span>{" "}
+                      <span className="text-white/85">{scene.ctaLabel}</span>
+                    </div>
+                  )}
                   {scene.choices && (
                     <div className="mt-2 pt-2 border-t border-white/10 space-y-0.5">
                       {scene.choices.map((c) => (
