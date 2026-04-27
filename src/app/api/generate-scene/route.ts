@@ -11,8 +11,11 @@ import { buildScenePromptParts, type PriorChoiceSummary } from '@/lib/prompts/sc
 import type { Archetype } from '@/lib/types'
 import fallbackScenes from '@/lib/fallback/scenes.json'
 
-const AUTHORED_SCENE_COUNT = 4
-const EPISODE_LENGTH = 5
+// Mirrors client-side constants in src/lib/session.ts.
+const AUTHORED_SCENE_COUNT = 8
+const SCENES_PER_GROUP = 4
+const GROUPS_PER_EPISODE = 5
+const EPISODE_LENGTH = SCENES_PER_GROUP * GROUPS_PER_EPISODE // 20
 
 type Body = {
   llmIndex?: unknown // global LLM-tail index (0..N)
@@ -97,6 +100,11 @@ export async function POST(request: Request) {
   const computedInEpisode = llmIndex % EPISODE_LENGTH
   const episodeIndex = asInt(body.episodeIndex, computedEpisodeIndex)
   const llmIndexInEpisode = asInt(body.llmIndexInEpisode, computedInEpisode)
+  // Within an episode, scenes are organized into archetype groups of
+  // SCENES_PER_GROUP sub-scenes each. The arc skeleton has one outline per
+  // group, indexed 0..GROUPS_PER_EPISODE-1.
+  const groupIndex = Math.floor(llmIndexInEpisode / SCENES_PER_GROUP)
+  const subSceneIndex = llmIndexInEpisode % SCENES_PER_GROUP
 
   let arcSkeleton
   try {
@@ -106,9 +114,9 @@ export async function POST(request: Request) {
   }
 
   const outline =
-    arcSkeleton.scenes.find((s) => s.index === llmIndexInEpisode) ?? arcSkeleton.scenes[llmIndexInEpisode]
+    arcSkeleton.scenes.find((s) => s.index === groupIndex) ?? arcSkeleton.scenes[groupIndex]
   if (!outline) {
-    return NextResponse.json({ error: `no outline for index ${llmIndexInEpisode} in episode ${episodeIndex}` }, { status: 400 })
+    return NextResponse.json({ error: `no outline for group ${groupIndex} (sub ${subSceneIndex}) in episode ${episodeIndex}` }, { status: 400 })
   }
 
   const sceneId = AUTHORED_SCENE_COUNT + llmIndex + 1
@@ -116,6 +124,8 @@ export async function POST(request: Request) {
   const promptInput = {
     episodeIndex,
     llmIndexInEpisode,
+    groupIndex,
+    subSceneIndex,
     sceneId,
     outline,
     arcSkeleton,

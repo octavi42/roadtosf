@@ -15,6 +15,7 @@ import {
   useSessionStore,
   AUTHORED_SCENE_COUNT,
   EPISODE_LENGTH,
+  SCENES_PER_GROUP,
 } from "@/lib/session";
 import { ARCHETYPES } from "@/lib/archetypes";
 import type {
@@ -111,7 +112,9 @@ function adaptLLMScene(scene: LLMScene): UnifiedScene {
   return {
     id: scene.id,
     title: scene.title,
-    background: HOME_BACKGROUND,
+    // Generated scene image takes over once it lands; HOME_BACKGROUND is the
+    // placeholder while gpt-image-2 is still in flight.
+    background: scene.imageUrl ?? HOME_BACKGROUND,
     dialogue: scene.dialogue.map((d) => ({
       speaker: formatArchetypeSpeaker(d.speaker),
       text: d.text,
@@ -249,6 +252,7 @@ export default function HomePage() {
     paywallSatisfied,
     arcSkeletonReady,
     dynamicSceneReady,
+    sceneImageReady,
     enterGeneratingArc,
     exitGeneratingArc,
     endRun,
@@ -267,6 +271,7 @@ export default function HomePage() {
       paywallSatisfied: s.paywallSatisfied,
       arcSkeletonReady: s.arcSkeletonReady,
       dynamicSceneReady: s.dynamicSceneReady,
+      sceneImageReady: s.sceneImageReady,
       enterGeneratingArc: s.enterGeneratingArc,
       exitGeneratingArc: s.exitGeneratingArc,
       endRun: s.endRun,
@@ -435,6 +440,8 @@ export default function HomePage() {
   // Reset all per-run refs when playthroughId changes (new run)
   const arcGenFiredRef = useRef<Set<number>>(new Set()); // episodes already requested
   const sceneGenFiredRef = useRef<Set<number>>(new Set()); // global llm indices already requested
+  const imageGenFiredRef = useRef<Set<number>>(new Set()); // llm indices whose image gen was requested
+  const arcPersistedRef = useRef<number>(-1); // last episodeIndex whose skeleton was PATCHed
   const extractFiredForRef = useRef<string | null>(null); // last startupDescription extracted for
   // Flips true once extraction has settled (success or failure). Arc-gen is
   // gated on this so Sonnet never receives a half-populated player facts block
@@ -443,6 +450,8 @@ export default function HomePage() {
   useEffect(() => {
     arcGenFiredRef.current = new Set();
     sceneGenFiredRef.current = new Set();
+    imageGenFiredRef.current = new Set();
+    arcPersistedRef.current = -1;
     extractFiredForRef.current = null;
     setExtractionResolved(false);
   }, [playthroughId]);
@@ -599,67 +608,202 @@ export default function HomePage() {
     exitGeneratingArc,
   ]);
 
-  // Eager next-scene generation: fire scene N+1 as soon as scene N mounts.
-  // Runs forever — no upper bound.
+  // Group-batch scene-text generation. Each archetype group fires as a
+  // single burst of 4 parallel calls when its trigger condition is met:
+  //   - Group 0 batch fires the moment player enters the LLM tail (sub 0 may
+  //     have already been fired by the generating-arc effect; sceneGenFiredRef
+  //     dedups).
+  //   - Group N (N>=1) batch fires when player reaches sub 1 of group N-1
+  //     (the midpoint of the prior group). At ~15s per sub-scene, the player
+  //     has 3 sub-scenes worth of buffer (~45s) before they hit group N's
+  //     leader — comfortably enough for ~5s scene-gen + ~25s image-gen.
+  // No more "fire after every choice" pattern: a group is generated as a
+  // unit, then the player plays through all 4 sub-scenes uninterrupted by
+  // network activity for that group.
   useEffect(() => {
     if (phase !== "scene") return;
     if (sceneIndex < AUTHORED_SCENE_COUNT) return;
-    if (!arc?.arcSkeleton) return;
+    const skeleton = arc?.arcSkeleton;
+    if (!skeleton) return;
+    const epi = skeleton.episodeIndex;
 
-    const llmIndex = sceneIndex - AUTHORED_SCENE_COUNT;
-    const nextLLMIndex = llmIndex + 1;
-    const skeleton = arc.arcSkeleton;
-    const nextInEpisode = nextLLMIndex - skeleton.episodeIndex * EPISODE_LENGTH;
+    const fireSceneGen = (globalLLMIndex: number, inEpi: number) => {
+      if (sceneGenFiredRef.current.has(globalLLMIndex)) return;
+      const stored = arc?.scenes[globalLLMIndex];
+      if (stored && stored.dialogue.length > 0) return;
+      sceneGenFiredRef.current.add(globalLLMIndex);
 
-    // Only eager-trigger within the current episode. Cross-episode generation
-    // is handled by the regen effect below.
-    if (nextInEpisode < 0 || nextInEpisode >= skeleton.scenes.length) return;
-    if (sceneGenFiredRef.current.has(nextLLMIndex)) return;
-    const stored = arc.scenes[nextLLMIndex];
-    if (stored && stored.dialogue.length > 0) return;
-    sceneGenFiredRef.current.add(nextLLMIndex);
+      postWithTimeout<SceneGenResponse>(
+        "/api/generate-scene",
+        {
+          llmIndex: globalLLMIndex,
+          episodeIndex: epi,
+          llmIndexInEpisode: inEpi,
+          arcSkeleton: skeleton,
+          storySoFar: arc?.storySoFar,
+          startupName: arc?.startupName,
+          startupDescription: intro.startupDescription ?? "",
+          founderPersona: arc?.founderPersona,
+          stage: arc?.stage,
+          team: intro.team,
+          fundingModel: intro.fundingModel,
+          targetCustomer: intro.targetCustomer,
+          concern: intro.concern,
+          flavorTags: arc?.flavorTags,
+          recentChoices: history.slice(-EPISODE_LENGTH).map((h) => ({
+            sceneId: h.sceneId,
+            choiceLabel: h.choiceLabel,
+            hypeDelta: h.hypeDelta,
+            integrityDelta: h.integrityDelta,
+          })),
+          currentStats: { hype, integrity },
+        },
+        SCENE_GEN_TIMEOUT_MS,
+      )
+        .then((data) => dynamicSceneReady(globalLLMIndex, data.scene))
+        .catch((err) => {
+          sceneGenFiredRef.current.delete(globalLLMIndex);
+          console.error(`generate-scene[${globalLLMIndex}] failed`, err);
+        });
+    };
 
-    postWithTimeout<SceneGenResponse>(
-      "/api/generate-scene",
-      {
-        llmIndex: nextLLMIndex,
-        episodeIndex: skeleton.episodeIndex,
-        llmIndexInEpisode: nextInEpisode,
-        arcSkeleton: skeleton,
-        storySoFar: arc.storySoFar,
-        startupName: arc.startupName,
-        startupDescription: intro.startupDescription ?? "",
-        founderPersona: arc.founderPersona,
-        stage: arc.stage,
-        team: intro.team,
-        fundingModel: intro.fundingModel,
-        targetCustomer: intro.targetCustomer,
-        concern: intro.concern,
-        flavorTags: arc.flavorTags,
-        recentChoices: history.slice(-EPISODE_LENGTH).map((h) => ({
-          sceneId: h.sceneId,
-          choiceLabel: h.choiceLabel,
-          hypeDelta: h.hypeDelta,
-          integrityDelta: h.integrityDelta,
-        })),
-        currentStats: { hype, integrity },
-      },
-      SCENE_GEN_TIMEOUT_MS,
-    )
-      .then((data) => dynamicSceneReady(nextLLMIndex, data.scene))
-      .catch((err) =>
-        console.error(`generate-scene[${nextLLMIndex}] failed`, err),
-      );
+    for (let groupIdx = 0; groupIdx < skeleton.scenes.length; groupIdx++) {
+      // Trigger condition for this group's batch.
+      let triggered = false;
+      if (groupIdx === 0) {
+        // Group 0 batch: triggered the moment we're in the LLM tail.
+        triggered = true;
+      } else {
+        // Group N (N>=1): triggered at the midpoint (sub 1) of group N-1.
+        const priorGroupSub1Index =
+          AUTHORED_SCENE_COUNT +
+          epi * EPISODE_LENGTH +
+          (groupIdx - 1) * SCENES_PER_GROUP +
+          1;
+        triggered = sceneIndex >= priorGroupSub1Index;
+      }
+      if (!triggered) continue;
+
+      // Fire all 4 sub-scenes of this group in parallel. sceneGenFiredRef
+      // dedups across renders so each sub fires exactly once.
+      for (let sub = 0; sub < SCENES_PER_GROUP; sub++) {
+        const inEpi = groupIdx * SCENES_PER_GROUP + sub;
+        fireSceneGen(epi * EPISODE_LENGTH + inEpi, inEpi);
+      }
+    }
   }, [
     phase,
     sceneIndex,
     arc,
     intro.startupDescription,
+    intro.team,
+    intro.fundingModel,
+    intro.targetCustomer,
+    intro.concern,
     history,
     hype,
     integrity,
     dynamicSceneReady,
   ]);
+
+  // Arc persistence: each time a new episode skeleton lands, PATCH the
+  // playthrough so we have the arc on the server (for replay, share cards,
+  // analytics). One write per episode; per-scene data already lives in
+  // scene_events. Base64 imageUrls are stripped — they're a runtime concern
+  // and would otherwise inflate the row by ~100KB per scene.
+  useEffect(() => {
+    if (!playthroughId) return;
+    if (!arc) return;
+    const skeleton = arc.arcSkeleton;
+    if (!skeleton) return;
+    if (arcPersistedRef.current === skeleton.episodeIndex) return;
+    arcPersistedRef.current = skeleton.episodeIndex;
+
+    const arcForWire = {
+      ...arc,
+      scenes: arc.scenes.map(({ imageUrl: _imageUrl, ...rest }) => rest),
+    };
+
+    fetch(`/api/playthroughs/${playthroughId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ arcJson: arcForWire }),
+    }).catch((err) => console.error("persistArc failed", err));
+  }, [playthroughId, arc]);
+
+  // Image generation watcher (group-aware): one image per archetype group.
+  //   - Sub-scene 0 of each group fires gpt-image-2 with that scene's
+  //     imagePrompt + archetype.
+  //   - Sub-scenes 1–3 of the same group never call image gen — they copy
+  //     the leader's imageUrl as soon as it arrives. The dedicated effect
+  //     below fans the leader's imageUrl out to its followers.
+  // Failures are silent — the placeholder background stays in place.
+  useEffect(() => {
+    const scenes = arc?.scenes;
+    if (!scenes) return;
+    scenes.forEach((scene, idx) => {
+      if (!scene || scene.dialogue.length === 0) return;
+      if (scene.imageUrl) return;
+      if (!scene.imagePrompt) return;
+      // Only the leader (sub-scene 0) of an archetype group fires image gen.
+      // SCENES_PER_GROUP sub-scenes per group, all sharing one image.
+      if (idx % SCENES_PER_GROUP !== 0) return;
+      if (imageGenFiredRef.current.has(idx)) return;
+      imageGenFiredRef.current.add(idx);
+
+      const groupIdx = idx / SCENES_PER_GROUP;
+      const t0 = performance.now();
+      console.log(
+        `[image-gen] fire group=${groupIdx} llmIdx=${idx} archetype=${scene.archetype}`,
+      );
+
+      fetch("/api/generate-image", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode: "scene",
+          scenePrompt: scene.imagePrompt,
+          archetype: scene.archetype,
+          // "low" lands in ~15s vs ~60s at "medium" — required to beat the
+          // player to the scene. Hero/share image stays "high".
+          quality: "low",
+        }),
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+        .then((data: { dataUrl?: string }) => {
+          const dt = ((performance.now() - t0) / 1000).toFixed(1);
+          if (data.dataUrl) {
+            console.log(`[image-gen] done group=${groupIdx} in ${dt}s`);
+            sceneImageReady(idx, data.dataUrl);
+          } else {
+            console.warn(`[image-gen] empty response group=${groupIdx} after ${dt}s`);
+          }
+        })
+        .catch((err) => {
+          // Allow a retry on the next scene-state change.
+          imageGenFiredRef.current.delete(idx);
+          console.error(`[image-gen] FAILED group=${groupIdx} llmIdx=${idx}`, err);
+        });
+    });
+  }, [arc?.scenes, sceneImageReady]);
+
+  // Image fan-out: when a group's leader scene gets its imageUrl, copy it to
+  // any sibling sub-scenes that already have text. Runs whenever scenes
+  // change, so a follower that arrives later than its leader picks up the
+  // imageUrl on the next render.
+  useEffect(() => {
+    const scenes = arc?.scenes;
+    if (!scenes) return;
+    scenes.forEach((scene, idx) => {
+      if (!scene || scene.dialogue.length === 0) return;
+      if (scene.imageUrl) return;
+      const subSceneIndex = idx % SCENES_PER_GROUP;
+      if (subSceneIndex === 0) return; // leader; image-gen path handles this
+      const leaderIdx = idx - subSceneIndex;
+      const leader = scenes[leaderIdx];
+      if (leader?.imageUrl) sceneImageReady(idx, leader.imageUrl);
+    });
+  }, [arc?.scenes, sceneImageReady]);
 
   // Episode regeneration: when the current LLM scene is the SECOND-TO-LAST of
   // its episode, kick off generation of the next episode's skeleton in the

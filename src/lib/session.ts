@@ -15,13 +15,20 @@ export type Phase =
 export const PAYWALL_AFTER_SCENE_INDEX = 2;
 
 /**
- * Authored scenes (src/lib/scenes.ts) cover indices 0..AUTHORED_SCENE_COUNT-1.
- * After that, the LLM tail runs *unbounded* — generated 5 scenes at a time
- * (one episode), regenerating a new skeleton when an episode finishes.
- * The run only ends when the player picks "End my run" or via reset.
+ * Authored scenes (src/lib/scenes.ts) cover indices 0..AUTHORED_SCENE_COUNT-1:
+ *   0–2 pre-paywall (FaceTime with Jordan)
+ *   3   post-paywall Q&A (the car ride)
+ *   4–7 Group 1: "exploring SF" — narrator-led, one shared pre-gen image
+ * After that, the LLM tail runs *unbounded* — generated 20 scenes at a time
+ * (one episode = 5 archetype groups × 4 sub-scenes each, sharing one image
+ * per group). Run ends when the player picks "End my run" or via reset.
  */
-export const AUTHORED_SCENE_COUNT = 4;
-export const EPISODE_LENGTH = 5;
+export const AUTHORED_SCENE_COUNT = 8;
+/** Sub-scenes per archetype encounter; one image per group of this size. */
+export const SCENES_PER_GROUP = 4;
+/** Archetype outlines per arc skeleton (one per group within an episode). */
+export const GROUPS_PER_EPISODE = 5;
+export const EPISODE_LENGTH = SCENES_PER_GROUP * GROUPS_PER_EPISODE; // 20
 
 export type MissingQuestionField =
   | "team"
@@ -105,6 +112,7 @@ interface SessionState {
   arcReady: (arc: StoryArc) => void;
   arcSkeletonReady: (skeleton: ArcSkeleton) => void;
   dynamicSceneReady: (llmIndex: number, scene: Scene) => void;
+  sceneImageReady: (llmIndex: number, imageUrl: string) => void;
   setEpilogue: (epilogue: string) => void;
   enterGeneratingArc: () => void;
   exitGeneratingArc: () => void;
@@ -270,7 +278,31 @@ export const useSessionStore = create<SessionState>()(
               timeoutChoiceId: "a",
             });
           }
-          scenes[llmIndex] = scene;
+          // Preserve any imageUrl that landed before the scene text did.
+          const prior = scenes[llmIndex];
+          scenes[llmIndex] = prior?.imageUrl
+            ? { ...scene, imageUrl: prior.imageUrl }
+            : scene;
+          return { arc: { ...state.arc, scenes } };
+        }),
+
+      sceneImageReady: (llmIndex, imageUrl) =>
+        set((state) => {
+          if (!state.arc) return state;
+          const scenes = [...state.arc.scenes];
+          while (scenes.length <= llmIndex) {
+            scenes.push({
+              id: 0,
+              title: "",
+              archetype: "cofounder",
+              imagePrompt: "",
+              dialogue: [],
+              choices: [],
+              timeoutSeconds: 15,
+              timeoutChoiceId: "a",
+            });
+          }
+          scenes[llmIndex] = { ...scenes[llmIndex], imageUrl };
           return { arc: { ...state.arc, scenes } };
         }),
 
