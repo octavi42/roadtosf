@@ -707,6 +707,12 @@ export default function HomePage() {
       if (imageGenFiredRef.current.has(idx)) return;
       imageGenFiredRef.current.add(idx);
 
+      const groupIdx = idx / SCENES_PER_GROUP;
+      const t0 = performance.now();
+      console.log(
+        `[image-gen] fire group=${groupIdx} llmIdx=${idx} archetype=${scene.archetype}`,
+      );
+
       fetch("/api/generate-image", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -721,12 +727,18 @@ export default function HomePage() {
       })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
         .then((data: { dataUrl?: string }) => {
-          if (data.dataUrl) sceneImageReady(idx, data.dataUrl);
+          const dt = ((performance.now() - t0) / 1000).toFixed(1);
+          if (data.dataUrl) {
+            console.log(`[image-gen] done group=${groupIdx} in ${dt}s`);
+            sceneImageReady(idx, data.dataUrl);
+          } else {
+            console.warn(`[image-gen] empty response group=${groupIdx} after ${dt}s`);
+          }
         })
         .catch((err) => {
           // Allow a retry on the next scene-state change.
           imageGenFiredRef.current.delete(idx);
-          console.error(`generate-image[${idx}] failed`, err);
+          console.error(`[image-gen] FAILED group=${groupIdx} llmIdx=${idx}`, err);
         });
     });
   }, [arc?.scenes, sceneImageReady]);

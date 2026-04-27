@@ -55,8 +55,10 @@ function mustExist(p: string, label: string) {
 }
 
 /**
- * Scene generator — double-anchored on style-ref + archetype portrait.
- * Presets are locked; only scenePrompt and archetype vary per call.
+ * Scene generator — single-anchored on style-ref only. The archetype
+ * portrait was dropped to halve OpenAI's reference-encoding cost (~30% wall-
+ * clock saving). Character identity is now carried by the textual
+ * description (clothing, features, background) from ARCHETYPES[archetype].
  */
 export async function generateSceneImage(
   opts: GenerateSceneImageOptions,
@@ -69,31 +71,35 @@ export async function generateSceneImage(
   } = opts;
 
   const archetypeDef = ARCHETYPES[archetype];
-  const portraitPath = path.join(PRESETS.portraitsDir, `${archetype}.png`);
 
   mustExist(PRESETS.styleRefPath, "style-ref.png");
-  mustExist(portraitPath, `portrait for ${archetype}`);
-
-  const [styleFile, portraitFile] = await Promise.all([
-    loadRef(PRESETS.styleRefPath, "style-ref.png", "image/png"),
-    loadRef(portraitPath, `${archetype}.png`, "image/png"),
-  ]);
+  const styleFile = await loadRef(
+    PRESETS.styleRefPath,
+    "style-ref.png",
+    "image/png",
+  );
 
   const fullPrompt = [
     PRESETS.stylePrefix,
     `Character: ${archetypeDef.name}, ${archetypeDef.title}. ${archetypeDef.imageStyle}.`,
     `Scene: ${scenePrompt}`,
-    "Match the art style of the first reference image exactly. Use the second reference image for the character's face and identity.",
+    "Match the art style of the reference image exactly.",
   ].join(" ");
 
+  const t0 = Date.now();
+  console.log(
+    `[image-gen] start archetype=${archetype} quality=${quality} size=${PRESETS.size}`,
+  );
   const response = await openai.images.edit({
     model: PRESETS.model,
-    image: [styleFile, portraitFile],
+    image: styleFile,
     prompt: fullPrompt,
     quality,
     output_format: format,
     size: PRESETS.size,
   });
+  const dt = ((Date.now() - t0) / 1000).toFixed(1);
+  console.log(`[image-gen] done  archetype=${archetype} in ${dt}s`);
 
   const b64Json = response.data?.[0]?.b64_json;
   if (!b64Json) throw new Error("No image data returned from OpenAI images API");
