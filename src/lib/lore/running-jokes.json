@@ -1,0 +1,87 @@
+[
+  {
+    "id": "vibe-coding",
+    "beat": "the post-vibe-coding hangover; codebases are now 40k lines of slop nobody can read",
+    "tone": "cynical"
+  },
+  {
+    "id": "founder-mode",
+    "beat": "everyone still says they're in 'Founder Mode' but mostly they mean 'I yelled at my CTO today'",
+    "tone": "absurd"
+  },
+  {
+    "id": "compound-startup",
+    "beat": "every deck claims to be a compound startup; nobody knows what that actually means",
+    "tone": "cynical"
+  },
+  {
+    "id": "agi-tuesday",
+    "beat": "AGI is six months away again, for the fourteenth quarter in a row",
+    "tone": "absurd"
+  },
+  {
+    "id": "47-agents",
+    "beat": "the solo founder running '47 agents' who has not actually shipped anything",
+    "tone": "absurd"
+  },
+  {
+    "id": "wrapper-denial",
+    "beat": "the founder insisting they are 'not a wrapper' while their entire backend is one prompt",
+    "tone": "cynical"
+  },
+  {
+    "id": "crashout-tweet",
+    "beat": "the 2am crash-out tweet; the apology Notes-app screenshot by 11am",
+    "tone": "absurd"
+  },
+  {
+    "id": "cooked-soback",
+    "beat": "the 'we're so cooked / we're so back' cycle running on a 90-minute timer",
+    "tone": "absurd"
+  },
+  {
+    "id": "ratio-by-vc",
+    "beat": "getting publicly ratio'd by an a16z partner before your seed round even closes",
+    "tone": "cynical"
+  },
+  {
+    "id": "cole-valley-lease",
+    "beat": "founders signing a Cole Valley lease the same week they fail to raise",
+    "tone": "wistful"
+  },
+  {
+    "id": "tam-math",
+    "beat": "the TAM slide that multiplies world GDP by 0.4% and calls the assumption conservative",
+    "tone": "absurd"
+  },
+  {
+    "id": "twitter-dms",
+    "beat": "the senior partner who only takes meetings via Twitter DMs and never on his calendar",
+    "tone": "cynical"
+  },
+  {
+    "id": "demo-once-laptop",
+    "beat": "the demo that worked exactly once on the founder's laptop and has not worked since, including in front of the lead investor",
+    "tone": "absurd"
+  },
+  {
+    "id": "linkedin-family",
+    "beat": "the LinkedIn 'stepping back to spend time with family' post that is unmistakably a board-mandated firing",
+    "tone": "cynical"
+  },
+  {
+    "id": "ghost-customers",
+    "beat": "the $40M Series B announced before a single paying customer, framed as 'stealth design partners'",
+    "tone": "cynical"
+  },
+  {
+    "id": "layoff-rehire",
+    "beat": "the 'we're hiring' tweet posted 48 hours after a layoff that nobody is supposed to know about yet",
+    "tone": "cynical"
+  },
+  {
+    "id": "stripe-of-vertical",
+    "beat": "the deck that says 'we are the Stripe of [vertical]' in seven different verticals across seven different decks",
+    "tone": "absurd"
+  }
+]

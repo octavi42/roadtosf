@@ -1,0 +1,72 @@
+[
+  {
+    "id": "human-in-loop-pivot",
+    "beat": "every 2024-vintage 'autonomous AI workforce' company is quietly pivoting to 'human-in-the-loop' and pretending it was always the plan",
+    "tone": "cynical",
+    "validUntil": "2026-05-15",
+    "archetypeHook": "vc"
+  },
+  {
+    "id": "coding-tools-mega",
+    "beat": "a coding-IDE company just raised at a valuation higher than most nation-states' GDP while every smaller code-gen startup quietly puts itself up for sale",
+    "tone": "absurd",
+    "validUntil": "2026-05-15",
+    "archetypeHook": "vc"
+  },
+  {
+    "id": "open-weights-china",
+    "beat": "a Chinese open-weights model benchmarks above the frontier labs again and the SF Slack channels have not stopped melting down since",
+    "tone": "hype",
+    "validUntil": "2026-05-15",
+    "archetypeHook": "cofounder"
+  },
+  {
+    "id": "structured-secondaries",
+    "beat": "late-stage unicorns are doing 'structured secondaries' that are mathematically down-rounds but PR'd as up-rounds, and the press is finally calling it out",
+    "tone": "cynical",
+    "validUntil": "2026-05-15",
+    "archetypeHook": "reporter"
+  },
+  {
+    "id": "h1b-premium",
+    "beat": "the H1B premium-pricing era is here; founders openly ask VCs for 'visa bridge' carve-outs and half the YC batch incorporates a Canadian sub as a hedge",
+    "tone": "wistful",
+    "validUntil": "2026-05-15",
+    "archetypeHook": "mentor"
+  },
+  {
+    "id": "yc-compliance-clones",
+    "beat": "the YC batch is back over 400 companies, with at least 30 pitching some flavor of 'AI for [legacy industry] compliance' and three of them having identical landing pages",
+    "tone": "absurd",
+    "validUntil": "2026-05-15",
+    "archetypeHook": "mentor"
+  },
+  {
+    "id": "defense-pivot",
+    "beat": "every consumer-AI founder who couldn't raise a Series A in Q1 has suddenly discovered a passion for autonomous drones and DoD contracts",
+    "tone": "cynical",
+    "validUntil": "2026-05-15",
+    "archetypeHook": "vc"
+  },
+  {
+    "id": "four-way-poach",
+    "beat": "the OpenAI / Anthropic / xAI / Meta four-way poaching circus where engineers get term sheets like free agents and Twitter keeps a public leaderboard",
+    "tone": "absurd",
+    "validUntil": "2026-05-15",
+    "archetypeHook": "hater"
+  },
+  {
+    "id": "humanoid-overfunded",
+    "beat": "humanoid-robot companies are raising $500M Series Bs on demo videos that are 80% post-production, and everyone in the room knows it",
+    "tone": "absurd",
+    "validUntil": "2026-05-15",
+    "archetypeHook": "vc"
+  },
+  {
+    "id": "spac-ghost",
+    "beat": "two AI infra companies just filed S-1s within a week of each other and the bankers are pretending the 2021 SPAC boom never happened",
+    "tone": "cynical",
+    "validUntil": "2026-05-15",
+    "archetypeHook": "reporter"
+  }
+]
