@@ -453,7 +453,12 @@ export default function HomePage() {
     imageGenFiredRef.current = new Set();
     arcPersistedRef.current = -1;
     extractFiredForRef.current = null;
-    setExtractionResolved(false);
+    // If the intro arrived with missingQuestions already populated (dev skip,
+    // or a hydrated session), treat extraction as resolved — otherwise arc-gen
+    // would stall waiting for an extract-facts call that won't be re-issued.
+    const presetMissing =
+      useSessionStore.getState().intro.missingQuestions !== undefined;
+    setExtractionResolved(presetMissing);
   }, [playthroughId]);
 
   // Smart Q&A extraction: once the player submits the scene-2 pitch, fire one
