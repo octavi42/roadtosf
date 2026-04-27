@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server'
 import { completeJson, MODELS, extractJsonObject } from '@/lib/anthropic'
-import { sceneSchema, sanitizeScene, type ParsedScene } from '@/lib/schemas/scene'
+import {
+  coerceRawSceneJson,
+  sceneSchema,
+  sanitizeScene,
+  type ParsedScene,
+} from '@/lib/schemas/scene'
 import { arcSkeletonSchema } from '@/lib/schemas/arc'
 import { buildScenePromptParts, type PriorChoiceSummary } from '@/lib/prompts/scene'
 import fallbackScenes from '@/lib/fallback/scenes.json'
@@ -66,7 +71,7 @@ function parseFromRaw(raw: string): ParsedScene {
     console.warn('[generate-scene] JSON extraction failed. raw:', raw.slice(0, 800))
     throw e
   }
-  const result = sceneSchema.safeParse(json)
+  const result = sceneSchema.safeParse(coerceRawSceneJson(json))
   if (!result.success) {
     console.warn(
       '[generate-scene] Zod validation failed. issues:',

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { completeJson, MODELS, extractJsonObject } from '@/lib/anthropic'
+import { completeJson, arcModel, extractJsonObject } from '@/lib/anthropic'
 import { arcSkeletonSchema, type ParsedArcSkeleton } from '@/lib/schemas/arc'
 import { buildArcPromptParts, type PriorChoiceSummary } from '@/lib/prompts/arc'
 import fallbackArc from '@/lib/fallback/arc.json'
@@ -118,7 +118,7 @@ export async function POST(request: Request) {
   try {
     if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY missing')
     const skeleton = await completeJson(
-      { model: MODELS.arc, systemBlocks, userBlocks, maxTokens: 1500, temperature: 0.85 },
+      { model: arcModel(), systemBlocks, userBlocks, maxTokens: 1500, temperature: 0.85 },
       parseFromRaw,
     )
     // The model may omit episodeIndex; backfill from request so the client can trust it.

@@ -33,8 +33,9 @@ export default function TextInputPanel({
   }
 
   function handleChange(e: ChangeEvent<HTMLTextAreaElement>) {
-    const next = e.target.value
-    if (next.length > maxLength) return
+    // Truncate rather than drop — pasting a block longer than maxLength
+    // would otherwise look like paste was silently broken.
+    const next = e.target.value.slice(0, maxLength)
     setValue(next)
     recalcHeight(e.target)
   }

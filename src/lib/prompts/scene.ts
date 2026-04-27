@@ -41,6 +41,8 @@ HARD RULES:
 - 2–4 dialogue lines per scene total.
 - Choice labels: 2–3 per scene, ≤8 words each, action-flavored.
 - Stat deltas: hype and integrity each ∈ {-2, -1, 0, +1, +2}. Most should be ±1.
+- timeoutSeconds: integer from 8 to 60 only (not seconds-per-line totals).
+- choice "consequence": optional, ≤160 characters each if present.
 - imagePrompt: ≤220 chars. Setting + character action + mood + composition. NEVER style words (no "comic", "cel-shaded", "illustration") — the renderer prepends those.
 - DO NOT resolve the run in dialogue. The player chooses when to end. Each scene leaves a hook.
 

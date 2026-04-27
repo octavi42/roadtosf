@@ -425,8 +425,11 @@ export default function HomePage() {
       });
   }, [intro.startupDescription, intro.selfDescription, factsExtracted]);
 
-  // Episode 0 generation: fire when entering authored scene 5 (the last
-  // authored). Sonnet runs in the background while the player reads / types.
+  // Episode 0 generation: fire from the second-to-last authored scene onward
+  // (same overlap idea as episode regen). Sonnet/Haiku runs while the player
+  // finishes the last authored beats. One fewer authored choice is in
+  // recentChoices until the player reaches the final authored scene — usually
+  // minor vs the latency win.
   // Gated on extraction having resolved — otherwise Sonnet receives an
   // undefined team and falls back to inventing a cofounder (the Maya bleed).
   // Safety bypass: if the player jumped straight here via the dev panel and
@@ -434,7 +437,7 @@ export default function HomePage() {
   // arc-gen anyway so the run isn't soft-locked.
   useEffect(() => {
     if (phase !== "scene") return;
-    if (sceneIndex !== AUTHORED_SCENE_COUNT - 1) return;
+    if (sceneIndex < AUTHORED_SCENE_COUNT - 2) return;
     if (arc?.arcSkeleton?.episodeIndex === 0) return;
     if (arcGenFiredRef.current.has(0)) return;
     const noPitchSubmitted = !intro.startupDescription?.trim();
@@ -1110,6 +1113,7 @@ export default function HomePage() {
           placeholder={currentScene.textInput.placeholder}
           onSubmit={handleSceneTextSubmit}
           disabled={choiceMade !== null}
+          maxLength={600}
         />
       );
     } else if (currentScene.ctaLabel) {

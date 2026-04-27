@@ -3,11 +3,14 @@ import { z } from 'zod'
 const ARCHETYPE_VALUES = ['vc', 'cofounder', 'reporter', 'hater', 'mentor'] as const
 const SPEAKER_VALUES = [...ARCHETYPE_VALUES, 'player', 'narrator'] as const
 
+/** Per-line cap in schema / coercion (prompt asks for shorter lines; model often exceeds). */
+export const MAX_DIALOGUE_LINE_CHARS = 320
+
 const dialogueLineSchema = z.object({
   speaker: z.enum(SPEAKER_VALUES),
   // text can be empty for "(silent reaction)" beats from player/narrator;
   // sanitizeScene strips them before rendering.
-  text: z.string().max(320),
+  text: z.string().max(MAX_DIALOGUE_LINE_CHARS),
 })
 
 const allowedDeltas = [-2, -1, 0, 1, 2] as const
@@ -56,6 +59,98 @@ export function clampDelta(n: number): number {
   if (n > 2) return 2
   if (n < -2) return -2
   return Math.round(n)
+}
+
+const MAX_CHOICE_CONSEQUENCE = 160
+const MAX_IMAGE_PROMPT = 500
+const MAX_TITLE = 120
+const TIMEOUT_MIN = 8
+const TIMEOUT_MAX = 60
+
+function dialogueCharTotal(lines: Array<Record<string, unknown>>): number {
+  return lines.reduce((acc, d) => {
+    const t = d.text
+    return acc + (typeof t === 'string' ? t.length : 0)
+  }, 0)
+}
+
+/** Shrink dialogue so total chars ≤ budget without dropping lines (trim from the end of lines). */
+function fitDialogueToBudget(
+  dialogue: Array<Record<string, unknown>>,
+  budget: number,
+  lineCap: number,
+): Array<Record<string, unknown>> {
+  const lines = dialogue.map((d) => {
+    const text = typeof d.text === 'string' ? d.text : ''
+    return { ...d, text: text.slice(0, lineCap) }
+  })
+  let total = dialogueCharTotal(lines)
+  let i = lines.length - 1
+  while (total > budget && i >= 0) {
+    const over = total - budget
+    const t = typeof lines[i].text === 'string' ? lines[i].text : ''
+    if (t.length <= 1) {
+      i--
+      continue
+    }
+    const cut = Math.min(over, t.length - 1)
+    lines[i] = { ...lines[i], text: t.slice(0, t.length - cut) }
+    total -= cut
+  }
+  return lines
+}
+
+/**
+ * Normalizes common LLM overshoots so Zod validation succeeds. Keeps gameplay on the LLM path
+ * instead of falling back when the model is slightly over TTS / field limits.
+ */
+export function coerceRawSceneJson(data: unknown): unknown {
+  if (!data || typeof data !== 'object') return data
+  const o = data as Record<string, unknown>
+  const out: Record<string, unknown> = { ...o }
+
+  if (typeof out.timeoutSeconds === 'number' && Number.isFinite(out.timeoutSeconds)) {
+    const n = Math.round(out.timeoutSeconds)
+    out.timeoutSeconds = Math.min(TIMEOUT_MAX, Math.max(TIMEOUT_MIN, n))
+  } else if (typeof out.timeoutSeconds === 'string') {
+    const n = parseInt(out.timeoutSeconds, 10)
+    if (!Number.isNaN(n)) {
+      out.timeoutSeconds = Math.min(TIMEOUT_MAX, Math.max(TIMEOUT_MIN, n))
+    }
+  }
+
+  if (typeof out.title === 'string' && out.title.length > MAX_TITLE) {
+    out.title = out.title.slice(0, MAX_TITLE).trimEnd()
+  }
+
+  if (typeof out.imagePrompt === 'string' && out.imagePrompt.length > MAX_IMAGE_PROMPT) {
+    out.imagePrompt = out.imagePrompt.slice(0, MAX_IMAGE_PROMPT).trimEnd()
+  }
+
+  if (Array.isArray(out.choices)) {
+    out.choices = out.choices.map((c) => {
+      if (!c || typeof c !== 'object') return c
+      const ch = { ...(c as Record<string, unknown>) }
+      if (typeof ch.label === 'string') {
+        const words = ch.label.split(/\s+/).filter(Boolean)
+        if (words.length > 8) ch.label = words.slice(0, 8).join(' ')
+      }
+      if (typeof ch.consequence === 'string' && ch.consequence.length > MAX_CHOICE_CONSEQUENCE) {
+        ch.consequence = ch.consequence.slice(0, MAX_CHOICE_CONSEQUENCE).trimEnd()
+      }
+      return ch
+    })
+  }
+
+  if (Array.isArray(out.dialogue)) {
+    out.dialogue = fitDialogueToBudget(
+      out.dialogue.filter((d) => d && typeof d === 'object') as Array<Record<string, unknown>>,
+      MAX_DIALOGUE_CHARS_PER_SCENE,
+      MAX_DIALOGUE_LINE_CHARS,
+    )
+  }
+
+  return out
 }
 
 export function sanitizeScene(s: ParsedScene): ParsedScene {
