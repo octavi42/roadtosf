@@ -1,7 +1,7 @@
 // Hardcoded onboarding-as-narrative scenes. Pre-paywall (1–3) is a FaceTime
-// from a friend already in SF. Post-paywall (4–5) is the cofounder waiting
-// when you land. Single source of truth for both the page renderer and the
-// dev panel transcript viewer.
+// from a friend already in SF. Post-paywall (4) is a single Q&A car-ride
+// scene with Jordan that captures the structured facts the LLM needs:
+// team, funding model, and current concern.
 
 export interface DialogueLine {
   speaker?: string;
@@ -18,9 +18,18 @@ export interface Choice {
 export type IntroExtractField =
   | "startupDescription"
   | "selfDescription"
-  | "stage";
+  | "stage"
+  | "team"
+  | "fundingModel"
+  | "concern";
 
 export interface TextInputConfig {
+  placeholder: string;
+  extractAs: IntroExtractField;
+}
+
+export interface QuestionStep {
+  prompt: DialogueLine; // the in-character question text
   placeholder: string;
   extractAs: IntroExtractField;
 }
@@ -32,6 +41,9 @@ export interface SceneData {
   dialogue: DialogueLine[];
   choices?: Choice[];
   textInput?: TextInputConfig;
+  // Multi-step Q&A: scene plays its `dialogue` once, then walks through these
+  // questions sequentially in the same scene before advancing.
+  questions?: QuestionStep[];
   // When the scene has no choices and no textInput, render a single CTA
   // button that advances the scene. Used for cinematic-pivot beats like
   // scene 3 (the dare → paywall).
@@ -126,61 +138,47 @@ export const SCENES: SceneData[] = [
     ctaLabel: "Book the flight →",
   },
   // -------- Paywall fires here: boarding pass to SFO --------
-  // -------- Post-paywall: arrived in SF, the co-founder is waiting --------
+  // -------- Post-paywall: Jordan picks you up at SFO; the car-ride Q&A --------
   {
     id: 4,
-    title: "Scene 4 · Baggage Claim",
+    title: "Scene 4 · The Car Ride",
     background: SF_BACKGROUND,
     dialogue: [
-      { text: "The carousel stops. Yours wasn't on it." },
       {
-        speaker: "Maya · Co-founder",
-        text: "sorry got held up at the place. just take an uber. key's under the mat",
-      },
-      { text: "No apology. No call. The phone goes dark in your hand." },
-    ],
-    choices: [
-      {
-        id: "a",
-        label: "Let it slide. They're stressed.",
-        hype: 0,
-        integrity: 1,
+        speaker: "Jordan · Friend, SF",
+        text: "Throw your bag in the back. We're driving over the bridge.",
       },
       {
-        id: "b",
-        label: "Send something sharp.",
-        hype: 1,
-        integrity: -1,
-      },
-      {
-        id: "c",
-        label: "Call. Talk like adults.",
-        hype: 0,
-        integrity: 0,
+        speaker: "Jordan · Friend, SF",
+        text: "Honest answers, no pitch deck. I'm getting you up to speed before anyone else asks.",
       },
     ],
-  },
-  {
-    id: 5,
-    title: "Scene 5 · The Spreadsheet",
-    background: HOME_BACKGROUND,
-    dialogue: [
+    questions: [
       {
-        speaker: "Maya · Co-founder",
-        text: "Sit down. Open this.",
+        prompt: {
+          speaker: "Jordan · Friend, SF",
+          text: "Who's with you on this? Cofounder, team, or solo?",
+        },
+        placeholder:
+          "e.g. solo, or 'my cofounder Anna, ex-Stripe engineer'…",
+        extractAs: "team",
       },
       {
-        speaker: "Maya · Co-founder",
-        text: "We don't do the pitch-deck version anymore. Where are we, actually?",
+        prompt: {
+          speaker: "Jordan · Friend, SF",
+          text: "Money. Raising, bootstrapping, paying yourself? How much runway?",
+        },
+        placeholder: "e.g. pre-seed, 4 months runway, no revenue yet…",
+        extractAs: "fundingModel",
       },
       {
-        speaker: "Maya · Co-founder",
-        text: "Stage. Runway. What's broken. Be honest.",
+        prompt: {
+          speaker: "Jordan · Friend, SF",
+          text: "Last one. What's actually broken right now?",
+        },
+        placeholder: "What keeps you up at night?",
+        extractAs: "concern",
       },
     ],
-    textInput: {
-      placeholder: "Stage, runway, what's broken…",
-      extractAs: "stage",
-    },
   },
 ];

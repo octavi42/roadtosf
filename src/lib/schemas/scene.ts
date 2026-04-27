@@ -5,7 +5,9 @@ const SPEAKER_VALUES = [...ARCHETYPE_VALUES, 'player', 'narrator'] as const
 
 const dialogueLineSchema = z.object({
   speaker: z.enum(SPEAKER_VALUES),
-  text: z.string().min(1).max(160),
+  // text can be empty for "(silent reaction)" beats from player/narrator;
+  // sanitizeScene strips them before rendering.
+  text: z.string().max(320),
 })
 
 const allowedDeltas = [-2, -1, 0, 1, 2] as const
@@ -24,18 +26,22 @@ const choiceSchema = z.object({
   }),
 })
 
-// Total dialogue char budget per scene — caps TTS cost (BUSINESS.md lever #1).
-export const MAX_DIALOGUE_CHARS_PER_SCENE = 350
+// Total dialogue char budget per scene. BUSINESS.md target was 350 (TTS lever
+// #1) but Sonnet/Haiku naturally write 400-500 char scenes for comic pacing.
+// Setting at 600 — ~70% over the BUSINESS.md target — to keep generation
+// reliable. Phase 2 (credit-aware UI) is the right place to push this back
+// down by making the cost surface to the player.
+export const MAX_DIALOGUE_CHARS_PER_SCENE = 600
 
 export const sceneSchema = z
   .object({
-    id: z.number().int().min(1).max(20),
-    title: z.string().min(1).max(80),
+    id: z.number().int().min(1).max(50),
+    title: z.string().min(1).max(120),
     archetype: z.enum(ARCHETYPE_VALUES),
-    imagePrompt: z.string().min(10).max(220),
-    dialogue: z.array(dialogueLineSchema).min(2).max(4),
+    imagePrompt: z.string().min(10).max(500),
+    dialogue: z.array(dialogueLineSchema).min(2).max(6),
     choices: z.array(choiceSchema).min(2).max(3),
-    timeoutSeconds: z.number().int().min(8).max(30).default(15),
+    timeoutSeconds: z.number().int().min(8).max(60).default(15),
     timeoutChoiceId: z.string().min(1).max(2),
   })
   .refine(
@@ -53,8 +59,12 @@ export function clampDelta(n: number): number {
 }
 
 export function sanitizeScene(s: ParsedScene): ParsedScene {
+  // Strip empty-text dialogue lines (LLM sometimes uses them for "silent
+  // beats"; the renderer can't display them as voiced lines).
+  const dialogue = s.dialogue.filter((d) => d.text.trim().length > 0)
   return {
     ...s,
+    dialogue: dialogue.length > 0 ? dialogue : s.dialogue, // never strip everything
     choices: s.choices.map((c) => ({
       ...c,
       hype: clampDelta(c.hype),

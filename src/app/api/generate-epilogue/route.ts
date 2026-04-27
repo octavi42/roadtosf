@@ -6,6 +6,9 @@ type Body = {
   startupName?: unknown
   endingKey?: unknown
   flavorTags?: unknown
+  team?: unknown
+  fundingModel?: unknown
+  concern?: unknown
   choiceHistory?: unknown
 }
 
@@ -37,7 +40,14 @@ function asChoiceHistory(v: unknown): ChoiceRecord[] {
   })
 }
 
-const SYSTEM = `You are writing the closing epilogue for "Road to SF", a satirical comic-book founder game. Output one paragraph (~80 words, max 600 chars) that names specific choices the player made AND specific SF places/people referenced. Tone: present-tense, biting, like a Bloomberg lede, with a comic punchline at the end. Output a single JSON object: {"epilogue": "..."} — no prose, no fences. Do NOT name real people; use archetypes.`
+const SYSTEM = `You are writing the closing epilogue for "Road to SF", a satirical comic-book founder game.
+
+HARD RULES:
+- Output a single JSON object only. No prose before or after, no fences. Shape: {"epilogue": "..."}
+- One paragraph, ~80 words, max 600 chars.
+- Tone: present-tense, biting, Bloomberg lede with a comic punchline at the end.
+- HONOR PLAYER FACTS: if Team says "solo", do NOT invent a cofounder character (no Maya, no Anna, no anyone). If Team names a person, use that name verbatim. If Funding says "bootstrapping", do NOT mention VCs or term sheets that didn't happen.
+- Do NOT name real people; archetype them.`
 
 function parseFromRaw(raw: string) {
   return epilogueSchema.parse(extractJsonObject(raw))
@@ -54,6 +64,9 @@ export async function POST(request: Request) {
   const startupName = asString(body.startupName, 'the startup')
   const endingKey = asString(body.endingKey, 'ghosted')
   const flavorTags = asStringArray(body.flavorTags)
+  const team = asString(body.team, '')
+  const fundingModel = asString(body.fundingModel, '')
+  const concern = asString(body.concern, '')
   const history = asChoiceHistory(body.choiceHistory)
 
   const formatted = history.length
@@ -63,6 +76,11 @@ export async function POST(request: Request) {
   const user = `Startup: ${startupName}
 Ending: ${endingKey}
 Flavor tags: ${flavorTags.join(', ') || '(none)'}
+
+PLAYER FACTS (HONOR THESE):
+Team: ${team || '(unstated; treat as solo, do NOT invent a cofounder)'}
+Funding: ${fundingModel || '(unstated; do NOT assume a fundraising track)'}
+Current concern: ${concern || '(unstated)'}
 
 Choices made (in order):
 ${formatted}
