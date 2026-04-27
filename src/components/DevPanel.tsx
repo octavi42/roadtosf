@@ -74,6 +74,7 @@ export default function DevPanel() {
   const setPlaythroughId = useSessionStore((s) => s.setPlaythroughId);
   const captureIntro = useSessionStore((s) => s.captureIntro);
   const reset = useSessionStore((s) => s.reset);
+  const wipeAll = useSessionStore((s) => s.wipeAll);
   const paywallOpen = useSessionStore((s) => s.paywallOpen);
   const devGrantCredits = useSessionStore((s) => s.devGrantCredits);
   const paywallSatisfied = useSessionStore((s) => s.paywallSatisfied);
@@ -149,7 +150,9 @@ export default function DevPanel() {
   const wipeSession = () => {
     window.localStorage.removeItem(DEV_OVERRIDE_KEY);
     window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
-    reset();
+    // wipeAll, not reset, because this is the "fully fresh anon" button —
+    // it nukes credits + session email too. reset preserves those.
+    wipeAll();
     setTick((t) => t + 1);
   };
 

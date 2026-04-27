@@ -162,7 +162,19 @@ interface SessionState {
     timedOut?: boolean,
   ) => void;
   advanceScene: () => void;
+  /**
+   * Resets the in-progress playthrough so a fresh run can start, but
+   * deliberately preserves identity + payment state (paid, creditsRemaining,
+   * sessionEmail, paywallOpen). Used by the end-of-game "play again" CTA
+   * and the dev SKIP ONBOARDING shortcut — both expect credits to carry
+   * over to the new run.
+   */
   reset: () => void;
+  /**
+   * Total wipe — playthrough, identity, payment. The dev WIPE SESSION
+   * button. Should not be wired into normal user flows.
+   */
+  wipeAll: () => void;
 }
 
 const INITIAL_INTRO: IntroData = {
@@ -524,8 +536,24 @@ export const useSessionStore = create<SessionState>()(
           stats: { hype: 0, integrity: 0 },
           ending: undefined,
           playthroughId: undefined,
+          shareMomentFiredInEpisode: null,
+          // paid, creditsRemaining, sessionEmail, paywallOpen preserved
+          // — those belong to the player, not the run.
+        }),
+
+      wipeAll: () =>
+        set({
+          phase: "welcome",
+          intro: INITIAL_INTRO,
+          arc: undefined,
+          progress: INITIAL_PROGRESS,
+          history: [],
+          stats: { hype: 0, integrity: 0 },
+          ending: undefined,
+          playthroughId: undefined,
           paid: false,
           creditsRemaining: 0,
+          sessionEmail: null,
           paywallOpen: false,
           shareMomentFiredInEpisode: null,
         }),
