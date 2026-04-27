@@ -19,13 +19,13 @@ function client(): Anthropic {
 
 export interface CachedBlock {
   text: string
-  cache?: boolean // if true, mark this block with cache_control: ephemeral
+  cache?: boolean
 }
 
 export interface CompleteJsonOptions {
   model: string
-  systemBlocks: CachedBlock[] // turn into Anthropic system parameter (text blocks)
-  userBlocks: CachedBlock[] // turn into a single user message with text blocks
+  systemBlocks: CachedBlock[]
+  userBlocks: CachedBlock[]
   maxTokens?: number
   temperature?: number
 }
@@ -54,15 +54,13 @@ export async function completeJson<T>(
       system: toContentBlocks(systemBlocks),
       messages: [
         { role: 'user', content: toContentBlocks(userBlocks) },
-        { role: 'assistant', content: '{' },
       ],
     })
     const block = response.content.find((b) => b.type === 'text')
     if (!block || block.type !== 'text') {
       throw new Error('No text block in Anthropic response')
     }
-    const raw = '{' + block.text
-    return parse(raw)
+    return parse(block.text)
   }
 
   try {
@@ -73,9 +71,24 @@ export async function completeJson<T>(
   }
 }
 
+// Tolerant JSON extraction:
+// - Strips an optional ```json or ``` fence
+// - Tolerates JS-style leading + on positive numbers ("integrity": +1) which
+//   Haiku 4.5 emits sometimes. Strict JSON forbids this; we patch before parse.
+// - Tolerates trailing commas (also produced occasionally).
 export function extractJsonObject(raw: string): unknown {
-  const start = raw.indexOf('{')
-  const end = raw.lastIndexOf('}')
+  let s = raw.trim()
+  // Strip code fences if present
+  if (s.startsWith('```')) {
+    s = s.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '')
+  }
+  const start = s.indexOf('{')
+  const end = s.lastIndexOf('}')
   if (start < 0 || end < start) throw new Error('No JSON object in response')
-  return JSON.parse(raw.slice(start, end + 1))
+  let json = s.slice(start, end + 1)
+  // +1 / +2 → 1 / 2 only when preceded by `:` (i.e., a number value)
+  json = json.replace(/:(\s*)\+(\d)/g, ':$1$2')
+  // Trailing commas before } or ]
+  json = json.replace(/,(\s*[}\]])/g, '$1')
+  return JSON.parse(json)
 }

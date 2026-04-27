@@ -11,20 +11,18 @@ export type Phase =
   | "ending";
 
 /**
- * Paywall fires when this scene index has just been completed
- * (i.e. the wall sits between scene N+1 and scene N+2 in player-facing terms).
- * Single source of truth — move this to shift the wall.
+ * Paywall fires when this scene index has just been completed.
  */
 export const PAYWALL_AFTER_SCENE_INDEX = 2;
 
 /**
  * Authored scenes (src/lib/scenes.ts) cover indices 0..AUTHORED_SCENE_COUNT-1.
- * After that the LLM tail takes over and runs for LLM_SCENE_COUNT scenes.
- * Total playthrough = AUTHORED + LLM scenes.
+ * After that, the LLM tail runs *unbounded* — generated 5 scenes at a time
+ * (one episode), regenerating a new skeleton when an episode finishes.
+ * The run only ends when the player picks "End my run" or via reset.
  */
-export const AUTHORED_SCENE_COUNT = 5;
-export const LLM_SCENE_COUNT = 5;
-export const TOTAL_SCENE_COUNT = AUTHORED_SCENE_COUNT + LLM_SCENE_COUNT;
+export const AUTHORED_SCENE_COUNT = 4;
+export const EPISODE_LENGTH = 5;
 
 export interface IntroData {
   transcript: string;
@@ -32,6 +30,9 @@ export interface IntroData {
   startupDescription?: string;
   selfDescription?: string;
   stage?: string;
+  team?: string; // captured in scene 4 Q&A: solo / cofounder name(s) / team
+  fundingModel?: string; // captured in scene 4 Q&A: raising / bootstrapping / runway
+  concern?: string; // captured in scene 4 Q&A: what's broken right now
   flavorTags: string[];
 }
 
@@ -85,6 +86,7 @@ interface SessionState {
   setEpilogue: (epilogue: string) => void;
   enterGeneratingArc: () => void;
   exitGeneratingArc: () => void;
+  endRun: () => void;
   devSetPhase: (phase: Phase, sceneIndex?: number) => void;
   advanceLine: (totalLines: number) => void;
   chooseOption: (
@@ -94,7 +96,7 @@ interface SessionState {
     integrityDelta: number,
     timedOut?: boolean,
   ) => void;
-  advanceScene: (totalScenes: number) => void;
+  advanceScene: () => void;
   reset: () => void;
 }
 
@@ -179,6 +181,9 @@ export const useSessionStore = create<SessionState>()(
 
       arcSkeletonReady: (skeleton) =>
         set((state) => {
+          // Episode 0+: replace current skeleton; episodes 1+ also update the
+          // rolling storySoFar that the next scene calls will reference.
+          const nextStorySoFar = skeleton.storySoFar ?? state.arc?.storySoFar;
           if (!state.arc) {
             return {
               arc: {
@@ -188,6 +193,7 @@ export const useSessionStore = create<SessionState>()(
                 flavorTags: state.intro.flavorTags,
                 arcSkeleton: skeleton,
                 scenes: [],
+                storySoFar: nextStorySoFar,
                 stats: {
                   firedCofounder: false,
                   tookVCMoney: false,
@@ -197,7 +203,13 @@ export const useSessionStore = create<SessionState>()(
               },
             };
           }
-          return { arc: { ...state.arc, arcSkeleton: skeleton } };
+          return {
+            arc: {
+              ...state.arc,
+              arcSkeleton: skeleton,
+              storySoFar: nextStorySoFar,
+            },
+          };
         }),
 
       dynamicSceneReady: (llmIndex, scene) =>
@@ -235,16 +247,33 @@ export const useSessionStore = create<SessionState>()(
       exitGeneratingArc: () =>
         set((state) => {
           if (state.phase !== "generating-arc") return state;
+          // First exit lands at the start of the *current* episode's first
+          // scene. For episode 0 that's authored-scene-count; for later
+          // episodes the player is already past it, so we stay where we are.
+          const llmCount = state.arc?.scenes.length ?? 0;
+          const targetIndex =
+            llmCount === 0
+              ? AUTHORED_SCENE_COUNT
+              : state.progress.sceneIndex;
           return {
             phase: "scene",
             progress: {
-              sceneIndex: AUTHORED_SCENE_COUNT,
+              sceneIndex: targetIndex,
               currentLineIndex: 0,
               showChoices: false,
               choiceMade: null,
             },
           };
         }),
+
+      endRun: () =>
+        set((state) => ({
+          phase: "ending",
+          ending: {
+            key: classifyEnding(state.stats.hype, state.stats.integrity),
+            achievementsUnlocked: state.ending?.achievementsUnlocked ?? [],
+          },
+        })),
 
       advanceLine: (totalLines) =>
         set((state) => {
@@ -286,19 +315,11 @@ export const useSessionStore = create<SessionState>()(
           };
         }),
 
-      advanceScene: (totalScenes) =>
+      advanceScene: () =>
         set((state) => {
           if (state.phase !== "scene") return state;
-          const nextIndex = state.progress.sceneIndex + 1;
-          if (nextIndex >= totalScenes) {
-            return {
-              phase: "ending",
-              ending: {
-                key: classifyEnding(state.stats.hype, state.stats.integrity),
-                achievementsUnlocked: [],
-              },
-            };
-          }
+          const currentIndex = state.progress.sceneIndex;
+          const nextIndex = currentIndex + 1;
           const nextProgress = {
             sceneIndex: nextIndex,
             currentLineIndex: 0,
@@ -306,14 +327,11 @@ export const useSessionStore = create<SessionState>()(
             choiceMade: null,
           };
           // Paywall after the configured authored scene
-          if (
-            state.progress.sceneIndex === PAYWALL_AFTER_SCENE_INDEX &&
-            !state.paid
-          ) {
+          if (currentIndex === PAYWALL_AFTER_SCENE_INDEX && !state.paid) {
             return { phase: "paywall", progress: nextProgress };
           }
           // After the last authored scene, hand off to LLM via generating-arc
-          if (state.progress.sceneIndex === AUTHORED_SCENE_COUNT - 1) {
+          if (currentIndex === AUTHORED_SCENE_COUNT - 1) {
             return { phase: "generating-arc", progress: nextProgress };
           }
           return { progress: nextProgress };

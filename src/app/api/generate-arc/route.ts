@@ -5,11 +5,18 @@ import { buildArcPromptParts, type PriorChoiceSummary } from '@/lib/prompts/arc'
 import fallbackArc from '@/lib/fallback/arc.json'
 
 type Body = {
+  episodeIndex?: unknown
+  priorStorySoFar?: unknown
   startupName?: unknown
   startupDescription?: unknown
   founderPersona?: unknown
   stage?: unknown
+  team?: unknown
+  fundingModel?: unknown
+  concern?: unknown
   flavorTags?: unknown
+  recentChoices?: unknown
+  // Back-compat alias used by an earlier client; treated the same as recentChoices.
   priorChoices?: unknown
   currentStats?: unknown
   seed?: unknown
@@ -50,7 +57,23 @@ function todayISO(): string {
 }
 
 function parseFromRaw(raw: string): ParsedArcSkeleton {
-  return arcSkeletonSchema.parse(extractJsonObject(raw))
+  let json: unknown
+  try {
+    json = extractJsonObject(raw)
+  } catch (e) {
+    console.warn('[generate-arc] JSON extraction failed. raw:', raw.slice(0, 800))
+    throw e
+  }
+  const result = arcSkeletonSchema.safeParse(json)
+  if (!result.success) {
+    console.warn(
+      '[generate-arc] Zod validation failed. issues:',
+      JSON.stringify(result.error.issues, null, 2),
+    )
+    console.warn('[generate-arc] payload was:', JSON.stringify(json).slice(0, 800))
+    throw result.error
+  }
+  return result.data
 }
 
 export async function POST(request: Request) {
@@ -61,13 +84,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'invalid json body' }, { status: 400 })
   }
 
+  const episodeIndex = asInt(body.episodeIndex, 0)
+  const priorStorySoFar = asString(body.priorStorySoFar, '') || undefined
+  const recentChoices = asPriorChoices(body.recentChoices ?? body.priorChoices)
+
   const promptInput = {
+    episodeIndex,
+    priorStorySoFar,
     startupName: asString(body.startupName, 'the startup'),
     startupDescription: asString(body.startupDescription, ''),
     founderPersona: asString(body.founderPersona, ''),
     stage: asString(body.stage, '') || undefined,
+    team: asString(body.team, '') || undefined,
+    fundingModel: asString(body.fundingModel, '') || undefined,
+    concern: asString(body.concern, '') || undefined,
     flavorTags: asStringArray(body.flavorTags),
-    priorChoices: asPriorChoices(body.priorChoices),
+    recentChoices,
     currentStats: {
       hype: asInt((body.currentStats as Record<string, unknown> | undefined)?.hype, 0),
       integrity: asInt(
@@ -84,13 +116,17 @@ export async function POST(request: Request) {
   try {
     if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY missing')
     const skeleton = await completeJson(
-      { model: MODELS.arc, systemBlocks, userBlocks, maxTokens: 1200, temperature: 0.85 },
+      { model: MODELS.arc, systemBlocks, userBlocks, maxTokens: 1500, temperature: 0.85 },
       parseFromRaw,
     )
-    return NextResponse.json({ skeleton, source: 'llm' as const })
+    // The model may omit episodeIndex; backfill from request so the client can trust it.
+    return NextResponse.json({
+      skeleton: { ...skeleton, episodeIndex: skeleton.episodeIndex ?? episodeIndex },
+      source: 'llm' as const,
+    })
   } catch (err) {
     console.warn('generate-arc: LLM path failed, returning fallback', err)
-    const parsed = arcSkeletonSchema.parse(fallbackArc)
+    const parsed = arcSkeletonSchema.parse({ ...fallbackArc, episodeIndex })
     return NextResponse.json({ skeleton: parsed, source: 'fallback' as const })
   }
 }
