@@ -10,6 +10,7 @@ import DialogueSubtitle from "@/components/DialogueSubtitle";
 import DialogueSpeaker from "@/components/DialogueSpeaker";
 import PaywallPanel from "@/components/PaywallPanel";
 import LoginModal from "@/components/LoginModal";
+import { ShareNotification } from "@/components/ShareNotification";
 import {
   useSessionStore,
   AUTHORED_SCENE_COUNT,
@@ -88,6 +89,9 @@ interface UnifiedScene {
   // LLM scenes don't set it.
   ctaLabel?: string;
   isLLM: boolean;
+  // LLM-only — emitted when the scene contains a shareable beat. Frequency
+  // is capped client-side; see shareMomentFiredInEpisode in session.ts.
+  shareMoment?: { title: string; blurb: string };
 }
 
 function formatArchetypeSpeaker(speaker: string): string {
@@ -114,6 +118,7 @@ function adaptLLMScene(scene: LLMScene): UnifiedScene {
       integrity: c.integrity,
     })),
     isLLM: true,
+    shareMoment: scene.shareMoment,
   };
 }
 
@@ -226,6 +231,10 @@ export default function HomePage() {
   const intro = useSessionStore(useShallow((s) => s.intro));
   const arc = useSessionStore((s) => s.arc);
   const history = useSessionStore((s) => s.history);
+  const shareMomentFiredInEpisode = useSessionStore(
+    (s) => s.shareMomentFiredInEpisode,
+  );
+  const markShareMomentFired = useSessionStore((s) => s.markShareMomentFired);
   const startupName = intro.startupName;
 
   const {
@@ -333,6 +342,48 @@ export default function HomePage() {
     return adaptLLMScene(s);
   })();
   const currentLine = currentScene?.dialogue[currentLineIndex] ?? null;
+
+  // Share-moment trigger: an LLM scene may carry a `shareMoment` payload, but
+  // only one fires per episode. The fired-flag is keyed by sceneIndex so the
+  // overlay reappears if the player navigates back to it within the episode,
+  // and stays suppressed once another scene in the episode has already shown
+  // its own moment. New episodes reset the flag in arcSkeletonReady.
+  const shareMomentVisible =
+    phase === "scene" &&
+    !!currentScene?.shareMoment &&
+    (shareMomentFiredInEpisode === null ||
+      shareMomentFiredInEpisode === sceneIndex);
+
+  useEffect(() => {
+    if (
+      shareMomentVisible &&
+      currentScene?.shareMoment &&
+      shareMomentFiredInEpisode !== sceneIndex
+    ) {
+      // Mark fired the first time this scene's overlay actually shows. This
+      // burns the per-episode budget so later scenes won't trigger their own.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      markShareMomentFired(sceneIndex);
+    }
+  }, [
+    shareMomentVisible,
+    currentScene?.shareMoment,
+    shareMomentFiredInEpisode,
+    sceneIndex,
+    markShareMomentFired,
+  ]);
+
+  const handleShareMomentShare = useCallback(() => {
+    const sm = currentScene?.shareMoment;
+    if (!sm) return;
+    const playUrl =
+      typeof window !== "undefined" ? window.location.origin : "";
+    const text = `${sm.title} — ${sm.blurb}`;
+    const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}${playUrl ? `&url=${encodeURIComponent(playUrl)}` : ""}`;
+    if (typeof window !== "undefined") {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+  }, [currentScene?.shareMoment]);
 
   const choiceShownAtRef = useRef<number | null>(null);
   useEffect(() => {
@@ -1404,6 +1455,13 @@ export default function HomePage() {
       >
         {centerContent}
       </GameShell>
+
+      <ShareNotification
+        visible={shareMomentVisible}
+        title={currentScene?.shareMoment?.title ?? ""}
+        blurb={currentScene?.shareMoment?.blurb ?? ""}
+        onShare={handleShareMomentShare}
+      />
     </>
   );
 }

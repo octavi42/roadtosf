@@ -41,6 +41,11 @@ const choiceSchema = z.object({
 // down by making the cost surface to the player.
 export const MAX_DIALOGUE_CHARS_PER_SCENE = 600
 
+const shareMomentSchema = z.object({
+  title: z.string().min(1).max(60),
+  blurb: z.string().min(1).max(180),
+})
+
 export const sceneSchema = z
   .object({
     id: z.number().int().min(1).max(50),
@@ -51,6 +56,10 @@ export const sceneSchema = z
     choices: z.array(choiceSchema).min(2).max(3),
     timeoutSeconds: z.number().int().min(8).max(60).default(15),
     timeoutChoiceId: z.string().min(1).max(2),
+    // Optional: emitted only when the scene contains a genuinely shareable
+    // beat (cameo, contrarian choice, stat reversal). Frequency cap is
+    // enforced client-side, not in the schema.
+    shareMoment: shareMomentSchema.optional(),
   })
   .refine(
     (s) => s.dialogue.reduce((acc, l) => acc + l.text.length, 0) <= MAX_DIALOGUE_CHARS_PER_SCENE,
@@ -180,6 +189,29 @@ export function coerceRawSceneJson(data: unknown, opts?: CoerceSceneOptions): un
       }
       return ch
     })
+  }
+
+  // shareMoment: drop the field if malformed rather than failing the whole
+  // scene. A bad share blurb is much worse than no share moment.
+  if (out.shareMoment !== undefined) {
+    const sm = out.shareMoment
+    const valid =
+      sm &&
+      typeof sm === 'object' &&
+      typeof (sm as Record<string, unknown>).title === 'string' &&
+      typeof (sm as Record<string, unknown>).blurb === 'string' &&
+      ((sm as Record<string, unknown>).title as string).trim().length > 0 &&
+      ((sm as Record<string, unknown>).blurb as string).trim().length > 0
+    if (valid) {
+      const t = ((sm as Record<string, unknown>).title as string).trim()
+      const b = ((sm as Record<string, unknown>).blurb as string).trim()
+      out.shareMoment = {
+        title: t.length > 60 ? t.slice(0, 60).trimEnd() : t,
+        blurb: b.length > 180 ? b.slice(0, 180).trimEnd() : b,
+      }
+    } else {
+      delete out.shareMoment
+    }
   }
 
   if (Array.isArray(out.dialogue)) {

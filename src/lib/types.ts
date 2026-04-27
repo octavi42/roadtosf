@@ -16,6 +16,11 @@ export interface Choice {
   integrity: number
 }
 
+export interface ShareMoment {
+  title: string
+  blurb: string
+}
+
 export interface Scene {
   id: number
   title: string
@@ -26,6 +31,9 @@ export interface Scene {
   choices: Choice[]
   timeoutSeconds: number
   timeoutChoiceId: string
+  // Optional: when present, the UI surfaces a "Share Moment" overlay at the
+  // start of this scene. Frequency is capped client-side (1 per episode).
+  shareMoment?: ShareMoment
 }
 
 // One row of an episode skeleton: gives each LLM scene a beat, archetype, and
