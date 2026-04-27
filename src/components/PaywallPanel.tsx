@@ -518,6 +518,23 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
           </p>
         )}
 
+        {process.env.NODE_ENV === "development" && (
+          <button
+            type="button"
+            onClick={onSatisfied}
+            className={[
+              "comic-outline comic-press w-full mb-3",
+              "rounded-xl py-2 text-[11px] font-bold uppercase tracking-[0.18em]",
+            ].join(" ")}
+            style={{
+              background: "var(--color-mustard)",
+              color: "var(--color-ink)",
+            }}
+          >
+            Dev · skip paywall
+          </button>
+        )}
+
         {returningUser ? (
           <ReturningUserPanel
             codeSent={codeSent}
