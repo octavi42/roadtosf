@@ -886,6 +886,29 @@ export default function HomePage() {
         />
       )}
 
+      {/*
+        Top-right "Past flights" pill — appears whenever a player is logged in,
+        EXCEPT on welcome (already linked there), paywall (don't interrupt
+        payment), and ending (its own CTA covers it). Sits above the
+        GameShell header so it overlays the cinematic without nudging layout.
+      */}
+      {sessionEmail &&
+        phase !== "welcome" &&
+        phase !== "paywall" &&
+        phase !== "ending" && (
+          <button
+            type="button"
+            onClick={() => router.push("/history")}
+            className="fixed top-5 right-6 z-30 comic-outline-sm font-sans font-semibold rounded-md px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] hover:no-underline"
+            style={{
+              background: "var(--color-fog)",
+              color: "var(--color-ink)",
+            }}
+          >
+            Past flights →
+          </button>
+        )}
+
       <GameShell
         backgroundSrc={
           phase === "welcome"

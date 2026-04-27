@@ -40,6 +40,24 @@ export async function POST(request: Request) {
       )
     }
 
+    // Dev-only: log the code so you can finish the OTP loop without
+    // depending on Resend (which only delivers to the account-owner email
+    // unless you've verified a domain). Production never hits this branch.
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[dev] OTP for ${email}: ${result.code}`)
+      try {
+        await sendOtpEmail(email, result.code)
+      } catch (err) {
+        // Resend rejection (e.g. unverified-recipient sandbox error) is
+        // non-fatal in dev — the code is in the server log already.
+        console.warn(
+          `[dev] sendOtpEmail failed (continuing — read code from log):`,
+          err instanceof Error ? err.message : err,
+        )
+      }
+      return NextResponse.json({ sent: true, devCode: result.code })
+    }
+
     await sendOtpEmail(email, result.code)
     return NextResponse.json({ sent: true })
   } catch (err) {

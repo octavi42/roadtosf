@@ -40,6 +40,22 @@ export async function POST(request: Request) {
       )
     }
 
+    // Dev-only: same bypass as /api/auth/send-code — log the code so the
+    // OTP loop can be exercised with arbitrary emails (Resend's sandbox
+    // only delivers to the account owner). Production never hits this.
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[dev] paywall OTP for ${email}: ${result.code}`)
+      try {
+        await sendOtpEmail(email, result.code)
+      } catch (err) {
+        console.warn(
+          `[dev] paywall sendOtpEmail failed (continuing — read code from log):`,
+          err instanceof Error ? err.message : err,
+        )
+      }
+      return NextResponse.json({ sent: true, devCode: result.code })
+    }
+
     await sendOtpEmail(email, result.code)
     return NextResponse.json({ sent: true })
   } catch (err) {
