@@ -10,6 +10,14 @@ import { arcSkeletonSchema } from '@/lib/schemas/arc'
 import { buildScenePromptParts, type PriorChoiceSummary } from '@/lib/prompts/scene'
 import type { Archetype } from '@/lib/types'
 import fallbackScenes from '@/lib/fallback/scenes.json'
+import { readAnonId } from '@/lib/anon-id'
+import { readSessionEmail } from '@/lib/auth'
+import {
+  debitCredit,
+  getBalance,
+  InsufficientCreditsError,
+  REASONS,
+} from '@/lib/credits'
 
 // Mirrors client-side constants in src/lib/session.ts.
 const AUTHORED_SCENE_COUNT = 8
@@ -35,6 +43,9 @@ type Body = {
   recentChoices?: unknown
   priorChoices?: unknown // back-compat alias
   currentStats?: unknown
+  // Optional: routed through to the credit_ledger row created on debit so
+  // we can answer "which playthrough burned this credit?" later.
+  playthroughId?: unknown
 }
 
 function asString(v: unknown, fallback = ''): string {
@@ -121,6 +132,65 @@ export async function POST(request: Request) {
 
   const sceneId = AUTHORED_SCENE_COUNT + llmIndex + 1
 
+  // 1 credit per LLM-generated group of SCENES_PER_GROUP sub-scenes. We
+  // debit on the leader (sub-scene 0); the other 3 sub-scenes ride free on
+  // the same credit. Doing this before the LLM call means a busted balance
+  // never spends Anthropic tokens. The 3 followers can still arrive at the
+  // server in parallel before the leader's debit fires — we accept that
+  // small ($0.30) leak because the client also pre-checks balance via
+  // /api/credits/balance, which makes the leak a rare race rather than the
+  // common path.
+  const playthroughId =
+    typeof body.playthroughId === 'string' ? body.playthroughId : null
+  let creditsRemaining: number | null = null
+  if (subSceneIndex === 0) {
+    const [anonId, email] = await Promise.all([
+      readAnonId(),
+      readSessionEmail(),
+    ])
+    try {
+      const debited = await debitCredit(
+        { anonId, email },
+        {
+          reason: REASONS.GROUP_DEBIT,
+          playthroughId,
+          episodeIndex,
+          groupIndex,
+          llmIndex,
+        },
+      )
+      creditsRemaining = debited.remaining
+    } catch (err) {
+      if (err instanceof InsufficientCreditsError) {
+        return NextResponse.json(
+          {
+            error: 'insufficient_credits',
+            paywall: true,
+            creditsRemaining: err.balance,
+          },
+          { status: 402 },
+        )
+      }
+      console.error('generate-scene: debit failed', err)
+      return NextResponse.json(
+        { error: 'credit debit failed' },
+        { status: 500 },
+      )
+    }
+  } else {
+    // For sub-scenes 1..3, surface the current balance so the client display
+    // stays in sync without a separate /api/credits/balance round-trip.
+    const [anonId, email] = await Promise.all([
+      readAnonId(),
+      readSessionEmail(),
+    ])
+    try {
+      creditsRemaining = await getBalance({ anonId, email })
+    } catch (err) {
+      console.error('generate-scene: getBalance failed (non-fatal)', err)
+    }
+  }
+
   const promptInput = {
     episodeIndex,
     llmIndexInEpisode,
@@ -157,7 +227,11 @@ export async function POST(request: Request) {
       { model: MODELS.scene, systemBlocks, userBlocks, maxTokens: 1000, temperature: 0.9 },
       (raw) => parseFromRaw(raw, outline.archetype),
     )
-    return NextResponse.json({ scene, source: 'llm' as const })
+    return NextResponse.json({
+      scene,
+      source: 'llm' as const,
+      creditsRemaining,
+    })
   } catch (err) {
     console.warn(`generate-scene index=${llmIndex}: LLM path failed, returning fallback`, err)
     // For fallback, modulo-cycle through the static bank if we've gone past 5
@@ -167,6 +241,10 @@ export async function POST(request: Request) {
     const parsed = sanitizeScene(sceneSchema.parse(fb))
     // Patch the id to match the requested global llmIndex so the renderer
     // doesn't show duplicate scene numbers across cycled fallbacks.
-    return NextResponse.json({ scene: { ...parsed, id: sceneId }, source: 'fallback' as const })
+    return NextResponse.json({
+      scene: { ...parsed, id: sceneId },
+      source: 'fallback' as const,
+      creditsRemaining,
+    })
   }
 }

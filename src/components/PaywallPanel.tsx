@@ -14,7 +14,7 @@ import { useSessionStore } from "@/lib/session";
 import { PACKS, formatUsd, type PackId } from "@/lib/packs";
 
 interface PaywallPanelProps {
-  onSatisfied: (playsGranted: number) => void;
+  onSatisfied: (creditsGranted: number) => void;
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -326,7 +326,7 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
       });
       const data = (await r.json()) as {
         paid?: boolean;
-        playsGranted?: number;
+        creditsGranted?: number;
         error?: string;
       };
       if (!r.ok || !data.paid) {
@@ -334,7 +334,7 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
         setSubmitting(false);
         return;
       }
-      onSatisfied(data.playsGranted ?? selectedPack.plays);
+      onSatisfied(data.creditsGranted ?? selectedPack.credits);
     } catch (err) {
       console.error("paywall verify failed", err);
       setError("Network error during verify.");
@@ -416,8 +416,8 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
         <div className="grid grid-cols-3 gap-3 mt-4 text-[10px] tracking-[0.18em] uppercase">
           <StubField label="Flight" value="RTSF · 001" />
           <StubField
-            label="Plays"
-            value={`${selectedPack.plays} runs`}
+            label="Credits"
+            value={`${selectedPack.credits} groups`}
           />
           <StubField
             label="Fare"
@@ -714,7 +714,7 @@ function TierTabs({
               className="block text-[9px] mt-0.5 tracking-[0.15em]"
               style={{ opacity: 0.75 }}
             >
-              {formatUsd(pack.priceCents)} · {pack.plays} plays
+              {formatUsd(pack.priceCents)} · {pack.credits} credits
             </span>
           </button>
         );

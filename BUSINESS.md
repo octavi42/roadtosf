@@ -1,6 +1,19 @@
 # Road to SF — Business Context
 
-Pricing model, cost structure, and unit economics for the game. Read alongside `BRIEF.md` and `GAME_LOGIC.md`.
+Pricing model, cost structure, and unit economics for the game. Read alongside `BRIEF.md`, `GAME_LOGIC.md`, and `GROUP_ARCHITECTURE.md`.
+
+---
+
+> **April 2026 update — credit-based metering.** The "1 play = 1 full
+> playthrough" math below predates the group-based LLM tail
+> (`GROUP_ARCHITECTURE.md`). The runtime now bills per-group: **1 credit = 1
+> LLM-generated group of 4 sub-scenes** (one shared image, four Sonnet
+> calls, four TTS lines, ≈$0.42 COGS/group). The pack values in
+> `src/lib/packs.ts` are the source of truth (currently $5 → 6 credits, $15
+> → 20 credits) and the playthrough-level math in §"Cost per playthrough"
+> still works as a sanity bound, just with N variable rather than fixed.
+> Re-derive after the first 100 real runs land in `usage_log` per
+> §"What to instrument before re-pricing".
 
 ---
 

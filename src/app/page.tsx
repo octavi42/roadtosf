@@ -204,6 +204,20 @@ interface ArcGenResponse {
 interface SceneGenResponse {
   scene: LLMScene;
   source: "llm" | "fallback";
+  // Set on group-leader (sub 0) responses after a successful credit debit.
+  // Sub-1..3 responses include it too as a free balance refresh.
+  creditsRemaining?: number | null;
+}
+
+/**
+ * Thrown by postWithTimeout when the server returns 402 — used by the
+ * scene-gen call sites to flip into the paywall phase mid-run.
+ */
+class PaywallRequiredError extends Error {
+  constructor(public readonly balance: number) {
+    super("paywall_required");
+    this.name = "PaywallRequiredError";
+  }
 }
 
 async function postWithTimeout<T>(
@@ -220,6 +234,15 @@ async function postWithTimeout<T>(
       body: JSON.stringify(body),
       signal: controller.signal,
     });
+    if (res.status === 402) {
+      let parsed: { creditsRemaining?: number } = {};
+      try {
+        parsed = (await res.json()) as { creditsRemaining?: number };
+      } catch {
+        /* body wasn't JSON — fall back to balance:0 */
+      }
+      throw new PaywallRequiredError(parsed.creditsRemaining ?? 0);
+    }
     if (!res.ok) throw new Error(`${url} ${res.status}`);
     return (await res.json()) as T;
   } finally {
@@ -242,6 +265,7 @@ export default function HomePage() {
   const shareMomentFiredInEpisode = useSessionStore(
     (s) => s.shareMomentFiredInEpisode,
   );
+  const creditsRemaining = useSessionStore((s) => s.creditsRemaining);
   const startupName = intro.startupName;
 
   const {
@@ -262,6 +286,8 @@ export default function HomePage() {
     advanceScene,
     reset,
     markShareMomentFired,
+    setCreditsRemaining,
+    creditsExhausted,
   } = useSessionStore(
     useShallow((s) => ({
       setPlaythroughId: s.setPlaythroughId,
@@ -281,8 +307,34 @@ export default function HomePage() {
       advanceScene: s.advanceScene,
       reset: s.reset,
       markShareMomentFired: s.markShareMomentFired,
+      setCreditsRemaining: s.setCreditsRemaining,
+      creditsExhausted: s.creditsExhausted,
     })),
   );
+
+  // Pull the server-authoritative balance once on hydrate. Server is the
+  // source of truth; the persisted client value can drift across tabs or
+  // after a manual purge. Failures are silent — the persisted value stays.
+  useEffect(() => {
+    if (!hasHydrated) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch("/api/credits/balance", { cache: "no-store" });
+        if (!r.ok) return;
+        const data = (await r.json()) as { credits?: number };
+        if (cancelled) return;
+        if (typeof data.credits === "number") {
+          setCreditsRemaining(data.credits);
+        }
+      } catch {
+        /* network blip — keep the persisted value */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasHydrated, setCreditsRemaining]);
 
   const router = useRouter();
   const [welcomeLineIndex, setWelcomeLineIndex] = useState(0);
@@ -604,15 +656,24 @@ export default function HomePage() {
           integrityDelta: h.integrityDelta,
         })),
         currentStats: { hype, integrity },
+        playthroughId,
       },
       SCENE_GEN_TIMEOUT_MS,
     )
       .then((data) => {
         sceneGenFiredRef.current.add(globalLLMIndex);
         dynamicSceneReady(globalLLMIndex, data.scene);
+        if (typeof data.creditsRemaining === "number") {
+          setCreditsRemaining(data.creditsRemaining);
+        }
         exitGeneratingArc();
       })
       .catch((err) => {
+        if (err instanceof PaywallRequiredError) {
+          setCreditsRemaining(err.balance);
+          creditsExhausted();
+          return;
+        }
         console.error("generate-scene[first] failed", err);
         exitGeneratingArc();
       });
@@ -625,6 +686,9 @@ export default function HomePage() {
     integrity,
     dynamicSceneReady,
     exitGeneratingArc,
+    playthroughId,
+    setCreditsRemaining,
+    creditsExhausted,
   ]);
 
   // Group-batch scene-text generation. Each archetype group fires as a
@@ -676,12 +740,23 @@ export default function HomePage() {
             integrityDelta: h.integrityDelta,
           })),
           currentStats: { hype, integrity },
+          playthroughId,
         },
         SCENE_GEN_TIMEOUT_MS,
       )
-        .then((data) => dynamicSceneReady(globalLLMIndex, data.scene))
+        .then((data) => {
+          dynamicSceneReady(globalLLMIndex, data.scene);
+          if (typeof data.creditsRemaining === "number") {
+            setCreditsRemaining(data.creditsRemaining);
+          }
+        })
         .catch((err) => {
           sceneGenFiredRef.current.delete(globalLLMIndex);
+          if (err instanceof PaywallRequiredError) {
+            setCreditsRemaining(err.balance);
+            creditsExhausted();
+            return;
+          }
           console.error(`generate-scene[${globalLLMIndex}] failed`, err);
         });
     };
@@ -703,6 +778,20 @@ export default function HomePage() {
       }
       if (!triggered) continue;
 
+      // Credit gate: each new group needs 1 credit. The server is
+      // authoritative (debit happens inside /api/generate-scene for sub 0),
+      // but we pre-check the client-side mirror to skip the wasted sub-1..3
+      // calls that would otherwise fire in parallel and burn $0.30 of
+      // Anthropic + image cost per group with no debit. If the check passes
+      // but the server still 402s (rare race), the .catch handler above
+      // routes us to the paywall.
+      const sub0LLMIndex = epi * EPISODE_LENGTH + groupIdx * SCENES_PER_GROUP;
+      const alreadyFired = sceneGenFiredRef.current.has(sub0LLMIndex);
+      if (!alreadyFired && creditsRemaining < 1) {
+        creditsExhausted();
+        break;
+      }
+
       // Fire all 4 sub-scenes of this group in parallel. sceneGenFiredRef
       // dedups across renders so each sub fires exactly once.
       for (let sub = 0; sub < SCENES_PER_GROUP; sub++) {
@@ -723,6 +812,10 @@ export default function HomePage() {
     hype,
     integrity,
     dynamicSceneReady,
+    playthroughId,
+    creditsRemaining,
+    setCreditsRemaining,
+    creditsExhausted,
   ]);
 
   // Arc persistence: each time a new episode skeleton lands, PATCH the
@@ -892,13 +985,28 @@ export default function HomePage() {
           integrityDelta: h.integrityDelta,
         })),
         currentStats: { hype, integrity },
+        playthroughId,
       },
       SCENE_GEN_TIMEOUT_MS,
     )
-      .then((data) => dynamicSceneReady(firstSceneOfNewEpisode, data.scene))
-      .catch((err) =>
-        console.error(`generate-scene[${firstSceneOfNewEpisode}] failed`, err),
-      );
+      .then((data) => {
+        dynamicSceneReady(firstSceneOfNewEpisode, data.scene);
+        if (typeof data.creditsRemaining === "number") {
+          setCreditsRemaining(data.creditsRemaining);
+        }
+      })
+      .catch((err) => {
+        sceneGenFiredRef.current.delete(firstSceneOfNewEpisode);
+        if (err instanceof PaywallRequiredError) {
+          setCreditsRemaining(err.balance);
+          creditsExhausted();
+          return;
+        }
+        console.error(
+          `generate-scene[${firstSceneOfNewEpisode}] failed`,
+          err,
+        );
+      });
   }, [
     phase,
     sceneIndex,
@@ -908,6 +1016,9 @@ export default function HomePage() {
     hype,
     integrity,
     dynamicSceneReady,
+    playthroughId,
+    setCreditsRemaining,
+    creditsExhausted,
   ]);
 
   // Safety: if the player jumps directly to generating-arc via dev panel and
@@ -1556,7 +1667,9 @@ export default function HomePage() {
   return (
     <>
       {phase === "paywall" && (
-        <PaywallPanel onSatisfied={(plays) => paywallSatisfied(plays)} />
+        <PaywallPanel
+          onSatisfied={(creditsGranted) => paywallSatisfied(creditsGranted)}
+        />
       )}
 
       {loginOpen && (

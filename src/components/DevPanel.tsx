@@ -73,7 +73,7 @@ export default function DevPanel() {
   const setPlaythroughId = useSessionStore((s) => s.setPlaythroughId);
   const captureIntro = useSessionStore((s) => s.captureIntro);
   const reset = useSessionStore((s) => s.reset);
-  const devGrantPlays = useSessionStore((s) => s.devGrantPlays);
+  const devGrantCredits = useSessionStore((s) => s.devGrantCredits);
   const paywallSatisfied = useSessionStore((s) => s.paywallSatisfied);
   const arcSkeleton = useSessionStore((s) => s.arc?.arcSkeleton);
   const storySoFar = useSessionStore((s) => s.arc?.storySoFar);
@@ -151,14 +151,16 @@ export default function DevPanel() {
     setTick((t) => t + 1);
   };
 
-  const grantThreePlays = () => {
+  const grantSixCredits = () => {
     if (phase === "paywall") {
-      // paywallSatisfied already grants 3 plays + transitions to "scene".
-      // Also drop the dev override so a refresh doesn't bounce back here.
+      // paywallSatisfied transitions to "scene" + flips paid=true. We pass
+      // an explicit credit grant so the local balance lines up with what a
+      // real Stripe verify would have done. Also drop the dev override so
+      // a refresh doesn't bounce back here.
       window.localStorage.removeItem(DEV_OVERRIDE_KEY);
-      paywallSatisfied();
+      paywallSatisfied(6);
     } else {
-      devGrantPlays(3);
+      devGrantCredits(6);
     }
     setTick((t) => t + 1);
   };
@@ -424,11 +426,11 @@ export default function DevPanel() {
           </div>
 
           <button
-            onClick={grantThreePlays}
+            onClick={grantSixCredits}
             className="w-full text-[10px] text-emerald-200/80 hover:text-emerald-100 py-1 border border-emerald-300/30 rounded transition-colors mb-1"
-            title="Mark paid + add 3 plays without going through Stripe"
+            title="Mark paid + add 6 credits without going through Stripe"
           >
-            +3 PLAYS (NO PAYMENT)
+            +6 CREDITS (NO PAYMENT)
           </button>
         </div>
       )}

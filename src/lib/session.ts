@@ -91,7 +91,14 @@ interface SessionState {
   ending?: EndingData;
   playthroughId?: string;
   paid: boolean;
-  playsRemaining: number;
+  /**
+   * Number of LLM-generated groups (each = 4 sub-scenes sharing one image)
+   * the user can still spawn. Server is authoritative; this field mirrors
+   * the value returned by /api/credits/balance and the creditsRemaining
+   * field on /api/generate-scene responses. Hits 0 → next group attempt
+   * triggers paywall via creditsExhausted().
+   */
+  creditsRemaining: number;
   // Tracks which sceneIndex already fired its share moment in the current
   // episode. Reset to null on each new arc skeleton (= new episode) and on
   // reset. Acts both as the per-episode frequency cap (max 1) and the
@@ -103,16 +110,22 @@ interface SessionState {
   setHasHydrated: (value: boolean) => void;
 
   setPlaythroughId: (id: string | undefined) => void;
-  setPlaysRemaining: (n: number) => void;
-  decrementPlay: () => void;
-  devGrantPlays: (n: number) => void;
+  setCreditsRemaining: (n: number) => void;
+  decrementCredits: (n?: number) => void;
+  /**
+   * Server-mediated paywall re-entry: called when the user has paid before
+   * (so paid=true) but their balance hit 0 mid-run. Different from the
+   * post-scene-2 first-time gate, which keys on paid=false.
+   */
+  creditsExhausted: () => void;
+  devGrantCredits: (n: number) => void;
   welcomeStarted: () => void;
   captureIntro: (updates: Partial<IntroData>) => void;
   factsExtracted: (payload: {
     extracted: Partial<IntroData>;
     missing: MissingQuestion[];
   }) => void;
-  paywallSatisfied: (playsGranted?: number) => void;
+  paywallSatisfied: (creditsGranted?: number) => void;
   arcReady: (arc: StoryArc) => void;
   arcSkeletonReady: (skeleton: ArcSkeleton) => void;
   dynamicSceneReady: (llmIndex: number, scene: Scene) => void;
@@ -167,7 +180,7 @@ export const useSessionStore = create<SessionState>()(
       stats: { hype: 0, integrity: 0 },
       ending: undefined,
       paid: false,
-      playsRemaining: 0,
+      creditsRemaining: 0,
       shareMomentFiredInEpisode: null,
 
       markShareMomentFired: (sceneIndex) =>
@@ -177,15 +190,20 @@ export const useSessionStore = create<SessionState>()(
       setHasHydrated: (value) => set({ hasHydrated: value }),
 
       setPlaythroughId: (id) => set({ playthroughId: id }),
-      setPlaysRemaining: (n) => set({ playsRemaining: Math.max(0, n) }),
-      decrementPlay: () =>
+      setCreditsRemaining: (n) => set({ creditsRemaining: Math.max(0, n) }),
+      decrementCredits: (n = 1) =>
         set((state) => ({
-          playsRemaining: Math.max(0, state.playsRemaining - 1),
+          creditsRemaining: Math.max(0, state.creditsRemaining - Math.max(0, n)),
         })),
-      devGrantPlays: (n) =>
+      creditsExhausted: () =>
+        set((state) => {
+          if (state.phase === 'paywall') return state;
+          return { phase: 'paywall', creditsRemaining: 0 };
+        }),
+      devGrantCredits: (n) =>
         set((state) => ({
           paid: true,
-          playsRemaining: state.playsRemaining + Math.max(0, n),
+          creditsRemaining: state.creditsRemaining + Math.max(0, n),
         })),
 
       welcomeStarted: () =>
@@ -426,13 +444,17 @@ export const useSessionStore = create<SessionState>()(
           return { progress: nextProgress };
         }),
 
-      paywallSatisfied: (playsGranted = 3) =>
+      paywallSatisfied: (creditsGranted = 0) =>
         set((state) => {
           if (state.phase !== "paywall") return state;
+          // Bounce back into the scene flow. The scene index doesn't reset
+          // here — for the first-time paywall it's already past the gate
+          // (scene 3+); for a mid-run credit-exhaustion paywall the player
+          // resumes wherever they were when the next group failed to fire.
           return {
             phase: "scene",
             paid: true,
-            playsRemaining: state.playsRemaining + Math.max(0, playsGranted),
+            creditsRemaining: state.creditsRemaining + Math.max(0, creditsGranted),
           };
         }),
 
@@ -495,7 +517,7 @@ export const useSessionStore = create<SessionState>()(
           ending: undefined,
           playthroughId: undefined,
           paid: false,
-          playsRemaining: 0,
+          creditsRemaining: 0,
           shareMomentFiredInEpisode: null,
         }),
     }),
@@ -508,14 +530,25 @@ export const useSessionStore = create<SessionState>()(
       partialize: (state) => ({
         phase: state.phase,
         intro: state.intro,
-        arc: state.arc,
+        // Strip base64 imageUrls — they're hundreds of KB each and would blow
+        // past sessionStorage's ~5MB quota after a dozen or so scenes in
+        // endless mode. They regenerate on rehydrate via the image-gen
+        // watcher in page.tsx; until then the placeholder background renders.
+        arc: state.arc
+          ? {
+              ...state.arc,
+              scenes: state.arc.scenes.map(
+                ({ imageUrl: _imageUrl, ...rest }) => rest,
+              ),
+            }
+          : undefined,
         progress: state.progress,
         history: state.history,
         stats: state.stats,
         ending: state.ending,
         playthroughId: state.playthroughId,
         paid: state.paid,
-        playsRemaining: state.playsRemaining,
+        creditsRemaining: state.creditsRemaining,
         shareMomentFiredInEpisode: state.shareMomentFiredInEpisode,
       }),
       onRehydrateStorage: () => (state) => {

@@ -4,13 +4,18 @@ import { useSessionStore } from "@/lib/session";
 
 export default function UsageWidget() {
   const hasHydrated = useSessionStore((s) => s.hasHydrated);
-  const playsRemaining = useSessionStore((s) => s.playsRemaining);
+  const creditsRemaining = useSessionStore((s) => s.creditsRemaining);
   const phase = useSessionStore((s) => s.phase);
+  const paid = useSessionStore((s) => s.paid);
 
   if (!hasHydrated) return null;
   if (phase === "paywall") return null;
+  // Pre-paywall (paid=false, the free authored prologue), credits aren't a
+  // useful concept yet — hide so the widget doesn't read "0 Credits" while
+  // the player is mid-trial.
+  if (!paid) return null;
 
-  const empty = playsRemaining <= 0;
+  const empty = creditsRemaining <= 0;
 
   return (
     <div
@@ -24,14 +29,15 @@ export default function UsageWidget() {
           color: empty ? "var(--color-fog)" : "var(--color-ink)",
           transform: "rotate(-0.4deg)",
         }}
+        title="1 credit = 1 generated group of scenes"
       >
         <span
           className="text-[9px] font-bold tracking-[0.24em] uppercase opacity-70"
         >
-          Plays
+          Credits
         </span>
         <span className="text-base font-bold leading-none tabular-nums">
-          {playsRemaining}
+          {creditsRemaining}
         </span>
       </div>
     </div>

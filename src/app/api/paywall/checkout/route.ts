@@ -29,7 +29,11 @@ export async function POST(request: Request) {
       // No redirect-based methods so we can confirm fully client-side
       // and trigger onSatisfied() inline on success.
       payment_method_types: ['card'],
-      metadata: { playthroughId, packId: pack.id, plays: String(pack.plays) },
+      metadata: {
+        playthroughId,
+        packId: pack.id,
+        credits: String(pack.credits),
+      },
     })
 
     if (!intent.client_secret) {
