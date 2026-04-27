@@ -54,22 +54,17 @@ export function ShareNotification({
   const isCard = state === "peek" || state === "expanded";
 
   // Single fixed box morphs between three layouts.
-  //  - peek: top-center toast
-  //  - expanded: dead-center modal-like card
+  //  - peek: top-center toast (the initial entry — only state that's centered)
   //  - docked: small pill in the top-left, stacked under the scene-title pill
-  //    (ROAD TO SF sits at ~top:20, scene title at top:64+~32; share pill goes
-  //     below at top:108, left:24)
+  //  - expanded: full card, anchored at the docked pill's position so re-opening
+  //    from the dock grows in place instead of jumping to viewport-center
   const positionByState: Record<
     Exclude<ShareNotificationState, "hidden">,
     Pick<React.CSSProperties, "left" | "top" | "transform">
   > = {
     peek: { left: "50%", top: 84, transform: "translateX(-50%)" },
-    expanded: {
-      left: "50%",
-      top: "50%",
-      transform: "translate(-50%, -50%)",
-    },
     docked: { left: 24, top: 108, transform: "none" },
+    expanded: { left: 24, top: 108, transform: "none" },
   };
   const containerStyle: React.CSSProperties = {
     background: isCard ? "var(--color-fog)" : "var(--color-mustard)",
