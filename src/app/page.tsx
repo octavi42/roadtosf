@@ -530,10 +530,15 @@ export default function HomePage() {
     (choiceId: string) => {
       if (!currentScene) return;
       const choice = currentScene.choices?.find((c) => c.id === choiceId);
-      if (!choice) return;
-      const hypeDelta = choice.hype;
-      const integrityDelta = choice.integrity;
-      chooseOption(choiceId, choice.label, hypeDelta, integrityDelta);
+      // CTA-only scenes (Scene 3 — the dare → paywall) have no `choices`
+      // array; the click is a stat-neutral commit, labelled by the CTA copy.
+      // Without this fallback, handleChoice silently bails and the player
+      // can never advance past the paywall scene.
+      if (!choice && !currentScene.ctaLabel) return;
+      const choiceLabel = choice?.label ?? currentScene.ctaLabel ?? choiceId;
+      const hypeDelta = choice?.hype ?? 0;
+      const integrityDelta = choice?.integrity ?? 0;
+      chooseOption(choiceId, choiceLabel, hypeDelta, integrityDelta);
 
       if (playthroughId) {
         const startedAt = choiceShownAtRef.current;
