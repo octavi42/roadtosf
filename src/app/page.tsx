@@ -453,7 +453,12 @@ export default function HomePage() {
     imageGenFiredRef.current = new Set();
     arcPersistedRef.current = -1;
     extractFiredForRef.current = null;
-    setExtractionResolved(false);
+    // If the intro arrived with missingQuestions already populated (dev skip,
+    // or a hydrated session), treat extraction as resolved — otherwise arc-gen
+    // would stall waiting for an extract-facts call that won't be re-issued.
+    const presetMissing =
+      useSessionStore.getState().intro.missingQuestions !== undefined;
+    setExtractionResolved(presetMissing);
   }, [playthroughId]);
 
   // Smart Q&A extraction: once the player submits the scene-2 pitch, fire one
@@ -464,6 +469,15 @@ export default function HomePage() {
     const desc = intro.startupDescription?.trim();
     if (!desc) return;
     if (extractFiredForRef.current === desc) return;
+    // If missingQuestions is already explicitly set (dev skip, or a prior
+    // extraction in this run), don't re-fire — the LLM call only sees the
+    // short pitch and would clobber a known-good answer with one based on
+    // less context.
+    if (intro.missingQuestions !== undefined) {
+      extractFiredForRef.current = desc;
+      setExtractionResolved(true);
+      return;
+    }
     extractFiredForRef.current = desc;
 
     fetch("/api/extract-facts", {
@@ -507,7 +521,12 @@ export default function HomePage() {
       .finally(() => {
         setExtractionResolved(true);
       });
-  }, [intro.startupDescription, intro.selfDescription, factsExtracted]);
+  }, [
+    intro.startupDescription,
+    intro.selfDescription,
+    intro.missingQuestions,
+    factsExtracted,
+  ]);
 
   // Episode 0 generation: fire from the second-to-last authored scene onward
   // (same overlap idea as episode regen). Sonnet/Haiku runs while the player
@@ -1537,7 +1556,7 @@ export default function HomePage() {
   return (
     <>
       {phase === "paywall" && (
-        <PaywallPanel onSatisfied={() => paywallSatisfied()} />
+        <PaywallPanel onSatisfied={(plays) => paywallSatisfied(plays)} />
       )}
 
       {loginOpen && (

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getStripe, PAYWALL_PRICE_USD_CENTS } from '@/lib/stripe'
+import { getStripe, getPack, PACKS } from '@/lib/stripe'
 import { markPlaythroughPaid } from '@/lib/playthroughs'
 import { setSessionEmail } from '@/lib/auth'
 
@@ -31,12 +31,14 @@ export async function POST(request: Request) {
     const intent = await stripe.paymentIntents.retrieve(paymentIntentId)
 
     // Defense in depth: don't trust just the status. Confirm the charge was
-    // for the price we actually meant to charge, in the currency we asked
-    // for. Stops accidental bypasses if a future endpoint creates intents
-    // on the same Stripe account with a 'playthroughId' metadata key.
+    // for the price of the pack named in the intent's metadata, in the
+    // currency we asked for. Stops accidental bypasses if a future endpoint
+    // creates intents on the same Stripe account with a 'playthroughId'
+    // metadata key.
+    const pack = getPack(intent.metadata?.packId) ?? PACKS.normal
     const paid =
       intent.status === 'succeeded' &&
-      intent.amount === PAYWALL_PRICE_USD_CENTS &&
+      intent.amount === pack.priceCents &&
       intent.currency === 'usd'
     if (!paid) {
       return NextResponse.json({ paid: false })
@@ -83,7 +85,11 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json({ paid: true })
+    return NextResponse.json({
+      paid: true,
+      packId: pack.id,
+      playsGranted: pack.plays,
+    })
   } catch (err) {
     console.error('paywall/verify failed', err)
     return NextResponse.json({ error: 'stripe error' }, { status: 500 })

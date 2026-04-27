@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import SessionHydrator from "@/components/SessionHydrator";
 import DevPanel from "@/components/DevPanel";
+import UsageWidget from "@/components/UsageWidget";
 
 // Chicago Kare — faithful 1984 Susan Kare Chicago bitmap reproduction.
 // MIT-licensed, https://github.com/KingDuane/Chicago-Kare
@@ -42,6 +43,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-fog text-ink overflow-hidden">
         <SessionHydrator />
         {children}
+        <UsageWidget />
         <DevPanel />
       </body>
     </html>

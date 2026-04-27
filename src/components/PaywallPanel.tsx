@@ -11,12 +11,12 @@ import {
   useStripe,
 } from "@stripe/react-stripe-js";
 import { useSessionStore } from "@/lib/session";
+import { PACKS, formatUsd, type PackId } from "@/lib/packs";
 
 interface PaywallPanelProps {
-  onSatisfied: () => void;
+  onSatisfied: (playsGranted: number) => void;
 }
 
-const PRICE_USD = "4.99";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const STRIPE_PUBLISHABLE_KEY =
@@ -103,6 +103,9 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
     };
   }, [playthroughId, setPlaythroughId]);
 
+  const [selectedPackId, setSelectedPackId] = useState<PackId>("normal");
+  const selectedPack = PACKS[selectedPackId];
+
   const [email, setEmail] = useState("");
   const [country, setCountry] = useState("US");
   const [zip, setZip] = useState("");
@@ -125,12 +128,17 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
   useEffect(() => {
     if (!playthroughId) return;
     let cancelled = false;
+    // Switching tabs invalidates the previous PaymentIntent (different
+    // amount). Clear the old client secret so the Stripe iframe disables
+    // the submit button until the new intent lands.
+    setClientSecret(null);
+    setPaymentIntentId(null);
     (async () => {
       try {
         const res = await fetch("/api/paywall/checkout", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ playthroughId }),
+          body: JSON.stringify({ playthroughId, packId: selectedPackId }),
         });
         const data = (await res.json()) as {
           clientSecret?: string;
@@ -153,7 +161,7 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [playthroughId]);
+  }, [playthroughId, selectedPackId]);
 
   // Debounced email lookup. Fires ~350 ms after the last keystroke so we
   // don't hammer the endpoint on every character. Each new keystroke aborts
@@ -250,7 +258,8 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
         setSubmitting(false);
         return;
       }
-      onSatisfied();
+      // OTP login is "I already paid before" — no fresh charge, no new plays.
+      onSatisfied(0);
     } catch (err) {
       console.error("paywall verify-code failed", err);
       setError("Network error during verify.");
@@ -315,13 +324,17 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
           email: EMAIL_RE.test(email.trim()) ? email.trim() : undefined,
         }),
       });
-      const data = (await r.json()) as { paid?: boolean; error?: string };
+      const data = (await r.json()) as {
+        paid?: boolean;
+        playsGranted?: number;
+        error?: string;
+      };
       if (!r.ok || !data.paid) {
         setError(data.error ?? "Payment could not be verified.");
         setSubmitting(false);
         return;
       }
-      onSatisfied();
+      onSatisfied(data.playsGranted ?? selectedPack.plays);
     } catch (err) {
       console.error("paywall verify failed", err);
       setError("Network error during verify.");
@@ -343,6 +356,14 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
 
   return (
     <PaywallShell>
+      <TierTabs
+        selected={selectedPackId}
+        onSelect={(p) => {
+          setSelectedPackId(p);
+          setError(null);
+        }}
+      />
+
       {/* Top half — flight stub */}
       <div className="px-5 pt-5 pb-4">
         <div className="flex items-baseline justify-between mb-3">
@@ -356,7 +377,7 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
             className="text-[9px] font-bold tracking-[0.22em] uppercase"
             style={{ color: "var(--color-cable)" }}
           >
-            Test mode
+            {selectedPack.cabin}
           </p>
         </div>
 
@@ -394,8 +415,15 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
 
         <div className="grid grid-cols-3 gap-3 mt-4 text-[10px] tracking-[0.18em] uppercase">
           <StubField label="Flight" value="RTSF · 001" />
-          <StubField label="Gate" value="A04" />
-          <StubField label="Fare" value={`$${PRICE_USD}`} highlight />
+          <StubField
+            label="Plays"
+            value={`${selectedPack.plays} runs`}
+          />
+          <StubField
+            label="Fare"
+            value={formatUsd(selectedPack.priceCents)}
+            highlight
+          />
         </div>
 
         <p
@@ -545,7 +573,9 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
               color: "var(--color-fog)",
             }}
           >
-            {submitting ? "Boarding…" : `Board the flight · $${PRICE_USD}`}
+            {submitting
+              ? "Boarding…"
+              : `Board the flight · ${formatUsd(selectedPack.priceCents)}`}
           </button>
         )}
 
@@ -640,6 +670,55 @@ function ReturningUserPanel({
       >
         {sendingCode ? "Resending…" : "Resend code"}
       </button>
+    </div>
+  );
+}
+
+function TierTabs({
+  selected,
+  onSelect,
+}: {
+  selected: PackId;
+  onSelect: (p: PackId) => void;
+}) {
+  return (
+    <div
+      className="flex gap-2 px-4 pt-4"
+      role="tablist"
+      aria-label="Ticket class"
+    >
+      {(Object.values(PACKS)).map((pack) => {
+        const active = pack.id === selected;
+        return (
+          <button
+            key={pack.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onSelect(pack.id)}
+            className={[
+              "comic-outline-sm flex-1 rounded-md px-3 py-2",
+              "text-[10px] font-bold uppercase tracking-[0.18em]",
+              "transition-colors",
+            ].join(" ")}
+            style={{
+              background: active ? "var(--color-cable)" : "var(--color-fog)",
+              color: active ? "var(--color-fog)" : "var(--color-ink)",
+              opacity: active ? 1 : 0.85,
+            }}
+          >
+            <span className="block">
+              {pack.id === "normal" ? "Normal flight" : "Business"}
+            </span>
+            <span
+              className="block text-[9px] mt-0.5 tracking-[0.15em]"
+              style={{ opacity: 0.75 }}
+            >
+              {formatUsd(pack.priceCents)} · {pack.plays} plays
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

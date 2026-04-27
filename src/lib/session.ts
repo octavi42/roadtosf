@@ -91,6 +91,7 @@ interface SessionState {
   ending?: EndingData;
   playthroughId?: string;
   paid: boolean;
+  playsRemaining: number;
   // Tracks which sceneIndex already fired its share moment in the current
   // episode. Reset to null on each new arc skeleton (= new episode) and on
   // reset. Acts both as the per-episode frequency cap (max 1) and the
@@ -102,13 +103,16 @@ interface SessionState {
   setHasHydrated: (value: boolean) => void;
 
   setPlaythroughId: (id: string | undefined) => void;
+  setPlaysRemaining: (n: number) => void;
+  decrementPlay: () => void;
+  devGrantPlays: (n: number) => void;
   welcomeStarted: () => void;
   captureIntro: (updates: Partial<IntroData>) => void;
   factsExtracted: (payload: {
     extracted: Partial<IntroData>;
     missing: MissingQuestion[];
   }) => void;
-  paywallSatisfied: () => void;
+  paywallSatisfied: (playsGranted?: number) => void;
   arcReady: (arc: StoryArc) => void;
   arcSkeletonReady: (skeleton: ArcSkeleton) => void;
   dynamicSceneReady: (llmIndex: number, scene: Scene) => void;
@@ -163,6 +167,7 @@ export const useSessionStore = create<SessionState>()(
       stats: { hype: 0, integrity: 0 },
       ending: undefined,
       paid: false,
+      playsRemaining: 0,
       shareMomentFiredInEpisode: null,
 
       markShareMomentFired: (sceneIndex) =>
@@ -172,6 +177,16 @@ export const useSessionStore = create<SessionState>()(
       setHasHydrated: (value) => set({ hasHydrated: value }),
 
       setPlaythroughId: (id) => set({ playthroughId: id }),
+      setPlaysRemaining: (n) => set({ playsRemaining: Math.max(0, n) }),
+      decrementPlay: () =>
+        set((state) => ({
+          playsRemaining: Math.max(0, state.playsRemaining - 1),
+        })),
+      devGrantPlays: (n) =>
+        set((state) => ({
+          paid: true,
+          playsRemaining: state.playsRemaining + Math.max(0, n),
+        })),
 
       welcomeStarted: () =>
         set((state) => {
@@ -411,10 +426,14 @@ export const useSessionStore = create<SessionState>()(
           return { progress: nextProgress };
         }),
 
-      paywallSatisfied: () =>
+      paywallSatisfied: (playsGranted = 3) =>
         set((state) => {
           if (state.phase !== "paywall") return state;
-          return { phase: "scene", paid: true };
+          return {
+            phase: "scene",
+            paid: true,
+            playsRemaining: state.playsRemaining + Math.max(0, playsGranted),
+          };
         }),
 
       devSetPhase: (phase, sceneIndex = 0) =>
@@ -476,6 +495,7 @@ export const useSessionStore = create<SessionState>()(
           ending: undefined,
           playthroughId: undefined,
           paid: false,
+          playsRemaining: 0,
           shareMomentFiredInEpisode: null,
         }),
     }),
@@ -495,6 +515,7 @@ export const useSessionStore = create<SessionState>()(
         ending: state.ending,
         playthroughId: state.playthroughId,
         paid: state.paid,
+        playsRemaining: state.playsRemaining,
         shareMomentFiredInEpisode: state.shareMomentFiredInEpisode,
       }),
       onRehydrateStorage: () => (state) => {

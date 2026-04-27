@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
-import { getStripe, PAYWALL_PRICE_USD_CENTS } from '@/lib/stripe'
+import { getStripe, getPack, PACKS } from '@/lib/stripe'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-type Body = { playthroughId?: unknown }
+type Body = { playthroughId?: unknown; packId?: unknown }
 
 export async function POST(request: Request) {
   let body: Body = {}
@@ -19,15 +19,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'invalid playthroughId' }, { status: 400 })
   }
 
+  const pack = getPack(body.packId) ?? PACKS.normal
+
   try {
     const stripe = getStripe()
     const intent = await stripe.paymentIntents.create({
-      amount: PAYWALL_PRICE_USD_CENTS,
+      amount: pack.priceCents,
       currency: 'usd',
       // No redirect-based methods so we can confirm fully client-side
       // and trigger onSatisfied() inline on success.
       payment_method_types: ['card'],
-      metadata: { playthroughId },
+      metadata: { playthroughId, packId: pack.id, plays: String(pack.plays) },
     })
 
     if (!intent.client_secret) {
