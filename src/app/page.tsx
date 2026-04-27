@@ -127,8 +127,8 @@ function authoredAsUnified(scene: SceneData): UnifiedScene {
   };
 }
 
-const ARC_GEN_TIMEOUT_MS = 30000;
-const SCENE_GEN_TIMEOUT_MS = 15000;
+const ARC_GEN_TIMEOUT_MS = 45000;
+const SCENE_GEN_TIMEOUT_MS = 30000;
 
 interface ArcGenResponse {
   skeleton: ArcSkeleton;

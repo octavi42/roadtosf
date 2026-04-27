@@ -7,7 +7,7 @@ const dialogueLineSchema = z.object({
   speaker: z.enum(SPEAKER_VALUES),
   // text can be empty for "(silent reaction)" beats from player/narrator;
   // sanitizeScene strips them before rendering.
-  text: z.string().max(200),
+  text: z.string().max(320),
 })
 
 const allowedDeltas = [-2, -1, 0, 1, 2] as const
@@ -41,7 +41,7 @@ export const sceneSchema = z
     imagePrompt: z.string().min(10).max(500),
     dialogue: z.array(dialogueLineSchema).min(2).max(6),
     choices: z.array(choiceSchema).min(2).max(3),
-    timeoutSeconds: z.number().int().min(8).max(30).default(15),
+    timeoutSeconds: z.number().int().min(8).max(60).default(15),
     timeoutChoiceId: z.string().min(1).max(2),
   })
   .refine(
