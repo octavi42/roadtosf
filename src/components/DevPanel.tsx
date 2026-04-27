@@ -28,8 +28,7 @@ const STATIC_TARGETS_HEAD: DevTarget[] = [
   { label: "Scene 2", phase: "scene", sceneIndex: 1 },
   { label: "Scene 3", phase: "scene", sceneIndex: 2 },
   { label: "Paywall", phase: "paywall" },
-  { label: "Scene 4", phase: "scene", sceneIndex: 3 },
-  { label: "Scene 5", phase: "scene", sceneIndex: 4 },
+  { label: "Scene 4 (Q&A)", phase: "scene", sceneIndex: 3 },
   { label: "Generating Arc", phase: "generating-arc" },
 ];
 

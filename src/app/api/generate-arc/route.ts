@@ -11,6 +11,9 @@ type Body = {
   startupDescription?: unknown
   founderPersona?: unknown
   stage?: unknown
+  team?: unknown
+  fundingModel?: unknown
+  concern?: unknown
   flavorTags?: unknown
   recentChoices?: unknown
   // Back-compat alias used by an earlier client; treated the same as recentChoices.
@@ -76,6 +79,9 @@ export async function POST(request: Request) {
     startupDescription: asString(body.startupDescription, ''),
     founderPersona: asString(body.founderPersona, ''),
     stage: asString(body.stage, '') || undefined,
+    team: asString(body.team, '') || undefined,
+    fundingModel: asString(body.fundingModel, '') || undefined,
+    concern: asString(body.concern, '') || undefined,
     flavorTags: asStringArray(body.flavorTags),
     recentChoices,
     currentStats: {

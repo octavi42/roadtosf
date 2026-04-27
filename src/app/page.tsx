@@ -77,6 +77,7 @@ interface UnifiedScene {
   dialogue: AuthoredDialogueLine[];
   choices?: AuthoredChoice[];
   textInput?: SceneData["textInput"];
+  questions?: SceneData["questions"];
   ctaLabel?: string;
   isLLM: boolean;
 }
@@ -120,6 +121,7 @@ function authoredAsUnified(scene: SceneData): UnifiedScene {
     dialogue: scene.dialogue,
     choices: scene.choices,
     textInput: scene.textInput,
+    questions: scene.questions,
     ctaLabel: scene.ctaLabel,
     isLLM: false,
   };
@@ -211,6 +213,13 @@ export default function HomePage() {
   const [welcomeDone, setWelcomeDone] = useState(false);
   const welcomeCompleteRef = useRef(false);
 
+  // Q&A scenes (e.g. scene 4 car ride) walk through `scene.questions` after
+  // the intro dialogue. Local state — resets when the player moves scenes.
+  const [qaStepIndex, setQaStepIndex] = useState(0);
+  useEffect(() => {
+    setQaStepIndex(0);
+  }, [sceneIndex]);
+
   const handleWelcomeLineComplete = useCallback(() => {
     if (welcomeCompleteRef.current) return;
     setWelcomeLineIndex((prev) => {
@@ -277,6 +286,9 @@ export default function HomePage() {
         startupDescription: intro.startupDescription ?? "",
         founderPersona: arc?.founderPersona ?? intro.selfDescription ?? "",
         stage: arc?.stage ?? intro.stage,
+        team: intro.team,
+        fundingModel: intro.fundingModel,
+        concern: intro.concern,
         flavorTags: arc?.flavorTags ?? intro.flavorTags,
         recentChoices,
         currentStats: { hype, integrity },
@@ -340,6 +352,9 @@ export default function HomePage() {
         startupDescription: intro.startupDescription ?? "",
         founderPersona: arc?.founderPersona,
         stage: arc?.stage,
+        team: intro.team,
+        fundingModel: intro.fundingModel,
+        concern: intro.concern,
         flavorTags: arc?.flavorTags,
         recentChoices: history.slice(-EPISODE_LENGTH).map((h) => ({
           sceneId: h.sceneId,
@@ -403,6 +418,9 @@ export default function HomePage() {
         startupDescription: intro.startupDescription ?? "",
         founderPersona: arc.founderPersona,
         stage: arc.stage,
+        team: intro.team,
+        fundingModel: intro.fundingModel,
+        concern: intro.concern,
         flavorTags: arc.flavorTags,
         recentChoices: history.slice(-EPISODE_LENGTH).map((h) => ({
           sceneId: h.sceneId,
@@ -485,6 +503,9 @@ export default function HomePage() {
         startupDescription: intro.startupDescription ?? "",
         founderPersona: arc?.founderPersona,
         stage: arc?.stage,
+        team: intro.team,
+        fundingModel: intro.fundingModel,
+        concern: intro.concern,
         flavorTags: arc?.flavorTags,
         recentChoices: history.slice(-EPISODE_LENGTH).map((h) => ({
           sceneId: h.sceneId,
@@ -716,6 +737,71 @@ export default function HomePage() {
     }, 600);
   }, [currentScene, chooseOption, advanceScene, playthroughId]);
 
+  const handleQASubmit = useCallback(
+    (text: string) => {
+      if (!currentScene?.questions) return;
+      const question = currentScene.questions[qaStepIndex];
+      if (!question) return;
+
+      // Capture the answer to the right field.
+      const updates: Partial<IntroData> = {};
+      switch (question.extractAs) {
+        case "startupDescription":
+          updates.startupDescription = text;
+          break;
+        case "selfDescription":
+          updates.selfDescription = text;
+          break;
+        case "stage":
+          updates.stage = text;
+          break;
+        case "team":
+          updates.team = text;
+          break;
+        case "fundingModel":
+          updates.fundingModel = text;
+          break;
+        case "concern":
+          updates.concern = text;
+          break;
+      }
+      captureIntro(updates);
+
+      const isLast = qaStepIndex >= currentScene.questions.length - 1;
+
+      if (playthroughId) {
+        const startedAt = choiceShownAtRef.current;
+        const timeToChooseMs =
+          startedAt !== null ? Date.now() - startedAt : null;
+        fetch(`/api/playthroughs/${playthroughId}/scenes`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            sceneNumber: currentScene.id,
+            dialogue: `Q: ${question.prompt.text}\nA: ${text}`,
+            choicesShown: [],
+            choicePicked: `qa-${question.extractAs}`,
+            freeText: text,
+            wasTimeout: false,
+            timeToChooseMs,
+            statDeltas: { hype: 0, integrity: 0 },
+          }),
+        }).catch((err) => console.error("logSceneEvent failed", err));
+      }
+
+      if (isLast) {
+        // Last question: log the choice + advance scene.
+        chooseOption("qa-done", text, 0, 0);
+        setTimeout(() => advanceScene(), 600);
+      } else {
+        // Reset choice latch so the next prompt re-arms (advanceLine /
+        // showChoices wasn't used; we just bump the step index).
+        setQaStepIndex((i) => i + 1);
+      }
+    },
+    [currentScene, qaStepIndex, captureIntro, chooseOption, advanceScene, playthroughId],
+  );
+
   const handleSceneTextSubmit = useCallback(
     (text: string) => {
       if (!currentScene?.textInput) return;
@@ -765,6 +851,16 @@ export default function HomePage() {
     [currentScene, captureIntro, chooseOption, advanceScene, playthroughId],
   );
 
+  // For Q&A scenes after intro dialogue completes, render the current
+  // question's prompt as a dialogue line so the visual rhythm doesn't break.
+  const isQAScene = !!currentScene?.questions && currentScene.questions.length > 0;
+  const qaCurrentQuestion =
+    isQAScene && currentScene?.questions
+      ? currentScene.questions[Math.min(qaStepIndex, currentScene.questions.length - 1)]
+      : undefined;
+  const qaPromptLine = qaCurrentQuestion?.prompt;
+  const showQAPrompt = isQAScene && showChoices && !!qaPromptLine;
+
   const dialogueSlot = (() => {
     if (phase === "welcome" && !welcomeDone) {
       return (
@@ -780,22 +876,39 @@ export default function HomePage() {
       );
     }
 
-    if (phase === "scene" && currentLine) {
-      return (
-        <div className="w-full max-w-2xl mx-auto px-2 select-none">
-          <DialogueSpeaker
-            speaker={showChoices ? undefined : currentLine.speaker}
-          />
-          {!showChoices && (
+    if (phase === "scene") {
+      // Q&A mode: after intro dialogue, replace dialogue rendering with the
+      // current question prompt (one per qaStepIndex).
+      if (showQAPrompt && qaPromptLine) {
+        return (
+          <div className="w-full max-w-2xl mx-auto px-2 select-none">
+            <DialogueSpeaker speaker={qaPromptLine.speaker} />
             <DialogueSubtitle
-              key={`scene${sceneIndex}-line${currentLineIndex}`}
-              text={currentLine.text}
+              key={`scene${sceneIndex}-q${qaStepIndex}`}
+              text={qaPromptLine.text}
               wordInterval={110}
-              onComplete={handleLineComplete}
             />
-          )}
-        </div>
-      );
+          </div>
+        );
+      }
+
+      if (currentLine) {
+        return (
+          <div className="w-full max-w-2xl mx-auto px-2 select-none">
+            <DialogueSpeaker
+              speaker={showChoices ? undefined : currentLine.speaker}
+            />
+            {!showChoices && (
+              <DialogueSubtitle
+                key={`scene${sceneIndex}-line${currentLineIndex}`}
+                text={currentLine.text}
+                wordInterval={110}
+                onComplete={handleLineComplete}
+              />
+            )}
+          </div>
+        );
+      }
     }
 
     return null;
@@ -838,7 +951,16 @@ export default function HomePage() {
     ) : null;
 
     let panel: React.ReactNode;
-    if (currentScene.textInput) {
+    if (currentScene.questions && qaCurrentQuestion) {
+      panel = (
+        <TextInputPanel
+          key={`qa-${sceneIndex}-${qaStepIndex}`}
+          placeholder={qaCurrentQuestion.placeholder}
+          onSubmit={handleQASubmit}
+          disabled={false}
+        />
+      );
+    } else if (currentScene.textInput) {
       panel = (
         <TextInputPanel
           placeholder={currentScene.textInput.placeholder}

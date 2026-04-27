@@ -21,7 +21,7 @@ export const PAYWALL_AFTER_SCENE_INDEX = 2;
  * (one episode), regenerating a new skeleton when an episode finishes.
  * The run only ends when the player picks "End my run" or via reset.
  */
-export const AUTHORED_SCENE_COUNT = 5;
+export const AUTHORED_SCENE_COUNT = 4;
 export const EPISODE_LENGTH = 5;
 
 export interface IntroData {
@@ -30,6 +30,9 @@ export interface IntroData {
   startupDescription?: string;
   selfDescription?: string;
   stage?: string;
+  team?: string; // captured in scene 4 Q&A: solo / cofounder name(s) / team
+  fundingModel?: string; // captured in scene 4 Q&A: raising / bootstrapping / runway
+  concern?: string; // captured in scene 4 Q&A: what's broken right now
   flavorTags: string[];
 }
 

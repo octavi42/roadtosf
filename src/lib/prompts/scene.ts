@@ -20,6 +20,9 @@ export interface BuildScenePromptInput {
   startupDescription: string
   founderPersona: string
   stage?: string
+  team?: string
+  fundingModel?: string
+  concern?: string
   flavorTags: string[]
   recentChoices: PriorChoiceSummary[] // only the last few; older context lives in storySoFar
   currentStats: { hype: number; integrity: number }
@@ -90,7 +93,12 @@ ${input.storySoFar ?? '(this is the opening episode — no prior summary)'}
 Startup: ${input.startupName}
 Pitch: ${input.startupDescription || '(unstated)'}
 Founder vibe: ${input.founderPersona || '(unstated)'}
-Stage: ${input.stage || '(unstated)'}`
+Stage: ${input.stage || '(unstated)'}
+
+## PLAYER FACTS (HONOR THESE — never invent contradictions)
+Team: ${input.team || '(unstated; do not invent a cofounder, treat as solo)'}
+Funding: ${input.fundingModel || '(unstated; do not assume a fundraising track)'}
+Current concern: ${input.concern || '(unstated)'}`
 
   // Per-call (uncached): the recent choices + scene target.
   const liveBlock = `## RECENT CHOICES (last few only)
