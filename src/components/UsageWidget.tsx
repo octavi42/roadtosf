@@ -5,11 +5,11 @@ import { useSessionStore } from "@/lib/session";
 export default function UsageWidget() {
   const hasHydrated = useSessionStore((s) => s.hasHydrated);
   const creditsRemaining = useSessionStore((s) => s.creditsRemaining);
-  const phase = useSessionStore((s) => s.phase);
+  const paywallOpen = useSessionStore((s) => s.paywallOpen);
   const paid = useSessionStore((s) => s.paid);
 
   if (!hasHydrated) return null;
-  if (phase === "paywall") return null;
+  if (paywallOpen) return null;
   // Show the widget when the player has either paid in this session OR
   // has a server-confirmed balance > 0 (e.g., a returning user who just
   // logged in via LoginModal, where `paid` was never flipped client-side

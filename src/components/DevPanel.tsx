@@ -26,7 +26,6 @@ const STATIC_TARGETS_HEAD: DevTarget[] = [
   { label: "Scene 1", phase: "scene", sceneIndex: 0 },
   { label: "Scene 2", phase: "scene", sceneIndex: 1 },
   { label: "Scene 3", phase: "scene", sceneIndex: 2 },
-  { label: "Paywall", phase: "paywall" },
   { label: "Scene 4 (Q&A)", phase: "scene", sceneIndex: 3 },
   { label: "Generating Arc", phase: "generating-arc" },
 ];
@@ -35,25 +34,7 @@ const STATIC_TARGETS_TAIL: DevTarget[] = [{ label: "Ending", phase: "ending" }];
 
 const SESSION_STORAGE_KEY = "roadtosf-session";
 
-const HARDCODED_INTRO = {
-  startupName: "Wagr",
-  startupDescription: "Compliance software for crypto exchanges.",
-  selfDescription:
-    "Anxious second-time founder, ex-Stripe PM, terrified of the YC rejection email.",
-  stage: "Pre-seed, just incorporated",
-  team: "Solo (looking for a technical cofounder)",
-  fundingModel: "Raising — six months of personal runway",
-  targetCustomer: "Compliance leads at mid-size crypto exchanges",
-  concern: "Not sure if this should be SaaS or a marketplace",
-  flavorTags: ["YC", "Tartine", "Sand Hill"],
-  transcript: "[dev skip — hardcoded onboarding]",
-  // All canonical fields are populated above, so the scene-4 Q&A has nothing
-  // left to ask. Pre-set [] so the Q&A auto-skips even before extract-facts
-  // returns (which would either echo [] or error and leave this untouched).
-  missingQuestions: [],
-};
-
-const PHASES_REQUIRING_PLAYTHROUGH: Phase[] = ["scene", "paywall", "ending"];
+const PHASES_REQUIRING_PLAYTHROUGH: Phase[] = ["scene", "ending"];
 
 function formatArchetypeSpeaker(speaker: string): string {
   if (speaker === "player") return "You";
@@ -71,8 +52,8 @@ export default function DevPanel() {
   const devSetPhase = useSessionStore((s) => s.devSetPhase);
   const playthroughId = useSessionStore((s) => s.playthroughId);
   const setPlaythroughId = useSessionStore((s) => s.setPlaythroughId);
-  const captureIntro = useSessionStore((s) => s.captureIntro);
   const reset = useSessionStore((s) => s.reset);
+  const paywallOpen = useSessionStore((s) => s.paywallOpen);
   const devGrantCredits = useSessionStore((s) => s.devGrantCredits);
   const paywallSatisfied = useSessionStore((s) => s.paywallSatisfied);
   const arcSkeleton = useSessionStore((s) => s.arc?.arcSkeleton);
@@ -178,13 +159,13 @@ export default function DevPanel() {
       console.error("dev grant-credits failed", err);
     }
 
-    if (phase === "paywall") {
-      window.localStorage.removeItem(DEV_OVERRIDE_KEY);
-      // Pass 0 — we'll set the absolute balance below from the server
-      // response, so this just flips phase + paid=true.
+    // paywallSatisfied closes the overlay and flips paid=true; devGrantCredits
+    // does the same flip without touching paywallOpen. Either is safe to call
+    // unconditionally — passing 0 because we set the absolute balance from
+    // the server response below.
+    if (paywallOpen) {
       paywallSatisfied(0);
     } else {
-      // Client devGrantCredits flips paid=true; pass 0 for the same reason.
       devGrantCredits(0);
     }
     if (serverBalance !== null) {
@@ -198,39 +179,12 @@ export default function DevPanel() {
     setTick((t) => t + 1);
   };
 
-  const skipToPaywall = async () => {
-    // Start from a clean slate so the hardcoded intro isn't appended onto
-    // whatever was already in the transcript.
-    window.localStorage.removeItem(DEV_OVERRIDE_KEY);
-    window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
-    reset();
-
-    captureIntro(HARDCODED_INTRO);
-
-    window.localStorage.setItem(
-      DEV_OVERRIDE_KEY,
-      JSON.stringify({ phase: "paywall" }),
-    );
-    devSetPhase("paywall");
+  const showPaywall = () => {
+    // The paywall is now an overlay, not a phase. Just toggle it on — no
+    // reset, no scene-index jump, no playthrough mint. Whatever the user
+    // was doing stays underneath; closing the modal returns them to it.
+    useSessionStore.getState().setPaywallOpen(true);
     setTick((t) => t + 1);
-
-    try {
-      const r = await fetch("/api/playthroughs", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          startupName: HARDCODED_INTRO.startupName,
-          startupDescription: HARDCODED_INTRO.startupDescription,
-          selfDescription: HARDCODED_INTRO.selfDescription,
-          flavorTags: HARDCODED_INTRO.flavorTags,
-          introTranscript: HARDCODED_INTRO.transcript,
-        }),
-      });
-      const data = (await r.json()) as { id?: string };
-      if (data.id) setPlaythroughId(data.id);
-    } catch (err) {
-      console.error("dev skip-to-paywall playthrough failed", err);
-    }
   };
 
   const isActive = (target: DevTarget) =>
@@ -443,11 +397,11 @@ export default function DevPanel() {
 
           <div className="grid grid-cols-2 gap-1 mb-1">
             <button
-              onClick={skipToPaywall}
+              onClick={showPaywall}
               className="text-[10px] text-amber-200/80 hover:text-amber-100 py-1 border border-amber-300/30 rounded transition-colors"
-              title="Wipe session, inject hardcoded intro, jump to paywall"
+              title="Open the paywall overlay without disturbing scene state"
             >
-              SKIP → PAYWALL
+              SHOW PAYWALL
             </button>
             <button
               onClick={wipeSession}

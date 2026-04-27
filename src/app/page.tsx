@@ -266,6 +266,7 @@ export default function HomePage() {
     (s) => s.shareMomentFiredInEpisode,
   );
   const creditsRemaining = useSessionStore((s) => s.creditsRemaining);
+  const paywallOpen = useSessionStore((s) => s.paywallOpen);
   const startupName = intro.startupName;
 
   const {
@@ -375,18 +376,15 @@ export default function HomePage() {
     };
   }, [hasHydrated, sessionEmail, setCreditsRemaining]);
 
-  // Auto-skip the paywall when the player has carry-over credits. Covers
-  // two paths the boundary check in advanceScene doesn't: (a) async balance
-  // arrival — fetch resolves AFTER advanceScene has already routed to
-  // paywall, (b) dev skip-to-paywall, which jumps phase=paywall after a
-  // reset that wiped paid/credits client-side. The next group fire is
-  // still server-authoritative; a stale client mirror just bounces back
-  // here via 402 → creditsExhausted.
+  // Auto-close the paywall overlay when the player ends up with credits
+  // (e.g. balance refetch resolves after a 402, or another tab paid first).
+  // The overlay is now decoupled from `phase`, so the only thing that
+  // matters here is paywallOpen + creditsRemaining.
   useEffect(() => {
-    if (phase !== "paywall") return;
+    if (!paywallOpen) return;
     if (creditsRemaining < 1) return;
     paywallSatisfied(0);
-  }, [phase, creditsRemaining, paywallSatisfied]);
+  }, [paywallOpen, creditsRemaining, paywallSatisfied]);
 
   // Q&A scenes (e.g. scene 4 car ride) walk through `scene.questions` after
   // the intro dialogue. Local state — resets when the player moves scenes.
@@ -691,6 +689,11 @@ export default function HomePage() {
       })
       .catch((err) => {
         if (err instanceof PaywallRequiredError) {
+          // Reset the dedup ref so this effect re-fires the call once the
+          // user pays and creditsRemaining changes — otherwise the
+          // generating-arc loader would hang forever after the modal
+          // closes.
+          firstSceneFiredRef.current = null;
           setCreditsRemaining(err.balance);
           creditsExhausted();
           return;
@@ -710,6 +713,7 @@ export default function HomePage() {
     playthroughId,
     setCreditsRemaining,
     creditsExhausted,
+    creditsRemaining,
   ]);
 
   // Group-batch scene-text generation. Each archetype group fires as a
@@ -1040,6 +1044,7 @@ export default function HomePage() {
     playthroughId,
     setCreditsRemaining,
     creditsExhausted,
+    creditsRemaining,
   ]);
 
   // Safety: if the player jumps directly to generating-arc via dev panel and
@@ -1556,9 +1561,6 @@ export default function HomePage() {
       case "welcome":
         return null;
 
-      case "paywall":
-        return null;
-
       case "generating-arc":
         return (
           <div
@@ -1687,7 +1689,7 @@ export default function HomePage() {
 
   return (
     <>
-      {phase === "paywall" && (
+      {paywallOpen && (
         <PaywallPanel
           onSatisfied={(creditsGranted) => paywallSatisfied(creditsGranted)}
         />
@@ -1706,13 +1708,14 @@ export default function HomePage() {
 
       {/*
         Top-right "Past flights" pill — appears whenever a player is logged in,
-        EXCEPT on welcome (already linked there), paywall (don't interrupt
-        payment), and ending (its own CTA covers it). Sits above the
-        GameShell header so it overlays the cinematic without nudging layout.
+        EXCEPT on welcome (already linked there), while the paywall overlay is
+        open (don't interrupt payment), and on ending (its own CTA covers
+        it). Sits above the GameShell header so it overlays the cinematic
+        without nudging layout.
       */}
       {sessionEmail &&
         phase !== "welcome" &&
-        phase !== "paywall" &&
+        !paywallOpen &&
         phase !== "ending" && (
           <button
             type="button"

@@ -2,17 +2,17 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { ArcSkeleton, EndingKey, Scene, StoryArc } from "./types";
 
+// Phase no longer includes "paywall" — the paywall is now an overlay
+// (paywallOpen: boolean) that floats on top of whatever phase the player
+// is in. Driven by /api/generate-scene 402 responses, not by scene index,
+// so a returning user with credits walks straight from scene 2 to scene 3
+// and a new user only meets the paywall when the LLM tail can't fund a
+// group it's about to generate.
 export type Phase =
   | "welcome"
   | "scene"
-  | "paywall"
   | "generating-arc"
   | "ending";
-
-/**
- * Paywall fires when this scene index has just been completed.
- */
-export const PAYWALL_AFTER_SCENE_INDEX = 2;
 
 /**
  * Authored scenes (src/lib/scenes.ts) cover indices 0..AUTHORED_SCENE_COUNT-1:
@@ -107,6 +107,14 @@ interface SessionState {
    * NOT persisted: the source of truth is the iron-session cookie.
    */
   sessionEmail: string | null;
+  /**
+   * The paywall is a modal overlay, not a phase. Set true when a generation
+   * call returns 402 (creditsExhausted) or by the dev tools for testing.
+   * Independent of `phase` so opening it doesn't disrupt the underlying
+   * scene/generating-arc state — when the user pays, paywallSatisfied
+   * closes the overlay and the existing flow resumes from where it was.
+   */
+  paywallOpen: boolean;
   // Tracks which sceneIndex already fired its share moment in the current
   // episode. Reset to null on each new arc skeleton (= new episode) and on
   // reset. Acts both as the per-episode frequency cap (max 1) and the
@@ -120,11 +128,12 @@ interface SessionState {
   setPlaythroughId: (id: string | undefined) => void;
   setCreditsRemaining: (n: number) => void;
   setSessionEmail: (email: string | null) => void;
+  setPaywallOpen: (open: boolean) => void;
   decrementCredits: (n?: number) => void;
   /**
-   * Server-mediated paywall re-entry: called when the user has paid before
-   * (so paid=true) but their balance hit 0 mid-run. Different from the
-   * post-scene-2 first-time gate, which keys on paid=false.
+   * Called when /api/generate-scene returns 402 (server-side debit found
+   * an empty balance). Opens the paywall overlay and zeroes the local
+   * mirror so the widget reflects the depleted state behind the modal.
    */
   creditsExhausted: () => void;
   devGrantCredits: (n: number) => void;
@@ -191,6 +200,7 @@ export const useSessionStore = create<SessionState>()(
       paid: false,
       creditsRemaining: 0,
       sessionEmail: null,
+      paywallOpen: false,
       shareMomentFiredInEpisode: null,
 
       markShareMomentFired: (sceneIndex) =>
@@ -202,14 +212,15 @@ export const useSessionStore = create<SessionState>()(
       setPlaythroughId: (id) => set({ playthroughId: id }),
       setCreditsRemaining: (n) => set({ creditsRemaining: Math.max(0, n) }),
       setSessionEmail: (email) => set({ sessionEmail: email }),
+      setPaywallOpen: (open) => set({ paywallOpen: open }),
       decrementCredits: (n = 1) =>
         set((state) => ({
           creditsRemaining: Math.max(0, state.creditsRemaining - Math.max(0, n)),
         })),
       creditsExhausted: () =>
         set((state) => {
-          if (state.phase === 'paywall') return state;
-          return { phase: 'paywall', creditsRemaining: 0 };
+          if (state.paywallOpen) return state;
+          return { paywallOpen: true, creditsRemaining: 0 };
         }),
       devGrantCredits: (n) =>
         set((state) => ({
@@ -444,22 +455,10 @@ export const useSessionStore = create<SessionState>()(
             showChoices: false,
             choiceMade: null,
           };
-          // Paywall after the configured authored scene — but only if the
-          // player has neither paid in this client session nor carried a
-          // credit balance over from a prior pack (returning logged-in
-          // user). Skipping the gate here when creditsRemaining > 0 is
-          // safe: the server still authoritatively debits on the next
-          // group fire, and a stale client mirror (says N, server says 0)
-          // bounces straight back to paywall via the 402 → creditsExhausted
-          // path. The cost of the leak in that edge case is the four
-          // post-paywall authored scenes' TTS — acceptable.
-          if (currentIndex === PAYWALL_AFTER_SCENE_INDEX && !state.paid) {
-            if (state.creditsRemaining > 0) {
-              return { paid: true, progress: nextProgress };
-            }
-            return { phase: "paywall", progress: nextProgress };
-          }
-          // After the last authored scene, hand off to LLM via generating-arc
+          // No more scene-2 paywall gate — the paywall is now driven by
+          // /api/generate-scene 402s only. A new user walks free through
+          // scenes 0–7 (authored) and hits the paywall the first time the
+          // LLM tail can't fund a group it's about to generate.
           if (currentIndex === AUTHORED_SCENE_COUNT - 1) {
             return { phase: "generating-arc", progress: nextProgress };
           }
@@ -468,13 +467,12 @@ export const useSessionStore = create<SessionState>()(
 
       paywallSatisfied: (creditsGranted = 0) =>
         set((state) => {
-          if (state.phase !== "paywall") return state;
-          // Bounce back into the scene flow. The scene index doesn't reset
-          // here — for the first-time paywall it's already past the gate
-          // (scene 3+); for a mid-run credit-exhaustion paywall the player
-          // resumes wherever they were when the next group failed to fire.
+          // Close the overlay regardless of phase — the user paid, they're
+          // free to keep playing wherever they were. paid stays true once
+          // set so the widget keeps surfacing post-purchase even at
+          // creditsRemaining=0.
           return {
-            phase: "scene",
+            paywallOpen: false,
             paid: true,
             creditsRemaining: state.creditsRemaining + Math.max(0, creditsGranted),
           };
@@ -487,18 +485,6 @@ export const useSessionStore = create<SessionState>()(
               phase,
               progress: {
                 sceneIndex,
-                currentLineIndex: 0,
-                showChoices: false,
-                choiceMade: null,
-              },
-              ending: undefined,
-            };
-          }
-          if (phase === "paywall") {
-            return {
-              phase,
-              progress: {
-                sceneIndex: PAYWALL_AFTER_SCENE_INDEX + 1,
                 currentLineIndex: 0,
                 showChoices: false,
                 choiceMade: null,
@@ -540,6 +526,7 @@ export const useSessionStore = create<SessionState>()(
           playthroughId: undefined,
           paid: false,
           creditsRemaining: 0,
+          paywallOpen: false,
           shareMomentFiredInEpisode: null,
         }),
     }),
@@ -571,6 +558,7 @@ export const useSessionStore = create<SessionState>()(
         playthroughId: state.playthroughId,
         paid: state.paid,
         creditsRemaining: state.creditsRemaining,
+        paywallOpen: state.paywallOpen,
         shareMomentFiredInEpisode: state.shareMomentFiredInEpisode,
       }),
       onRehydrateStorage: () => (state) => {
