@@ -312,30 +312,6 @@ export default function HomePage() {
     })),
   );
 
-  // Pull the server-authoritative balance once on hydrate. Server is the
-  // source of truth; the persisted client value can drift across tabs or
-  // after a manual purge. Failures are silent — the persisted value stays.
-  useEffect(() => {
-    if (!hasHydrated) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const r = await fetch("/api/credits/balance", { cache: "no-store" });
-        if (!r.ok) return;
-        const data = (await r.json()) as { credits?: number };
-        if (cancelled) return;
-        if (typeof data.credits === "number") {
-          setCreditsRemaining(data.credits);
-        }
-      } catch {
-        /* network blip — keep the persisted value */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [hasHydrated, setCreditsRemaining]);
-
   const router = useRouter();
   const [welcomeLineIndex, setWelcomeLineIndex] = useState(0);
   const [welcomeDone, setWelcomeDone] = useState(false);
@@ -366,6 +342,33 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchSessionEmail();
   }, [fetchSessionEmail]);
+
+  // Pull the server-authoritative balance on hydrate AND whenever the
+  // session email changes (welcome-screen login/logout, paywall OTP, fresh
+  // Stripe verify). Without the sessionEmail dep, a returning user who
+  // signs in via LoginModal would still see the anon balance frozen at
+  // mount and the widget would mis-report. Failures are silent — the
+  // persisted value stays.
+  useEffect(() => {
+    if (!hasHydrated) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch("/api/credits/balance", { cache: "no-store" });
+        if (!r.ok) return;
+        const data = (await r.json()) as { credits?: number };
+        if (cancelled) return;
+        if (typeof data.credits === "number") {
+          setCreditsRemaining(data.credits);
+        }
+      } catch {
+        /* network blip — keep the persisted value */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasHydrated, sessionEmail, setCreditsRemaining]);
 
   // Q&A scenes (e.g. scene 4 car ride) walk through `scene.questions` after
   // the intro dialogue. Local state — resets when the player moves scenes.

@@ -10,12 +10,14 @@ export default function UsageWidget() {
 
   if (!hasHydrated) return null;
   if (phase === "paywall") return null;
-  // Pre-paywall (paid=false, the free authored prologue), credits aren't a
-  // useful concept yet — hide so the widget doesn't read "0 Credits" while
-  // the player is mid-trial.
-  if (!paid) return null;
-
+  // Show the widget when the player has either paid in this session OR
+  // has a server-confirmed balance > 0 (e.g., a returning user who just
+  // logged in via LoginModal, where `paid` was never flipped client-side
+  // because no fresh Stripe verify ran). Pre-payment trial — anon, no
+  // balance — keeps the widget hidden so it doesn't read "0 Credits"
+  // during the free authored prologue.
   const empty = creditsRemaining <= 0;
+  if (empty && !paid) return null;
 
   return (
     <div
