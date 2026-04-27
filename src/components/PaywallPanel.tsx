@@ -155,42 +155,49 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
     };
   }, [playthroughId]);
 
-  const handleEmailBlur = async () => {
+  // Debounced email lookup. Fires ~350 ms after the last keystroke so we
+  // don't hammer the endpoint on every character. Each new keystroke aborts
+  // the previous in-flight fetch and clears the timer, so only the latest
+  // valid email's response wins. The onChange handler clears the optimistic
+  // returningUser state immediately, so stale "Frequent flyer found" labels
+  // can't survive into a new email.
+  useEffect(() => {
     const trimmed = email.trim();
-    if (!EMAIL_RE.test(trimmed)) {
-      returningUserRef.current = null;
-      setReturningUser(null);
-      return;
-    }
-    setCheckingEmail(true);
-    const promise = (async () => {
-      try {
-        const r = await fetch("/api/paywall/check-email", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ email: trimmed }),
-        });
-        const data = (await r.json()) as { paid?: boolean };
-        const result = Boolean(data.paid);
-        returningUserRef.current = result;
-        setReturningUser(result);
-      } catch (err) {
-        console.error("paywall check-email failed", err);
-        returningUserRef.current = null;
-        setReturningUser(null);
-      } finally {
-        setCheckingEmail(false);
-      }
-    })();
-    checkInFlightRef.current = promise;
-    try {
-      await promise;
-    } finally {
-      if (checkInFlightRef.current === promise) {
-        checkInFlightRef.current = null;
-      }
-    }
-  };
+    if (!EMAIL_RE.test(trimmed)) return;
+
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => {
+      setCheckingEmail(true);
+      const promise = (async () => {
+        try {
+          const r = await fetch("/api/paywall/check-email", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ email: trimmed }),
+            signal: ctrl.signal,
+          });
+          const data = (await r.json()) as { paid?: boolean };
+          if (ctrl.signal.aborted) return;
+          const result = Boolean(data.paid);
+          returningUserRef.current = result;
+          setReturningUser(result);
+        } catch (err) {
+          if (ctrl.signal.aborted) return;
+          console.error("paywall check-email failed", err);
+          returningUserRef.current = null;
+          setReturningUser(null);
+        } finally {
+          if (!ctrl.signal.aborted) setCheckingEmail(false);
+        }
+      })();
+      checkInFlightRef.current = promise.then(() => undefined);
+    }, 350);
+
+    return () => {
+      clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [email]);
 
   const handleSendCode = async () => {
     if (sendingCode) return;
@@ -418,7 +425,6 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
                 setCode("");
               }
             }}
-            onBlur={handleEmailBlur}
             placeholder="you@example.com"
             autoComplete="email"
             className="ticket-input w-full"
