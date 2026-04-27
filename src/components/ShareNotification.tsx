@@ -73,7 +73,7 @@ export function ShareNotification({
   const CARD_HEIGHT = 224;
   const DOCKED_HEIGHT = 32;
   const EASE = "cubic-bezier(0.32, 1.05, 0.6, 1)";
-  const DUR = "380ms";
+  const DUR = "260ms";
   const props = ["width", "height", "padding", "border-radius", "left", "top", "transform", "background-color"];
   const containerStyle: React.CSSProperties = {
     background: isCard ? "var(--color-fog)" : "var(--color-mustard)",
@@ -102,8 +102,8 @@ export function ShareNotification({
         style={{
           opacity: isCard ? 1 : 0,
           transition: isCard
-            ? "opacity 220ms ease 140ms"
-            : "opacity 140ms ease",
+            ? "opacity 160ms ease 100ms"
+            : "opacity 100ms ease",
           pointerEvents: isCard ? "auto" : "none",
         }}
       >
@@ -173,8 +173,8 @@ export function ShareNotification({
           opacity: state === "docked" ? 1 : 0,
           transition:
             state === "docked"
-              ? "opacity 220ms ease 140ms"
-              : "opacity 140ms ease",
+              ? "opacity 160ms ease 100ms"
+              : "opacity 100ms ease",
           pointerEvents: state === "docked" ? "auto" : "none",
           fontSize: "0.78rem",
           letterSpacing: "0.16em",
