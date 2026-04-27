@@ -10,177 +10,13 @@ import TextInputPanel from "@/components/TextInputPanel";
 import DialogueSubtitle from "@/components/DialogueSubtitle";
 import DialogueSpeaker from "@/components/DialogueSpeaker";
 import { useSessionStore } from "@/lib/session";
-import type { EndingKey } from "@/lib/types";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+import { ARCHETYPES } from "@/lib/archetypes";
+import type { EndingKey, Group, StoryArc } from "@/lib/types";
 
 interface ApiKeys {
   openaiKey: string;
   elevenlabsKey: string;
 }
-
-interface DialogueLine {
-  speaker: string;
-  text: string;
-}
-
-interface Choice {
-  id: string;
-  label: string;
-  hype: number;
-  integrity: number;
-}
-
-interface SceneData {
-  id: number;
-  title: string;
-  dialogue: DialogueLine[];
-  choices: Choice[];
-}
-
-// ---------------------------------------------------------------------------
-// Prescripted story — Wagr (Venmo for sports bets between friends)
-// ---------------------------------------------------------------------------
-
-const SCENES: SceneData[] = [
-  {
-    id: 1,
-    title: "Scene 1 · The Pivot",
-    dialogue: [
-      {
-        speaker: "Maya · Co-founder & CTO",
-        text: "We need to talk before the pitch. I've been thinking — Wagr needs to pivot to AI.",
-      },
-      {
-        speaker: "Maya · Co-founder & CTO",
-        text: "Everyone on Sand Hill is asking about AI agents. Peer-to-peer betting is a tough sell right now.",
-      },
-      {
-        speaker: "Maya · Co-founder & CTO",
-        text: "We wrap Wagr in an AI layer — 'your AI friend who handles all your bets' — and suddenly we're a platform play.",
-      },
-      {
-        speaker: "Maya · Co-founder & CTO",
-        text: "I can have a demo ready by Thursday. But I need you to back me on this. Right now.",
-      },
-    ],
-    choices: [
-      { id: "a", label: "No, ship the original", hype: -1, integrity: 1 },
-      { id: "b", label: "Yes, pivot to AI", hype: 1, integrity: -1 },
-    ],
-  },
-  {
-    id: 2,
-    title: "Scene 2 · The Scoop",
-    dialogue: [
-      {
-        speaker: "Journalist · TechCrunch",
-        text: "I heard from three sources that Wagr's payment processor dropped you over regulatory concerns. Care to comment?",
-      },
-      {
-        speaker: "Journalist · TechCrunch",
-        text: "I'm running this either way. The question is whether your version of the story is in it.",
-      },
-      {
-        speaker: "Journalist · TechCrunch",
-        text: "Off the record — I actually think what you're building is interesting. But my editor wants blood.",
-      },
-      {
-        speaker: "Journalist · TechCrunch",
-        text: "Give me something. Anything. A leak, a number, a name. I'll make it worth your while.",
-      },
-    ],
-    choices: [
-      {
-        id: "a",
-        label: "That's not true. No comment.",
-        hype: -1,
-        integrity: 1,
-      },
-      { id: "b", label: "Send her the details", hype: 1, integrity: -1 },
-    ],
-  },
-  {
-    id: 3,
-    title: "Scene 3 · The Term Sheet",
-    dialogue: [
-      {
-        speaker: "VC · Founders Fund",
-        text: "Tell me something that's true that almost nobody agrees with you on.",
-      },
-      {
-        speaker: "VC · Founders Fund",
-        text: "We want to lead your seed. Three million, fifteen percent, standard pro-rata.",
-      },
-      {
-        speaker: "VC · Founders Fund",
-        text: "One condition. Maya steps back to an advisory role. We want you running point, solo.",
-      },
-      {
-        speaker: "VC · Founders Fund",
-        text: "This offer expires when I leave this table. The Caltrain back to the city is in eleven minutes.",
-      },
-    ],
-    choices: [
-      { id: "a", label: "Take it", hype: 1, integrity: -1 },
-      { id: "b", label: "Walk away", hype: -1, integrity: 1 },
-    ],
-  },
-  {
-    id: 4,
-    title: "Scene 4 · Trust Crisis",
-    dialogue: [
-      {
-        speaker: "Maya · Co-founder & CTO",
-        text: "I saw the term sheet. The one with my name in the advisory clause.",
-      },
-      {
-        speaker: "Maya · Co-founder & CTO",
-        text: "You were going to tell me when, exactly?",
-      },
-      {
-        speaker: "Hater · Twitter / X",
-        text: "Wagr founder just pushed out his CTO for VC money. Classic. Thread incoming 🧵",
-      },
-      {
-        speaker: "Maya · Co-founder & CTO",
-        text: "I built the entire backend. I have thirty percent. Whatever you're about to say — think carefully.",
-      },
-    ],
-    choices: [
-      { id: "a", label: "Lie. You never saw it.", hype: 0, integrity: -2 },
-      { id: "b", label: "Level with her", hype: 0, integrity: 2 },
-    ],
-  },
-  {
-    id: 5,
-    title: "Scene 5 · Demo Day",
-    dialogue: [
-      {
-        speaker: "Mentor · YC Partner",
-        text: "You're on in ten minutes. Five hundred people in that room, half of them writing checks.",
-      },
-      {
-        speaker: "Mentor · YC Partner",
-        text: "The number they remember is the one you say on stage. It lives forever.",
-      },
-      {
-        speaker: "Mentor · YC Partner",
-        text: "Your actual MRR is eighty thousand. That's real. That's respectable.",
-      },
-      {
-        speaker: "Mentor · YC Partner",
-        text: "But I've seen founders say ten million ARR with a straight face and walk out with a term sheet. Your call.",
-      },
-    ],
-    choices: [
-      { id: "a", label: "Understated truth", hype: -1, integrity: 2 },
-      { id: "b", label: "Full hype. $10M ARR.", hype: 2, integrity: -2 },
-    ],
-  },
-];
 
 const ENDING_COPY: Record<
   EndingKey,
@@ -189,49 +25,82 @@ const ENDING_COPY: Record<
   ipo: {
     label: "IPO",
     subtitle:
-      "Wagr rang the bell at NYSE on a Tuesday. You cried. Maya didn't come. The Bloomberg headline called you 'the unlikely conscience of fintech.' You framed it.",
+      "Wagr rang the bell at NYSE on a Tuesday. You cried. Maya didn't come.",
     color: "text-emerald-400",
   },
   indicted: {
     label: "INDICTED",
     subtitle:
-      "The SEC opened an inquiry in November. You're on your third podcast apology tour. Wagr pivoted to compliance software. It still has twelve employees.",
+      "The SEC opened an inquiry in November. You're on your third podcast apology tour.",
     color: "text-red-400",
   },
   "ai-wrapper": {
     label: "AI-WRAPPER PIVOT",
     subtitle:
-      "You quietly rebranded to WagrAI, laid off four people, and wrote a Substack post called 'Why We're Going Back to Basics.' It got three thousand likes.",
+      "You quietly rebranded, laid off four people, and wrote a Substack post called 'Why We're Going Back to Basics.'",
     color: "text-sky-400",
   },
   acquihire: {
     label: "ACQUI-HIRED",
     subtitle:
-      "DraftKings bought the team for parts. You got a director title and a non-compete. Maya took her thirty percent and started something new without you.",
+      "DraftKings bought the team for parts. You got a director title and a non-compete.",
     color: "text-amber-400",
   },
   ghosted: {
     label: "GHOSTED",
     subtitle:
-      "Wagr never quite registered. The algorithm didn't notice. The co-working space lease expired. You still have the hoodie.",
+      "Wagr never quite registered. The algorithm didn't notice. The co-working space lease expired.",
     color: "text-white/60",
   },
 };
 
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
+const TWIST_CARD_MIN_MS = 3000;
+const TWIST_CARD_FAILSAFE_MS = 8000;
+const GROUP_GEN_TIMEOUT_MS = 20000;
+
+function formatSpeaker(speaker: string): string {
+  if (speaker === "player") return "You";
+  if (speaker === "narrator") return "";
+  const def = ARCHETYPES[speaker as keyof typeof ARCHETYPES];
+  if (!def) return speaker;
+  return `${def.name} · ${def.title}`;
+}
+
+interface GeneratedGroupResponse {
+  group: Group;
+  source: "llm" | "fallback";
+}
+
+async function fetchGroup(payload: Record<string, unknown>): Promise<Group> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), GROUP_GEN_TIMEOUT_MS);
+  try {
+    const res = await fetch("/api/generate-group", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`generate-group ${res.status}`);
+    const data = (await res.json()) as GeneratedGroupResponse;
+    return data.group;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export default function HomePage() {
   const [isMuted, setIsMuted] = useState(false);
 
   const phase = useSessionStore((s) => s.phase);
   const hasHydrated = useSessionStore((s) => s.hasHydrated);
-  const { sceneIndex, currentLineIndex, showChoices, choiceMade } =
+  const { groupIndex, sceneIndex, currentLineIndex, showChoices, choiceMade } =
     useSessionStore(useShallow((s) => s.progress));
   const { hype, integrity } = useSessionStore(useShallow((s) => s.stats));
   const ending = useSessionStore((s) => s.ending);
-  const historyCount = useSessionStore((s) => s.history.length);
+  const intro = useSessionStore(useShallow((s) => s.intro));
+  const arc = useSessionStore((s) => s.arc);
+  const history = useSessionStore((s) => s.history);
   const playthroughId = useSessionStore((s) => s.playthroughId);
 
   const {
@@ -239,9 +108,13 @@ export default function HomePage() {
     keysConfirmed,
     introSubmitted,
     enterScenes,
+    arcReady,
+    groupReady,
+    exitTwistCard,
     advanceLine,
     chooseOption,
     advanceScene,
+    setEpilogue,
     reset,
   } = useSessionStore(
     useShallow((s) => ({
@@ -249,17 +122,18 @@ export default function HomePage() {
       keysConfirmed: s.keysConfirmed,
       introSubmitted: s.introSubmitted,
       enterScenes: s.enterScenes,
+      arcReady: s.arcReady,
+      groupReady: s.groupReady,
+      exitTwistCard: s.exitTwistCard,
       advanceLine: s.advanceLine,
       chooseOption: s.chooseOption,
       advanceScene: s.advanceScene,
+      setEpilogue: s.setEpilogue,
       reset: s.reset,
     })),
   );
 
-  // -------------------------------------------------------------------------
   // Dev: skip API key panel when .env.local keys are present
-  // -------------------------------------------------------------------------
-
   useEffect(() => {
     if (!hasHydrated) return;
     if (process.env.NODE_ENV !== "development") return;
@@ -272,11 +146,172 @@ export default function HomePage() {
       .catch(() => {});
   }, [hasHydrated, phase, keysConfirmed]);
 
-  // -------------------------------------------------------------------------
-  // DB capture
-  // -------------------------------------------------------------------------
+  // Group 1 generation kicks off when phase enters 'generating'.
+  const group1FiredRef = useRef(false);
+  useEffect(() => {
+    if (phase !== "generating") {
+      group1FiredRef.current = false;
+      return;
+    }
+    if (group1FiredRef.current) return;
+    group1FiredRef.current = true;
 
-  // Tracks when the choice panel became visible, for time_to_choose_ms.
+    const startupName = intro.startupName ?? "Wagr";
+    const startupDescription =
+      intro.startupDescription ?? "Venmo for sports bets between friends";
+    const founderPersona = intro.selfDescription ?? "";
+
+    const seed = playthroughId ?? `local-${Date.now()}`;
+
+    fetchGroup({
+      groupIndex: 1,
+      startupName,
+      startupDescription,
+      founderPersona,
+      flavorTags: intro.flavorTags,
+      priorChoices: [],
+      currentStats: { hype: 0, integrity: 0 },
+      seed,
+    })
+      .then((group) => {
+        const initialArc: StoryArc = {
+          startupName,
+          founderPersona,
+          flavorTags: intro.flavorTags,
+          groups: [
+            { ...group, status: "ready" },
+            { id: 2, twistCard: "", scenes: [], status: "pending" },
+            { id: 3, twistCard: "", scenes: [], status: "pending" },
+          ],
+          stats: {
+            firedCofounder: false,
+            tookVCMoney: false,
+            leakedToPress: false,
+            playedSafeDemoDay: false,
+          },
+        };
+        arcReady(initialArc);
+        if (playthroughId) {
+          fetch(`/api/playthroughs/${playthroughId}`, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ arcJson: initialArc }),
+          }).catch(() => {});
+        }
+        enterScenes();
+      })
+      .catch((err) => {
+        console.error("group 1 generation failed", err);
+        // Even the route's fallback couldn't ship — leave the user on the
+        // generating screen with a manual entry so they're not stuck.
+      });
+  }, [phase, intro, playthroughId, arcReady, enterScenes]);
+
+  // Eager trigger for Group N+1 when Scene 3 of Group N mounts.
+  const eagerFiredRef = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    if (phase !== "scene") return;
+    if (sceneIndex !== 2) return; // Scene 3 (0-indexed)
+    if (groupIndex >= 2) return; // no Group 4
+    if (!arc) return;
+    const nextIndex = groupIndex + 1;
+    if (eagerFiredRef.current.has(nextIndex)) return;
+    if (arc.groups[nextIndex]?.status === "ready") return;
+    eagerFiredRef.current.add(nextIndex);
+
+    const payload = {
+      groupIndex: nextIndex + 1, // route uses 1-based group ids
+      startupName: arc.startupName,
+      startupDescription: intro.startupDescription ?? "",
+      founderPersona: arc.founderPersona,
+      flavorTags: arc.flavorTags,
+      priorChoices: history.map((h) => ({
+        groupIndex: h.groupIndex,
+        sceneId: h.sceneId,
+        choiceLabel: h.choiceLabel,
+        hypeDelta: h.hypeDelta,
+        integrityDelta: h.integrityDelta,
+      })),
+      currentStats: { hype, integrity },
+      seed: playthroughId ?? `local-${arc.startupName}`,
+    };
+
+    fetchGroup(payload)
+      .then((group) => {
+        groupReady(nextIndex, group);
+      })
+      .catch((err) => {
+        console.error(`eager group ${nextIndex + 1} failed`, err);
+      });
+  }, [
+    phase,
+    sceneIndex,
+    groupIndex,
+    arc,
+    intro.startupDescription,
+    history,
+    hype,
+    integrity,
+    playthroughId,
+    groupReady,
+  ]);
+
+  // Twist card: enforce min hold + auto-advance once next group ready.
+  const twistEnteredAtRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (phase !== "twist-card") {
+      twistEnteredAtRef.current = null;
+      return;
+    }
+    if (twistEnteredAtRef.current === null) {
+      twistEnteredAtRef.current = Date.now();
+    }
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - (twistEnteredAtRef.current ?? Date.now());
+      const isLastGroup = groupIndex >= 2;
+      const nextReady = arc?.groups[groupIndex + 1]?.status === "ready";
+      if (elapsed >= TWIST_CARD_MIN_MS && (isLastGroup || nextReady)) {
+        clearInterval(interval);
+        exitTwistCard();
+        return;
+      }
+      if (elapsed >= TWIST_CARD_FAILSAFE_MS) {
+        clearInterval(interval);
+        // Failsafe: pull a fallback for the next group synchronously.
+        if (!isLastGroup) {
+          fetchGroup({
+            groupIndex: groupIndex + 2,
+            startupName: arc?.startupName ?? "Wagr",
+            startupDescription: intro.startupDescription ?? "",
+            founderPersona: arc?.founderPersona ?? "",
+            flavorTags: arc?.flavorTags ?? [],
+            priorChoices: history,
+            currentStats: { hype, integrity },
+          })
+            .then((group) => {
+              groupReady(groupIndex + 1, group);
+              exitTwistCard();
+            })
+            .catch(() => exitTwistCard());
+        } else {
+          exitTwistCard();
+        }
+      }
+    }, 250);
+    return () => clearInterval(interval);
+  }, [
+    phase,
+    groupIndex,
+    arc,
+    history,
+    hype,
+    integrity,
+    intro.startupDescription,
+    exitTwistCard,
+    groupReady,
+  ]);
+
+  // DB capture
   const choiceShownAtRef = useRef<number | null>(null);
   useEffect(() => {
     if (showChoices) {
@@ -288,7 +323,7 @@ export default function HomePage() {
     }
   }, [showChoices]);
 
-  // Finalize the playthrough exactly once when the ending lands.
+  // Finalize the playthrough + generate epilogue once at ending.
   const finalizedRef = useRef(false);
   useEffect(() => {
     if (phase !== "ending") {
@@ -296,23 +331,46 @@ export default function HomePage() {
       return;
     }
     if (finalizedRef.current) return;
-    if (!playthroughId || !ending) return;
+    if (!ending) return;
     finalizedRef.current = true;
-    fetch(`/api/playthroughs/${playthroughId}`, {
-      method: "PATCH",
+
+    const epilogueP = fetch("/api/generate-epilogue", {
+      method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        ending: ending.key,
-        epilogue: null,
-        achievements: ending.achievementsUnlocked,
+        startupName: arc?.startupName ?? "the startup",
+        endingKey: ending.key,
+        flavorTags: arc?.flavorTags ?? [],
+        choiceHistory: history.map((h) => ({
+          groupIndex: h.groupIndex,
+          sceneId: h.sceneId,
+          choiceLabel: h.choiceLabel,
+        })),
       }),
-    }).catch((err) => console.error("finalizePlaythrough failed", err));
-  }, [phase, playthroughId, ending]);
+    })
+      .then((r) => r.json() as Promise<{ epilogue: string }>)
+      .then((data) => {
+        setEpilogue(data.epilogue);
+        return data.epilogue;
+      })
+      .catch(() => null);
 
-  // -------------------------------------------------------------------------
+    if (playthroughId) {
+      epilogueP.then((epilogue) => {
+        fetch(`/api/playthroughs/${playthroughId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            ending: ending.key,
+            epilogue,
+            achievements: ending.achievementsUnlocked,
+          }),
+        }).catch((err) => console.error("finalizePlaythrough failed", err));
+      });
+    }
+  }, [phase, ending, playthroughId, arc, history, setEpilogue]);
+
   // Handlers
-  // -------------------------------------------------------------------------
-
   const handleKeysConfirmed = useCallback(
     (_keys: ApiKeys) => {
       keysConfirmed();
@@ -346,21 +404,25 @@ export default function HomePage() {
       .catch((err) => console.error("createPlaythrough failed", err));
   }, [introSubmitted, setPlaythroughId]);
 
+  const currentGroup = arc?.groups[groupIndex];
+  const currentScene = currentGroup?.scenes[sceneIndex] ?? null;
+  const currentLine = currentScene?.dialogue[currentLineIndex] ?? null;
+
   const handleLineComplete = useCallback(() => {
-    const scene = SCENES[sceneIndex];
-    if (!scene) return;
-    advanceLine(scene.dialogue.length);
-  }, [sceneIndex, advanceLine]);
+    if (!currentScene) return;
+    advanceLine(currentScene.dialogue.length);
+  }, [currentScene, advanceLine]);
 
   const handleChoice = useCallback(
     (choiceId: string, freeText?: string) => {
-      const scene = SCENES[sceneIndex];
-      const choice = scene?.choices.find((c) => c.id === choiceId);
-      const hypeDelta = choice?.hype ?? 0;
-      const integrityDelta = choice?.integrity ?? 0;
-      chooseOption(choiceId, hypeDelta, integrityDelta);
+      if (!currentScene) return;
+      const choice = currentScene.choices.find((c) => c.id === choiceId);
+      if (!choice) return;
+      const hypeDelta = choice.hype;
+      const integrityDelta = choice.integrity;
+      chooseOption(choiceId, choice.label, hypeDelta, integrityDelta);
 
-      if (playthroughId && scene) {
+      if (playthroughId) {
         const startedAt = choiceShownAtRef.current;
         const timeToChooseMs =
           startedAt !== null ? Date.now() - startedAt : null;
@@ -368,11 +430,11 @@ export default function HomePage() {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            sceneNumber: scene.id,
-            dialogue: scene.dialogue
-              .map((d) => `${d.speaker}: ${d.text}`)
+            sceneNumber: currentScene.id,
+            dialogue: currentScene.dialogue
+              .map((d) => `${formatSpeaker(d.speaker)}: ${d.text}`)
               .join("\n"),
-            choicesShown: scene.choices.map((c) => ({
+            choicesShown: currentScene.choices.map((c) => ({
               id: c.id,
               label: c.label,
             })),
@@ -386,40 +448,37 @@ export default function HomePage() {
       }
 
       setTimeout(() => {
-        advanceScene(SCENES.length);
+        advanceScene();
       }, 600);
     },
-    [sceneIndex, chooseOption, advanceScene, playthroughId],
+    [currentScene, chooseOption, advanceScene, playthroughId],
   );
 
   const handleTextSubmit = useCallback(
     (text: string) => {
-      // Scene 3 counter-offer: classify as "walk" for now (integrity boost)
-      handleChoice("b", text);
+      // VC-archetype scene: collapse counter-offer to last choice (typically "walk").
+      if (!currentScene) return;
+      const fallback = currentScene.choices[currentScene.choices.length - 1];
+      handleChoice(fallback.id, text);
     },
-    [handleChoice],
+    [currentScene, handleChoice],
   );
-
-  // -------------------------------------------------------------------------
-  // Derived slots
-  // -------------------------------------------------------------------------
 
   const muteButton = (
     <MuteButton isMuted={isMuted} onToggle={handleMuteToggle} />
   );
 
-  const currentScene = SCENES[sceneIndex] ?? null;
-  const currentLine = currentScene?.dialogue[currentLineIndex] ?? null;
-
   const dialogueSlot =
     phase === "scene" && currentLine ? (
       <div className="w-full max-w-2xl mx-auto px-2 select-none">
         <DialogueSpeaker
-          speaker={showChoices ? undefined : currentLine.speaker}
+          speaker={
+            showChoices ? undefined : formatSpeaker(currentLine.speaker)
+          }
         />
         {!showChoices && (
           <DialogueSubtitle
-            key={`scene${sceneIndex}-line${currentLineIndex}`}
+            key={`g${groupIndex}-s${sceneIndex}-l${currentLineIndex}`}
             text={currentLine.text}
             wordInterval={110}
             onComplete={handleLineComplete}
@@ -428,11 +487,13 @@ export default function HomePage() {
       </div>
     ) : null;
 
-  const bottomPanel = (() => {
-    if (phase !== "scene" || !showChoices) return null;
+  const showCounterOfferInput =
+    currentScene?.archetype === "vc" && groupIndex === 0;
 
-    // Scene 3 gets an extra free-text counter-offer option
-    if (currentScene?.id === 3 && !isMuted) {
+  const bottomPanel = (() => {
+    if (phase !== "scene" || !showChoices || !currentScene) return null;
+
+    if (showCounterOfferInput && !isMuted) {
       return (
         <div className="flex flex-col gap-3">
           <ChoicePanel
@@ -461,16 +522,12 @@ export default function HomePage() {
 
     return (
       <ChoicePanel
-        choices={currentScene?.choices ?? []}
+        choices={currentScene.choices}
         onChoice={handleChoice}
         disabled={choiceMade !== null}
       />
     );
   })();
-
-  // -------------------------------------------------------------------------
-  // Center content by phase
-  // -------------------------------------------------------------------------
 
   const centerContent = (() => {
     switch (phase) {
@@ -520,12 +577,6 @@ export default function HomePage() {
               <br />
               Your co-founder is already texting.
             </p>
-            <button
-              onClick={() => enterScenes()}
-              className="mt-4 text-white/30 hover:text-white/60 text-xs underline transition-colors"
-            >
-              Enter →
-            </button>
           </div>
         );
 
@@ -541,6 +592,20 @@ export default function HomePage() {
           </div>
         );
 
+      case "twist-card": {
+        const text = currentGroup?.twistCard ?? "Word travels fast in SF.";
+        return (
+          <div className="backdrop-panel animate-fade-slide-up rounded-2xl p-10 max-w-lg w-full text-center flex flex-col gap-3">
+            <p className="text-white/40 text-xs font-semibold tracking-widest uppercase">
+              Interlude
+            </p>
+            <p className="text-white text-lg leading-relaxed font-light">
+              {text}
+            </p>
+          </div>
+        );
+      }
+
       case "ending": {
         const e = ending ? ENDING_COPY[ending.key] : null;
         return (
@@ -554,7 +619,7 @@ export default function HomePage() {
               {e?.label ?? "UNKNOWN"}
             </h2>
             <p className="text-white/60 text-sm leading-relaxed">
-              {e?.subtitle}
+              {ending?.epilogue ?? e?.subtitle}
             </p>
             <div className="border-t border-white/10 pt-4 flex flex-col gap-1 text-xs text-white/30">
               <span>
@@ -562,7 +627,7 @@ export default function HomePage() {
                 {hype} · Integrity {integrity > 0 ? "+" : ""}
                 {integrity}
               </span>
-              <span>{historyCount} choices made</span>
+              <span>{history.length} choices made</span>
             </div>
             <button
               onClick={() => reset()}
@@ -575,10 +640,6 @@ export default function HomePage() {
       }
     }
   })();
-
-  // -------------------------------------------------------------------------
-  // Render
-  // -------------------------------------------------------------------------
 
   if (!hasHydrated) return null;
 

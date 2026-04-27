@@ -1,0 +1,78 @@
+{
+  "id": 2,
+  "twistCard": "The thread goes viral by 9am. The replies are split into two camps: the ones who already hate you, and the ones who are about to.",
+  "scenes": [
+    {
+      "id": 5,
+      "title": "Scene 5 · The Hater Tweet",
+      "archetype": "hater",
+      "imagePrompt": "rooftop bar in SoMa at golden hour, a male competing-startup CEO in expensive streetwear leaning on a railing, phone held up showing a tweet, founder's silhouette half-turned, smug condescension, two-shot",
+      "dialogue": [
+        { "speaker": "hater", "text": "Hey. Big fan. Just posted a thread about Wagr — my views are my own, obviously." },
+        { "speaker": "hater", "text": "Saw the term sheet news. Bold of you. Gutsy. Thirteen percent dilution at three mil though, brutal." },
+        { "speaker": "hater", "text": "Anyway, my Series B closed at four-fifty post. Just so you know what real numbers look like in this market." },
+        { "speaker": "hater", "text": "Want to grab coffee? I can intro you to my partners. They love a comeback story." }
+      ],
+      "choices": [
+        { "id": "a", "label": "Block him publicly", "consequence": "Founder retaliates; the hater's quote-tweet army doubles overnight.", "hype": 1, "integrity": -1 },
+        { "id": "b", "label": "Take the meeting", "consequence": "Founder humors him; the meeting was a recruiting trap.", "hype": -1, "integrity": -1 },
+        { "id": "c", "label": "Ignore. Eat the dunk.", "consequence": "Founder absorbs the hit; the timeline moves on by lunch.", "hype": 0, "integrity": 1 }
+      ],
+      "timeoutSeconds": 15,
+      "timeoutChoiceId": "c"
+    },
+    {
+      "id": 6,
+      "title": "Scene 6 · The YC Office Hours",
+      "archetype": "mentor",
+      "imagePrompt": "a YC partner's small Palo Alto office, an older woman with reading glasses pushed up, warm but searching expression, founder seated across a wooden desk strewn with batch-house mugs and one rejection letter, two-shot, late-afternoon golden light",
+      "dialogue": [
+        { "speaker": "mentor", "text": "I've watched two hundred startups die. The dead ones almost always look like yours did three weeks ago." },
+        { "speaker": "mentor", "text": "Here's what I want you to consider. Not as advice. As a question." },
+        { "speaker": "mentor", "text": "If you fired Maya tomorrow, would the company still ship Q3? Would it still be Wagr?" }
+      ],
+      "choices": [
+        { "id": "a", "label": "Yes. I am Wagr.", "consequence": "Founder claims the company; the mentor stops returning calls.", "hype": 1, "integrity": -1 },
+        { "id": "b", "label": "No. We are.", "consequence": "Founder credits the team; the mentor opens her contact list.", "hype": -1, "integrity": 2 },
+        { "id": "c", "label": "I don't know yet.", "consequence": "Founder hesitates; the mentor writes the answer in her notebook.", "hype": 0, "integrity": 1 }
+      ],
+      "timeoutSeconds": 15,
+      "timeoutChoiceId": "c"
+    },
+    {
+      "id": 7,
+      "title": "Scene 7 · The Pre-Empt",
+      "archetype": "vc",
+      "imagePrompt": "the Battery members-only club, exposed brick and $24 cocktails, a patrician VC across a small leather banquette, founder's drink untouched, leaning in for the close, intimate two-shot, late evening",
+      "dialogue": [
+        { "speaker": "vc", "text": "The other firm's term sheet is a trap and you know it. We can pre-empt at two-X the valuation tonight." },
+        { "speaker": "vc", "text": "But I need a yes before the bill comes. Tomorrow this conversation gets re-priced." },
+        { "speaker": "vc", "text": "And I need you to commit to the AI pivot publicly. Tweet it tomorrow morning. Tag us." }
+      ],
+      "choices": [
+        { "id": "a", "label": "Sign tonight", "consequence": "Founder takes the bigger check; the public pivot tweet goes live at 7am.", "hype": 2, "integrity": -2 },
+        { "id": "b", "label": "Need 48 hours", "consequence": "Founder asks for time; the offer evaporates.", "hype": -1, "integrity": 1 }
+      ],
+      "timeoutSeconds": 15,
+      "timeoutChoiceId": "b"
+    },
+    {
+      "id": 8,
+      "title": "Scene 8 · TechCrunch Calls Back",
+      "archetype": "reporter",
+      "imagePrompt": "a Mission cafe at noon, third-wave espresso machine in background, the male reporter from before now seated alone, phone face-up between you, his recorder visibly running, founder's hands tense on the table, two-shot",
+      "dialogue": [
+        { "speaker": "reporter", "text": "We're publishing in three hours. The headline currently reads 'Wagr Founder Pushed Out CTO For VC Money'." },
+        { "speaker": "reporter", "text": "I'm giving you one chance to give me a quote. Anything. The lawyers say the headline stands either way." },
+        { "speaker": "reporter", "text": "Or — if you want to make news instead of being it — I have a different angle. Off the record." }
+      ],
+      "choices": [
+        { "id": "a", "label": "Give him a quote", "consequence": "Founder feeds the headline; it shifts from 'pushed out' to 'in transition'.", "hype": 0, "integrity": 0 },
+        { "id": "b", "label": "Take the off-record", "consequence": "Founder trades a different scoop; a competitor's funding round leaks instead.", "hype": 2, "integrity": -2 },
+        { "id": "c", "label": "Hang up", "consequence": "Founder cuts contact; the headline runs as written.", "hype": -1, "integrity": 1 }
+      ],
+      "timeoutSeconds": 15,
+      "timeoutChoiceId": "c"
+    }
+  ]
+}

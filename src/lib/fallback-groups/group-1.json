@@ -1,0 +1,77 @@
+{
+  "id": 1,
+  "twistCard": "Word travels fast in SF. By the time you make it to Caltrain, three Twitter accounts already know what you said in the room.",
+  "scenes": [
+    {
+      "id": 1,
+      "title": "Scene 1 · The Pivot",
+      "archetype": "cofounder",
+      "imagePrompt": "co-working space at dusk, female cofounder mid-sentence leaning across a laptop covered in stickers, the founder visible in profile listening, golden hour glow, two-shot composition, urgent mood",
+      "dialogue": [
+        { "speaker": "cofounder", "text": "We need to talk before the pitch. I've been thinking — Wagr needs to pivot to AI." },
+        { "speaker": "cofounder", "text": "Everyone on Sand Hill is asking about AI agents. Peer-to-peer betting is a tough sell right now." },
+        { "speaker": "cofounder", "text": "We wrap Wagr in an AI layer — 'your AI friend who handles all your bets' — and suddenly we're a platform play." },
+        { "speaker": "cofounder", "text": "I can have a demo ready by Thursday. But I need you to back me on this. Right now." }
+      ],
+      "choices": [
+        { "id": "a", "label": "No, ship the original", "consequence": "Founder holds the line; cofounder reads it as a no-confidence vote.", "hype": -1, "integrity": 1 },
+        { "id": "b", "label": "Yes, pivot to AI", "consequence": "Founder folds; the deck gets a new title slide before midnight.", "hype": 1, "integrity": -1 }
+      ],
+      "timeoutSeconds": 15,
+      "timeoutChoiceId": "a"
+    },
+    {
+      "id": 2,
+      "title": "Scene 2 · The Scoop",
+      "archetype": "reporter",
+      "imagePrompt": "a SoMa coffee shop with exposed brick, a male tech reporter holding a notebook, smirking, leaning forward across a small table, the founder's hands wrapped around a coffee cup in foreground, slight noir lighting, two-shot",
+      "dialogue": [
+        { "speaker": "reporter", "text": "I heard from three sources that Wagr's payment processor dropped you over regulatory concerns. Care to comment?" },
+        { "speaker": "reporter", "text": "I'm running this either way. The question is whether your version of the story is in it." },
+        { "speaker": "reporter", "text": "Off the record — I actually think what you're building is interesting. But my editor wants blood." },
+        { "speaker": "reporter", "text": "Give me something. Anything. A leak, a number, a name. I'll make it worth your while." }
+      ],
+      "choices": [
+        { "id": "a", "label": "That's not true. No comment.", "consequence": "Founder denies; the story runs anyway, harsher.", "hype": -1, "integrity": 1 },
+        { "id": "b", "label": "Send her the details", "consequence": "Founder leaks; the cofounder finds out from Twitter.", "hype": 1, "integrity": -1 }
+      ],
+      "timeoutSeconds": 15,
+      "timeoutChoiceId": "a"
+    },
+    {
+      "id": 3,
+      "title": "Scene 3 · The Term Sheet",
+      "archetype": "vc",
+      "imagePrompt": "the bar at Rosewood Sand Hill at last light, a patrician male VC in a perfectly tailored blazer across a small marble table, founder's hands clasped, a leather portfolio between them, cinematic two-shot, deal-closing tension",
+      "dialogue": [
+        { "speaker": "vc", "text": "Tell me something that's true that almost nobody agrees with you on." },
+        { "speaker": "vc", "text": "We want to lead your seed. Three million, fifteen percent, standard pro-rata." },
+        { "speaker": "vc", "text": "One condition. Maya steps back to an advisory role. We want you running point, solo." },
+        { "speaker": "vc", "text": "This offer expires when I leave this table. The Caltrain back to the city is in eleven minutes." }
+      ],
+      "choices": [
+        { "id": "a", "label": "Take it", "consequence": "Founder accepts; the cofounder isn't told tonight.", "hype": 1, "integrity": -1 },
+        { "id": "b", "label": "Walk away", "consequence": "Founder declines on principle; the term sheet goes to a competitor by Friday.", "hype": -1, "integrity": 1 }
+      ],
+      "timeoutSeconds": 15,
+      "timeoutChoiceId": "b"
+    },
+    {
+      "id": 4,
+      "title": "Scene 4 · Trust Crisis",
+      "archetype": "cofounder",
+      "imagePrompt": "founder's apartment kitchen at midnight, female cofounder standing across the counter holding a phone, screen glow lighting her face, the founder seated, two-shot, raw emotional confrontation, harsh overhead lighting",
+      "dialogue": [
+        { "speaker": "cofounder", "text": "I saw the term sheet. The one with my name in the advisory clause." },
+        { "speaker": "cofounder", "text": "You were going to tell me when, exactly?" },
+        { "speaker": "cofounder", "text": "I built the entire backend. I have thirty percent. Whatever you're about to say — think carefully." }
+      ],
+      "choices": [
+        { "id": "a", "label": "Lie. You never saw it.", "consequence": "Founder denies; the cofounder pretends to believe it for one more week.", "hype": 0, "integrity": -2 },
+        { "id": "b", "label": "Level with her", "consequence": "Founder confesses; one of them is leaving by morning.", "hype": 0, "integrity": 2 }
+      ],
+      "timeoutSeconds": 15,
+      "timeoutChoiceId": "b"
+    }
+  ]
+}

@@ -11,27 +11,40 @@ export interface DialogueLine {
 export interface Choice {
   id: string
   label: string
-  consequence: string // short internal note for LLM continuity
+  consequence?: string // short internal note for LLM continuity
+  hype: number
+  integrity: number
 }
 
 export interface Scene {
-  id: number // 1–5
+  id: number
   title: string
-  imagePrompt: string     // prompt sent to gpt-image-2
-  imageUrl?: string       // base64 data URL, filled after image gen
+  archetype: Archetype
+  imagePrompt: string
+  imageUrl?: string
   dialogue: DialogueLine[]
   choices: Choice[]
   timeoutSeconds: number
-  timeoutChoiceId: string // which choice ID fires on timeout
+  timeoutChoiceId: string
+}
+
+export type GroupStatus = 'pending' | 'ready' | 'failed'
+
+export interface Group {
+  id: number // 1, 2, 3
+  twistCard: string
+  scenes: Scene[]
+  status: GroupStatus
 }
 
 export interface StoryArc {
   startupName: string
   founderPersona: string
-  scenes: Scene[]
-  endingKey: EndingKey
-  endingNarrative: string
-  shareCardPrompt: string // image gen prompt for final hero art
+  flavorTags: string[]
+  groups: Group[]
+  endingKey?: EndingKey
+  endingNarrative?: string
+  shareCardPrompt?: string
   stats: {
     firedCofounder: boolean
     tookVCMoney: boolean
@@ -40,8 +53,7 @@ export interface StoryArc {
   }
 }
 
-// What the API route returns for a single image generation
 export interface GenerateImageResult {
-  b64Json: string    // raw base64, no data URL prefix
+  b64Json: string
   format: 'jpeg' | 'png' | 'webp'
 }

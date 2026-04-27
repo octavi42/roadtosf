@@ -1,0 +1,78 @@
+{
+  "id": 3,
+  "twistCard": "Demo Day is in 36 hours. Every founder you know is in their hotel room rehearsing the same number with a different straight face.",
+  "scenes": [
+    {
+      "id": 9,
+      "title": "Scene 9 · The Reckoning",
+      "archetype": "cofounder",
+      "imagePrompt": "the empty co-working space at 2am, fluorescent strip lights flickering, female cofounder packing a single cardboard box on the desk, the founder watching from a doorway, wide two-shot, exhausted resignation",
+      "dialogue": [
+        { "speaker": "cofounder", "text": "I'm leaving. I emailed the board fifteen minutes ago." },
+        { "speaker": "cofounder", "text": "You can keep my equity vesting if you want. I'd rather you bought it back at the cap. Either way." },
+        { "speaker": "cofounder", "text": "One last thing. The pitch on Thursday — the MRR slide. Don't say ten million. I'll know. Everyone in that room will know." }
+      ],
+      "choices": [
+        { "id": "a", "label": "Beg her to stay", "consequence": "Founder pleads; the cofounder gives a 30-day ultimatum.", "hype": -1, "integrity": 1 },
+        { "id": "b", "label": "Buy back her equity", "consequence": "Founder cleans the cap table; the cofounder leaves quietly.", "hype": 1, "integrity": 0 },
+        { "id": "c", "label": "Let her walk", "consequence": "Founder accepts it; the door clicks shut at 2:14am.", "hype": 1, "integrity": -1 }
+      ],
+      "timeoutSeconds": 15,
+      "timeoutChoiceId": "c"
+    },
+    {
+      "id": 10,
+      "title": "Scene 10 · The Backstage Pep Talk",
+      "archetype": "mentor",
+      "imagePrompt": "backstage at a Demo Day venue, the YC partner with reading glasses and a clipboard, founder in a hoodie clutching a water bottle, exposed pipework and stage-light glow above, intimate two-shot, pre-stage tension",
+      "dialogue": [
+        { "speaker": "mentor", "text": "You're on in ten minutes. Five hundred people in that room, half of them writing checks." },
+        { "speaker": "mentor", "text": "The number they remember is the one you say on stage. It lives forever." },
+        { "speaker": "mentor", "text": "Your actual MRR is eighty thousand. That's real. That's respectable. But I've seen founders say ten million ARR with a straight face and walk out with a term sheet. Your call." }
+      ],
+      "choices": [
+        { "id": "a", "label": "Understated truth", "consequence": "Founder commits to the real number; the room quiets but doesn't reach for checkbooks.", "hype": -1, "integrity": 2 },
+        { "id": "b", "label": "Full hype. Ten mil ARR.", "consequence": "Founder lies on stage; three texts from VCs hit before the next demo finishes.", "hype": 2, "integrity": -2 },
+        { "id": "c", "label": "Round generously", "consequence": "Founder fudges to 'mid-seven figures'; nobody fact-checks live.", "hype": 1, "integrity": -1 }
+      ],
+      "timeoutSeconds": 18,
+      "timeoutChoiceId": "a"
+    },
+    {
+      "id": 11,
+      "title": "Scene 11 · The Hater Comes Back",
+      "archetype": "hater",
+      "imagePrompt": "the after-party at Trick Dog in the Mission, mezcal cocktails on a small table, the competing-startup CEO blocking the founder's exit, neon and warm bar light, tense two-shot, late-night closing time",
+      "dialogue": [
+        { "speaker": "hater", "text": "Heard your pitch. Bold numbers. Aspirational, even." },
+        { "speaker": "hater", "text": "I have receipts. Stripe export. Three months of MRR. I haven't tweeted it yet. I might not." },
+        { "speaker": "hater", "text": "What's it worth to you? Acquihire, advisory role, board observer — make me a number." }
+      ],
+      "choices": [
+        { "id": "a", "label": "Call his bluff", "consequence": "Founder dares him; the receipts are real and they hit Twitter at 11:42pm.", "hype": -2, "integrity": 1 },
+        { "id": "b", "label": "Cut him in", "consequence": "Founder offers an advisory slot; the receipts disappear into a NDA.", "hype": 1, "integrity": -2 },
+        { "id": "c", "label": "Walk past him", "consequence": "Founder ignores the threat; he tweets within the hour either way.", "hype": -1, "integrity": 0 }
+      ],
+      "timeoutSeconds": 15,
+      "timeoutChoiceId": "c"
+    },
+    {
+      "id": 12,
+      "title": "Scene 12 · The Last Office Hours",
+      "archetype": "mentor",
+      "imagePrompt": "a quiet Palo Alto cafe at 8am, the YC partner pouring two cups of coffee from a French press, founder seated across from her with a closed laptop, soft morning light, intimate two-shot, the calm after",
+      "dialogue": [
+        { "speaker": "mentor", "text": "You made it through the week. That puts you ahead of about thirty percent of your batch already." },
+        { "speaker": "mentor", "text": "So. The real question. When the Bloomberg piece runs in eighteen months, what's the headline you want?" },
+        { "speaker": "mentor", "text": "Don't tell me. Tell yourself. And then ship something this week that proves it." }
+      ],
+      "choices": [
+        { "id": "a", "label": "Build quietly. No press.", "consequence": "Founder commits to silence; the next news about Wagr is a Series B.", "hype": -1, "integrity": 2 },
+        { "id": "b", "label": "Lean in. Be the story.", "consequence": "Founder embraces the persona; the podcast tour books out the month.", "hype": 2, "integrity": -1 },
+        { "id": "c", "label": "I don't know.", "consequence": "Founder admits uncertainty; the mentor smiles and orders another coffee.", "hype": 0, "integrity": 1 }
+      ],
+      "timeoutSeconds": 18,
+      "timeoutChoiceId": "c"
+    }
+  ]
+}

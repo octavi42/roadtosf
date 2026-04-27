@@ -1,12 +1,13 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { EndingKey, StoryArc } from "./types";
+import type { EndingKey, Group, StoryArc } from "./types";
 
 export type Phase =
   | "api-keys"
   | "intro"
   | "generating"
   | "scene"
+  | "twist-card"
   | "ending";
 
 export interface IntroData {
@@ -18,15 +19,18 @@ export interface IntroData {
 }
 
 export interface SceneProgress {
-  sceneIndex: number;
+  groupIndex: number; // 0, 1, 2 — index into arc.groups[]
+  sceneIndex: number; // index within the current group's scenes
   currentLineIndex: number;
   showChoices: boolean;
   choiceMade: string | null;
 }
 
 export interface SceneOutcome {
+  groupIndex: number; // 1, 2, 3 — matches Group.id
   sceneId: number;
   choiceId: string;
+  choiceLabel: string;
   timedOut: boolean;
   hypeDelta: number;
   integrityDelta: number;
@@ -59,16 +63,21 @@ interface SessionState {
   ) => void;
   enterScenes: () => void;
   arcReady: (arc: StoryArc) => void;
+  groupReady: (groupIndex: number, group: Group) => void;
+  enterTwistCard: () => void;
+  exitTwistCard: () => void;
   advanceLine: (totalLines: number) => void;
   chooseOption: (
     choiceId: string,
+    choiceLabel: string,
     hypeDelta: number,
     integrityDelta: number,
     timedOut?: boolean,
   ) => void;
-  advanceScene: (totalScenes: number) => void;
+  advanceScene: () => void;
+  setEpilogue: (epilogue: string) => void;
   reset: () => void;
-  devSetPhase: (phase: Phase, sceneIndex?: number) => void;
+  devSetPhase: (phase: Phase, sceneIndex?: number, groupIndex?: number) => void;
 }
 
 const INITIAL_INTRO: IntroData = {
@@ -77,6 +86,7 @@ const INITIAL_INTRO: IntroData = {
 };
 
 const INITIAL_PROGRESS: SceneProgress = {
+  groupIndex: 0,
   sceneIndex: 0,
   currentLineIndex: 0,
   showChoices: false,
@@ -137,6 +147,50 @@ export const useSessionStore = create<SessionState>()(
 
       arcReady: (arc) => set({ arc }),
 
+      groupReady: (groupIndex, group) =>
+        set((state) => {
+          if (!state.arc) return state;
+          const groups = [...state.arc.groups];
+          // Pad with empty groups if needed so indexed assignment is safe.
+          while (groups.length <= groupIndex) {
+            groups.push({ id: groups.length + 1, twistCard: "", scenes: [], status: "pending" });
+          }
+          groups[groupIndex] = { ...group, status: "ready" };
+          return { arc: { ...state.arc, groups } };
+        }),
+
+      enterTwistCard: () =>
+        set((state) => {
+          if (state.phase !== "scene") return state;
+          return { phase: "twist-card" };
+        }),
+
+      exitTwistCard: () =>
+        set((state) => {
+          if (state.phase !== "twist-card") return state;
+          if (!state.arc) return state;
+          const nextGroupIndex = state.progress.groupIndex + 1;
+          if (nextGroupIndex >= state.arc.groups.length) {
+            return {
+              phase: "ending",
+              ending: {
+                key: classifyEnding(state.stats.hype, state.stats.integrity),
+                achievementsUnlocked: [],
+              },
+            };
+          }
+          return {
+            phase: "scene",
+            progress: {
+              groupIndex: nextGroupIndex,
+              sceneIndex: 0,
+              currentLineIndex: 0,
+              showChoices: false,
+              choiceMade: null,
+            },
+          };
+        }),
+
       advanceLine: (totalLines) =>
         set((state) => {
           if (state.phase !== "scene") return state;
@@ -152,15 +206,25 @@ export const useSessionStore = create<SessionState>()(
           };
         }),
 
-      chooseOption: (choiceId, hypeDelta, integrityDelta, timedOut = false) =>
+      chooseOption: (choiceId, choiceLabel, hypeDelta, integrityDelta, timedOut = false) =>
         set((state) => {
           if (state.phase !== "scene") return state;
           if (state.progress.choiceMade !== null) return state;
-          const sceneId = state.progress.sceneIndex + 1;
+          const group = state.arc?.groups[state.progress.groupIndex];
+          const scene = group?.scenes[state.progress.sceneIndex];
+          if (!scene) return state;
           return {
             history: [
               ...state.history,
-              { sceneId, choiceId, timedOut, hypeDelta, integrityDelta },
+              {
+                groupIndex: group.id,
+                sceneId: scene.id,
+                choiceId,
+                choiceLabel,
+                timedOut,
+                hypeDelta,
+                integrityDelta,
+              },
             ],
             stats: {
               hype: state.stats.hype + hypeDelta,
@@ -170,27 +234,31 @@ export const useSessionStore = create<SessionState>()(
           };
         }),
 
-      advanceScene: (totalScenes) =>
+      advanceScene: () =>
         set((state) => {
           if (state.phase !== "scene") return state;
-          const nextIndex = state.progress.sceneIndex + 1;
-          if (nextIndex >= totalScenes) {
-            return {
-              phase: "ending",
-              ending: {
-                key: classifyEnding(state.stats.hype, state.stats.integrity),
-                achievementsUnlocked: [],
-              },
-            };
+          if (!state.arc) return state;
+          const group = state.arc.groups[state.progress.groupIndex];
+          if (!group) return state;
+          const nextSceneIndex = state.progress.sceneIndex + 1;
+          if (nextSceneIndex >= group.scenes.length) {
+            return { phase: "twist-card" };
           }
           return {
             progress: {
-              sceneIndex: nextIndex,
+              ...state.progress,
+              sceneIndex: nextSceneIndex,
               currentLineIndex: 0,
               showChoices: false,
               choiceMade: null,
             },
           };
+        }),
+
+      setEpilogue: (epilogue) =>
+        set((state) => {
+          if (!state.ending) return state;
+          return { ending: { ...state.ending, epilogue } };
         }),
 
       reset: () =>
@@ -205,12 +273,13 @@ export const useSessionStore = create<SessionState>()(
           playthroughId: undefined,
         }),
 
-      devSetPhase: (phase, sceneIndex = 0) =>
+      devSetPhase: (phase, sceneIndex = 0, groupIndex = 0) =>
         set((state) => {
           if (phase === "scene") {
             return {
               phase,
               progress: {
+                groupIndex,
                 sceneIndex,
                 currentLineIndex: 0,
                 showChoices: false,
