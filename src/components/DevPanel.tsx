@@ -47,6 +47,10 @@ const HARDCODED_INTRO = {
   concern: "Not sure if this should be SaaS or a marketplace",
   flavorTags: ["YC", "Tartine", "Sand Hill"],
   transcript: "[dev skip — hardcoded onboarding]",
+  // All canonical fields are populated above, so the scene-4 Q&A has nothing
+  // left to ask. Pre-set [] so the Q&A auto-skips even before extract-facts
+  // returns (which would either echo [] or error and leave this untouched).
+  missingQuestions: [],
 };
 
 const PHASES_REQUIRING_PLAYTHROUGH: Phase[] = ["scene", "paywall", "ending"];
