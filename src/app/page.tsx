@@ -376,15 +376,14 @@ export default function HomePage() {
     };
   }, [hasHydrated, sessionEmail, setCreditsRemaining]);
 
-  // Auto-close the paywall overlay when the player ends up with credits
-  // (e.g. balance refetch resolves after a 402, or another tab paid first).
-  // The overlay is now decoupled from `phase`, so the only thing that
-  // matters here is paywallOpen + creditsRemaining.
-  useEffect(() => {
-    if (!paywallOpen) return;
-    if (creditsRemaining < 1) return;
-    paywallSatisfied(0);
-  }, [paywallOpen, creditsRemaining, paywallSatisfied]);
+  // The earlier auto-close effect ("if paywallOpen && credits>0, close")
+  // turned out to be more harm than help: it made the dev SHOW PAYWALL
+  // toggle un-testable for any user who already had credits, and the rare
+  // race it was guarding (402 fires, then a parallel-tab payment lands
+  // before the modal renders) is acceptable to fall back on — the user
+  // just sees a paywall they don't need and either dismisses or buys an
+  // extra pack. Closing the modal is now driven solely by
+  // paywallSatisfied (Stripe verify or OTP) and explicit dev toggles.
 
   // Q&A scenes (e.g. scene 4 car ride) walk through `scene.questions` after
   // the intro dialogue. Local state — resets when the player moves scenes.

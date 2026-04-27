@@ -36,6 +36,26 @@ const SESSION_STORAGE_KEY = "roadtosf-session";
 
 const PHASES_REQUIRING_PLAYTHROUGH: Phase[] = ["scene", "ending"];
 
+// Used by the "skip onboarding" dev shortcut to seed the IntroData fields
+// the post-onboarding scenes expect, so the player drops straight into
+// scene 3 (Q&A) without the conversational startup-pitching flow.
+const HARDCODED_INTRO = {
+  startupName: "Wagr",
+  startupDescription: "Compliance software for crypto exchanges.",
+  selfDescription:
+    "Anxious second-time founder, ex-Stripe PM, terrified of the YC rejection email.",
+  stage: "Pre-seed, just incorporated",
+  team: "Solo (looking for a technical cofounder)",
+  fundingModel: "Raising — six months of personal runway",
+  targetCustomer: "Compliance leads at mid-size crypto exchanges",
+  concern: "Not sure if this should be SaaS or a marketplace",
+  flavorTags: ["YC", "Tartine", "Sand Hill"],
+  transcript: "[dev skip — hardcoded onboarding]",
+  // Pre-set [] so the scene-4 Q&A auto-skips even before extract-facts
+  // returns (which would either echo [] or error and leave this untouched).
+  missingQuestions: [],
+};
+
 function formatArchetypeSpeaker(speaker: string): string {
   if (speaker === "player") return "You";
   if (speaker === "narrator") return "";
@@ -52,6 +72,7 @@ export default function DevPanel() {
   const devSetPhase = useSessionStore((s) => s.devSetPhase);
   const playthroughId = useSessionStore((s) => s.playthroughId);
   const setPlaythroughId = useSessionStore((s) => s.setPlaythroughId);
+  const captureIntro = useSessionStore((s) => s.captureIntro);
   const reset = useSessionStore((s) => s.reset);
   const paywallOpen = useSessionStore((s) => s.paywallOpen);
   const devGrantCredits = useSessionStore((s) => s.devGrantCredits);
@@ -179,12 +200,50 @@ export default function DevPanel() {
     setTick((t) => t + 1);
   };
 
-  const showPaywall = () => {
-    // The paywall is now an overlay, not a phase. Just toggle it on — no
-    // reset, no scene-index jump, no playthrough mint. Whatever the user
-    // was doing stays underneath; closing the modal returns them to it.
-    useSessionStore.getState().setPaywallOpen(true);
+  const togglePaywall = () => {
+    // Toggle the overlay on/off. The paywall has no built-in close button
+    // (real users have to pay), so the dev panel is the escape hatch when
+    // testing. State underneath is preserved.
+    const store = useSessionStore.getState();
+    store.setPaywallOpen(!store.paywallOpen);
     setTick((t) => t + 1);
+  };
+
+  const skipOnboarding = async () => {
+    // Wipe + inject hardcoded intro + jump to scene 3 (post-onboarding,
+    // start of the car-ride Q&A). With the paywall removed from the scene
+    // flow, this is the new "fast lane" for testing the rest of the run
+    // without typing through the conversational onboarding every time.
+    window.localStorage.removeItem(DEV_OVERRIDE_KEY);
+    window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    reset();
+
+    captureIntro(HARDCODED_INTRO);
+
+    window.localStorage.setItem(
+      DEV_OVERRIDE_KEY,
+      JSON.stringify({ phase: "scene", sceneIndex: 3 }),
+    );
+    devSetPhase("scene", 3);
+    setTick((t) => t + 1);
+
+    try {
+      const r = await fetch("/api/playthroughs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          startupName: HARDCODED_INTRO.startupName,
+          startupDescription: HARDCODED_INTRO.startupDescription,
+          selfDescription: HARDCODED_INTRO.selfDescription,
+          flavorTags: HARDCODED_INTRO.flavorTags,
+          introTranscript: HARDCODED_INTRO.transcript,
+        }),
+      });
+      const data = (await r.json()) as { id?: string };
+      if (data.id) setPlaythroughId(data.id);
+    } catch (err) {
+      console.error("dev skip-onboarding playthrough failed", err);
+    }
   };
 
   const isActive = (target: DevTarget) =>
@@ -397,11 +456,11 @@ export default function DevPanel() {
 
           <div className="grid grid-cols-2 gap-1 mb-1">
             <button
-              onClick={showPaywall}
+              onClick={skipOnboarding}
               className="text-[10px] text-amber-200/80 hover:text-amber-100 py-1 border border-amber-300/30 rounded transition-colors"
-              title="Open the paywall overlay without disturbing scene state"
+              title="Wipe session, inject hardcoded intro, jump to scene 3"
             >
-              SHOW PAYWALL
+              SKIP ONBOARDING
             </button>
             <button
               onClick={wipeSession}
@@ -411,6 +470,14 @@ export default function DevPanel() {
               WIPE SESSION
             </button>
           </div>
+
+          <button
+            onClick={togglePaywall}
+            className="w-full text-[10px] text-sky-200/80 hover:text-sky-100 py-1 border border-sky-300/30 rounded transition-colors mb-1"
+            title="Open or close the paywall overlay without disturbing scene state"
+          >
+            {paywallOpen ? "HIDE PAYWALL" : "SHOW PAYWALL"}
+          </button>
 
           <button
             onClick={grantSixCredits}
