@@ -40,10 +40,9 @@ export async function POST(request: Request) {
       )
     }
 
-    // Dev-only: same bypass as /api/auth/send-code — log the code so the
-    // OTP loop can be exercised with arbitrary emails (Resend's sandbox
-    // only delivers to the account owner). Production never hits this.
-    if (process.env.NODE_ENV !== 'production') {
+    // Dev-only: same bypass as /api/auth/send-code. Gated on `=== 'development'`
+    // (only `next dev` sets that) so Vercel preview/prod stay silent.
+    if (process.env.NODE_ENV === 'development') {
       console.log(`[dev] paywall OTP for ${email}: ${result.code}`)
       try {
         await sendOtpEmail(email, result.code)

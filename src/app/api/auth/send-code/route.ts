@@ -42,8 +42,10 @@ export async function POST(request: Request) {
 
     // Dev-only: log the code so you can finish the OTP loop without
     // depending on Resend (which only delivers to the account-owner email
-    // unless you've verified a domain). Production never hits this branch.
-    if (process.env.NODE_ENV !== 'production') {
+    // unless you've verified a domain). Gated on `=== 'development'` (only
+    // `next dev` sets that) — Vercel preview/prod both run with NODE_ENV
+    // 'production' so they never echo the code.
+    if (process.env.NODE_ENV === 'development') {
       console.log(`[dev] OTP for ${email}: ${result.code}`)
       try {
         await sendOtpEmail(email, result.code)

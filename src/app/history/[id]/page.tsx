@@ -18,7 +18,9 @@ export default async function HistoryDetailPage({ params }: PageProps) {
 
   const email = await readSessionEmail();
   if (!email) {
-    return <NotLoggedIn id={id} />;
+    // No UUID echo back to logged-out viewers — don't confirm whether the ID
+    // points at a real run.
+    return <NotLoggedIn />;
   }
 
   const item = await getPlaythroughByIdAndEmail(id, email);
@@ -127,7 +129,7 @@ export default async function HistoryDetailPage({ params }: PageProps) {
   );
 }
 
-function NotLoggedIn({ id }: { id: string }) {
+function NotLoggedIn() {
   return (
     <div
       className="fixed inset-0 flex items-center justify-center px-5"
@@ -141,10 +143,10 @@ function NotLoggedIn({ id }: { id: string }) {
           className="text-[10px] font-bold tracking-[0.28em] uppercase mb-2"
           style={{ color: "var(--color-bay)" }}
         >
-          Past flight · {id.slice(0, 8)}
+          Earlier flights
         </p>
         <p className="text-sm mb-4" style={{ color: "var(--color-ink)" }}>
-          Log in to view this run.
+          Log in to view past playthroughs.
         </p>
         <Link
           href="/"
