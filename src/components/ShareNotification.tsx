@@ -24,29 +24,51 @@ export function ShareNotification({
   onDismiss,
 }: ShareNotificationProps) {
   const [state, setState] = useState<ShareNotificationState>("hidden");
+  // Drives the entry fade. Can't use the existing `animate-bounce-in`
+  // keyframes because they animate `transform`, which clobbers the morph's
+  // inline translate(-50%, -50%) and shoves the box off-center.
+  const [entered, setEntered] = useState(false);
 
   useEffect(() => {
     // Effect runs only when `visible` flips, so the setState calls here are a
     // synchronisation step (incoming prop → local state machine), not the
     // cascading-render pattern the lint rule guards against.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!visible) return setState("hidden");
+    if (!visible) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEntered(false);
+      return setState("hidden");
+    }
     setState("peek");
+    const raf = requestAnimationFrame(() => setEntered(true));
     const t = setTimeout(() => {
       setState((s) => (s === "peek" ? "docked" : s));
     }, peekDurationMs);
-    return () => clearTimeout(t);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t);
+    };
   }, [visible, peekDurationMs]);
 
   if (state === "hidden") return null;
 
   const isCard = state === "peek" || state === "expanded";
-  const isPeek = state === "peek";
 
   // Single fixed box morphs between three layouts.
   //  - peek: top-center toast
-  //  - expanded: anchored to left edge, full card
+  //  - expanded: dead-center modal-like card
   //  - docked: collapsed pill at left edge (icon only)
+  const positionByState: Record<
+    Exclude<ShareNotificationState, "hidden">,
+    Pick<React.CSSProperties, "left" | "top" | "transform">
+  > = {
+    peek: { left: "50%", top: 84, transform: "translateX(-50%)" },
+    expanded: {
+      left: "50%",
+      top: "50%",
+      transform: "translate(-50%, -50%)",
+    },
+    docked: { left: 12, top: "50%", transform: "translateY(-50%)" },
+  };
   const containerStyle: React.CSSProperties = {
     background: isCard ? "var(--color-fog)" : "var(--color-mustard)",
     color: "var(--color-ink)",
@@ -54,20 +76,17 @@ export function ShareNotification({
     minHeight: 56,
     padding: isCard ? "1rem 1.1rem" : "0",
     borderRadius: 14,
-    left: isPeek ? "50%" : 12,
-    top: isPeek ? 84 : "50%",
-    transform: isPeek
-      ? "translateX(-50%)"
-      : "translateY(-50%)",
+    ...positionByState[state],
+    opacity: entered ? 1 : 0,
     transition:
-      "width 360ms cubic-bezier(0.34, 1.56, 0.64, 1), padding 360ms ease, border-radius 360ms ease, background-color 240ms ease, left 360ms cubic-bezier(0.34, 1.56, 0.64, 1), top 360ms cubic-bezier(0.34, 1.56, 0.64, 1), transform 360ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+      "opacity 220ms ease, width 360ms cubic-bezier(0.34, 1.56, 0.64, 1), padding 360ms ease, border-radius 360ms ease, background-color 240ms ease, left 360ms cubic-bezier(0.34, 1.56, 0.64, 1), top 360ms cubic-bezier(0.34, 1.56, 0.64, 1), transform 360ms cubic-bezier(0.34, 1.56, 0.64, 1)",
     overflow: "hidden",
     cursor: state === "docked" ? "pointer" : "default",
   };
 
   return (
     <div
-      className="fixed comic-outline animate-bounce-in"
+      className="fixed comic-outline"
       style={{ ...containerStyle, zIndex: 40 }}
       onClick={state === "docked" ? () => setState("expanded") : undefined}
       role={state === "docked" ? "button" : undefined}
