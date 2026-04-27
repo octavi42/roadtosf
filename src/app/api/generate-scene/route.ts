@@ -5,7 +5,7 @@ import { arcSkeletonSchema } from '@/lib/schemas/arc'
 import { buildScenePromptParts, type PriorChoiceSummary } from '@/lib/prompts/scene'
 import fallbackScenes from '@/lib/fallback/scenes.json'
 
-const AUTHORED_SCENE_COUNT = 5
+const AUTHORED_SCENE_COUNT = 4
 const EPISODE_LENGTH = 5
 
 type Body = {

@@ -5,7 +5,9 @@ const SPEAKER_VALUES = [...ARCHETYPE_VALUES, 'player', 'narrator'] as const
 
 const dialogueLineSchema = z.object({
   speaker: z.enum(SPEAKER_VALUES),
-  text: z.string().min(1).max(160),
+  // text can be empty for "(silent reaction)" beats from player/narrator;
+  // sanitizeScene strips them before rendering.
+  text: z.string().max(200),
 })
 
 const allowedDeltas = [-2, -1, 0, 1, 2] as const
@@ -53,8 +55,12 @@ export function clampDelta(n: number): number {
 }
 
 export function sanitizeScene(s: ParsedScene): ParsedScene {
+  // Strip empty-text dialogue lines (LLM sometimes uses them for "silent
+  // beats"; the renderer can't display them as voiced lines).
+  const dialogue = s.dialogue.filter((d) => d.text.trim().length > 0)
   return {
     ...s,
+    dialogue: dialogue.length > 0 ? dialogue : s.dialogue, // never strip everything
     choices: s.choices.map((c) => ({
       ...c,
       hype: clampDelta(c.hype),

@@ -36,7 +36,8 @@ HARD RULES:
 - Real people are NEVER named — archetype them.
 - Use ONLY the archetype assigned in the outline as the in-scene speaker (other archetypes can be referenced in dialogue but not present).
 - Total dialogue across all lines in this scene MUST be ≤${MAX_DIALOGUE_CHARS_PER_SCENE} chars (TTS budget).
-- Each individual dialogue line ≤160 chars. 2–4 lines per scene total.
+- Each individual dialogue line ≤160 chars and MUST contain non-empty text. Do not use empty strings for "silent beats" — express silence in narration prose, not as an empty player line.
+- 2–4 dialogue lines per scene total.
 - Choice labels: 2–3 per scene, ≤8 words each, action-flavored.
 - Stat deltas: hype and integrity each ∈ {-2, -1, 0, +1, +2}. Most should be ±1.
 - imagePrompt: ≤220 chars. Setting + character action + mood + composition. NEVER style words (no "comic", "cel-shaded", "illustration") — the renderer prepends those.
