@@ -159,6 +159,83 @@ export type FinalizePlaythroughInput = {
   achievements?: string[]
 }
 
+export type PlaythroughSummary = {
+  id: string
+  startup_name: string | null
+  ending: string | null
+  epilogue: string | null
+  achievements: string[]
+  completed_at: string
+}
+
+export async function listPlaythroughsByEmail(
+  email: string,
+): Promise<PlaythroughSummary[]> {
+  const sql = getSql()
+  const rows = await sql`
+    SELECT id, startup_name, ending, epilogue, achievements, completed_at
+    FROM playthroughs
+    WHERE LOWER(email) = LOWER(${email})
+      AND completed_at IS NOT NULL
+    ORDER BY completed_at DESC
+    LIMIT 100
+  `
+  return rows.map((row) => {
+    const r = row as {
+      id: string
+      startup_name: string | null
+      ending: string | null
+      epilogue: string | null
+      achievements: unknown
+      completed_at: string
+    }
+    return {
+      id: r.id,
+      startup_name: r.startup_name,
+      ending: r.ending,
+      epilogue: r.epilogue,
+      achievements: Array.isArray(r.achievements)
+        ? (r.achievements as string[])
+        : [],
+      completed_at: r.completed_at,
+    }
+  })
+}
+
+export async function getPlaythroughByIdAndEmail(
+  id: string,
+  email: string,
+): Promise<PlaythroughSummary | null> {
+  const sql = getSql()
+  const rows = await sql`
+    SELECT id, startup_name, ending, epilogue, achievements, completed_at
+    FROM playthroughs
+    WHERE id = ${id}
+      AND LOWER(email) = LOWER(${email})
+      AND completed_at IS NOT NULL
+    LIMIT 1
+  `
+  if (rows.length === 0) return null
+  const r = rows[0] as {
+    id: string
+    startup_name: string | null
+    ending: string | null
+    epilogue: string | null
+    achievements: unknown
+    completed_at: string
+  }
+  return {
+    id: r.id,
+    startup_name: r.startup_name,
+    ending: r.ending,
+    epilogue: r.epilogue,
+    achievements: Array.isArray(r.achievements)
+      ? (r.achievements as string[])
+      : [],
+    completed_at: r.completed_at,
+  }
+}
+
 export async function finalizePlaythrough(
   input: FinalizePlaythroughInput,
 ): Promise<{ id: string; completed_at: string } | null> {

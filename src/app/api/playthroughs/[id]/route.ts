@@ -1,7 +1,38 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { finalizePlaythrough, updatePlaythroughArc } from '@/lib/playthroughs'
+import {
+  finalizePlaythrough,
+  getPlaythroughByIdAndEmail,
+  updatePlaythroughArc,
+} from '@/lib/playthroughs'
+import { readSessionEmail } from '@/lib/auth'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+export async function GET(
+  _request: NextRequest,
+  ctx: { params: Promise<{ id: string }> },
+) {
+  const { id } = await ctx.params
+  if (!UUID_RE.test(id)) {
+    return NextResponse.json({ error: 'invalid id' }, { status: 400 })
+  }
+
+  const email = await readSessionEmail()
+  if (!email) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  }
+
+  try {
+    const item = await getPlaythroughByIdAndEmail(id, email)
+    if (!item) {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
+    return NextResponse.json({ item })
+  } catch (err) {
+    console.error('getPlaythroughByIdAndEmail failed', err)
+    return NextResponse.json({ error: 'database error' }, { status: 500 })
+  }
+}
 
 type Body = {
   arcJson?: unknown

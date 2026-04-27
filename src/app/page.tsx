@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useShallow } from "zustand/react/shallow";
 import { GameShell } from "@/components/GameShell";
 import ChoicePanel from "@/components/ChoicePanel";
@@ -8,6 +9,7 @@ import TextInputPanel from "@/components/TextInputPanel";
 import DialogueSubtitle from "@/components/DialogueSubtitle";
 import DialogueSpeaker from "@/components/DialogueSpeaker";
 import PaywallPanel from "@/components/PaywallPanel";
+import LoginModal from "@/components/LoginModal";
 import { useSessionStore } from "@/lib/session";
 import type { EndingKey } from "@/lib/types";
 import type { IntroData } from "@/lib/session";
@@ -98,9 +100,36 @@ export default function HomePage() {
     })),
   );
 
+  const router = useRouter();
   const [welcomeLineIndex, setWelcomeLineIndex] = useState(0);
   const [welcomeDone, setWelcomeDone] = useState(false);
   const welcomeCompleteRef = useRef(false);
+  const [loginOpen, setLoginOpen] = useState(false);
+  // Tracks the email currently logged in, for showing/hiding "Past flights"
+  // CTAs without flashing them while we're still fetching /api/auth/me.
+  const [sessionEmail, setSessionEmail] = useState<string | null>(null);
+
+  // Best-effort session probe — runs once on mount, again after a successful
+  // login, again when arriving at the ending screen (paywall verify auto-
+  // issues a session cookie, so we want to surface the "Past flights" CTA
+  // without needing a page reload).
+  const fetchSessionEmail = useCallback(async () => {
+    try {
+      const r = await fetch("/api/auth/me", { cache: "no-store" });
+      if (!r.ok) return;
+      const data = (await r.json()) as { email?: string | null };
+      setSessionEmail(data.email ?? null);
+    } catch {
+      /* network blip — leave previous value */
+    }
+  }, []);
+
+  useEffect(() => {
+    // setState happens inside the async fetch resolution, not during the
+    // effect body — the cascading-render concern doesn't apply.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchSessionEmail();
+  }, [fetchSessionEmail]);
 
   const handleWelcomeLineComplete = useCallback(() => {
     if (welcomeCompleteRef.current) return;
@@ -150,7 +179,14 @@ export default function HomePage() {
         achievements: ending.achievementsUnlocked,
       }),
     }).catch((err) => console.error("finalizePlaythrough failed", err));
-  }, [phase, playthroughId, ending]);
+    // Paywall verify auto-issued a session cookie a few seconds ago — re-probe
+    // /api/auth/me so the ending screen can show "Past flights" without a
+    // full reload. setState happens after the async fetch resolves, not in
+    // the effect body, so the lint rule's worry about cascading renders
+    // doesn't apply here.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchSessionEmail();
+  }, [phase, playthroughId, ending, fetchSessionEmail]);
 
   // -------------------------------------------------------------------------
   // Handlers
@@ -332,7 +368,7 @@ export default function HomePage() {
     if (phase === "welcome") {
       if (!welcomeDone) return null;
       return (
-        <div className="w-full max-w-md mx-auto animate-bounce-in">
+        <div className="w-full max-w-md mx-auto animate-bounce-in flex flex-col gap-2">
           <button
             onClick={handleStart}
             className="comic-outline comic-press font-sans font-semibold w-full rounded-xl py-3 text-base text-[var(--color-ink)]"
@@ -342,6 +378,22 @@ export default function HomePage() {
             }}
           >
             Start →
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (sessionEmail) {
+                router.push("/history");
+              } else {
+                setLoginOpen(true);
+              }
+            }}
+            className="text-[12px] tracking-wide hover:underline self-center"
+            style={{ color: "rgba(32,32,31,0.65)" }}
+          >
+            {sessionEmail
+              ? "View past flights →"
+              : "Already played? Log in →"}
           </button>
         </div>
       );
@@ -482,6 +534,16 @@ export default function HomePage() {
               >
                 Play again →
               </button>
+              {sessionEmail && (
+                <button
+                  type="button"
+                  onClick={() => router.push("/history")}
+                  className="text-[12px] tracking-wide hover:underline self-center mt-1"
+                  style={{ color: "rgba(32,32,31,0.65)" }}
+                >
+                  View past flights →
+                </button>
+              )}
             </div>
           </div>
         );
@@ -499,6 +561,17 @@ export default function HomePage() {
     <>
       {phase === "paywall" && (
         <PaywallPanel onSatisfied={() => paywallSatisfied()} />
+      )}
+
+      {loginOpen && (
+        <LoginModal
+          onClose={() => setLoginOpen(false)}
+          onSuccess={(emailFromServer) => {
+            setLoginOpen(false);
+            setSessionEmail(emailFromServer);
+            router.push("/history");
+          }}
+        />
       )}
 
       <GameShell

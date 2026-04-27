@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getOrCreateAnonId } from '@/lib/anon-id'
-import { createPlaythrough } from '@/lib/playthroughs'
+import { createPlaythrough, listPlaythroughsByEmail } from '@/lib/playthroughs'
+import { readSessionEmail } from '@/lib/auth'
 
 type Body = {
   startupName?: unknown
@@ -18,6 +19,20 @@ function asStringArray(v: unknown): string[] | undefined {
   if (!Array.isArray(v)) return undefined
   const out = v.filter((x): x is string => typeof x === 'string')
   return out.length > 0 ? out : []
+}
+
+export async function GET() {
+  const email = await readSessionEmail()
+  if (!email) {
+    return NextResponse.json({ items: [] })
+  }
+  try {
+    const items = await listPlaythroughsByEmail(email)
+    return NextResponse.json({ items })
+  } catch (err) {
+    console.error('listPlaythroughsByEmail failed', err)
+    return NextResponse.json({ error: 'database error' }, { status: 500 })
+  }
 }
 
 export async function POST(request: Request) {

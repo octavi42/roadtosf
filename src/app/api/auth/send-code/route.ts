@@ -1,0 +1,53 @@
+import { NextResponse } from 'next/server'
+import { hasPaidPlaythroughForEmail } from '@/lib/playthroughs'
+import { issueEmailCode } from '@/lib/email-codes'
+import { sendOtpEmail } from '@/lib/email'
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+type Body = { email?: unknown }
+
+export async function POST(request: Request) {
+  let body: Body = {}
+  try {
+    body = (await request.json()) as Body
+  } catch {
+    return NextResponse.json({ error: 'invalid json body' }, { status: 400 })
+  }
+
+  const email = typeof body.email === 'string' ? body.email.trim() : ''
+  if (!EMAIL_RE.test(email)) {
+    return NextResponse.json({ error: 'invalid email' }, { status: 400 })
+  }
+
+  try {
+    // Same gate as the paywall send-code: only emails with at least one
+    // completed paid run can request a login code. Prevents using this
+    // endpoint as a generic email-validation oracle.
+    const paid = await hasPaidPlaythroughForEmail(email)
+    if (!paid) {
+      return NextResponse.json(
+        { error: 'no past playthroughs found for this email' },
+        { status: 404 },
+      )
+    }
+
+    const result = await issueEmailCode(email)
+    if (result.kind === 'rate_limited') {
+      return NextResponse.json(
+        { error: 'too many requests — wait a minute' },
+        { status: 429 },
+      )
+    }
+
+    await sendOtpEmail(email, result.code)
+    return NextResponse.json({ sent: true })
+  } catch (err) {
+    console.error('auth/send-code failed', err)
+    const message =
+      err instanceof Error && err.message.startsWith('resend:')
+        ? err.message
+        : 'send failed'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
