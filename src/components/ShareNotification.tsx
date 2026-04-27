@@ -56,7 +56,9 @@ export function ShareNotification({
   // Single fixed box morphs between three layouts.
   //  - peek: top-center toast
   //  - expanded: dead-center modal-like card
-  //  - docked: collapsed pill at left edge (icon only)
+  //  - docked: small pill in the top-left, stacked under the scene-title pill
+  //    (ROAD TO SF sits at ~top:20, scene title at top:64+~32; share pill goes
+  //     below at top:108, left:24)
   const positionByState: Record<
     Exclude<ShareNotificationState, "hidden">,
     Pick<React.CSSProperties, "left" | "top" | "transform">
@@ -67,26 +69,27 @@ export function ShareNotification({
       top: "50%",
       transform: "translate(-50%, -50%)",
     },
-    docked: { left: 12, top: "50%", transform: "translateY(-50%)" },
+    docked: { left: 24, top: 108, transform: "none" },
   };
   const containerStyle: React.CSSProperties = {
     background: isCard ? "var(--color-fog)" : "var(--color-mustard)",
     color: "var(--color-ink)",
-    width: isCard ? 340 : 56,
-    minHeight: 56,
+    width: isCard ? 340 : 110,
+    minHeight: isCard ? 56 : 32,
+    height: isCard ? "auto" : 32,
     padding: isCard ? "1rem 1.1rem" : "0",
-    borderRadius: 14,
+    borderRadius: isCard ? 14 : 8,
     ...positionByState[state],
     opacity: entered ? 1 : 0,
     transition:
-      "opacity 220ms ease, width 360ms cubic-bezier(0.34, 1.56, 0.64, 1), padding 360ms ease, border-radius 360ms ease, background-color 240ms ease, left 360ms cubic-bezier(0.34, 1.56, 0.64, 1), top 360ms cubic-bezier(0.34, 1.56, 0.64, 1), transform 360ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+      "opacity 220ms ease, width 360ms cubic-bezier(0.34, 1.56, 0.64, 1), height 360ms cubic-bezier(0.34, 1.56, 0.64, 1), padding 360ms ease, border-radius 360ms ease, background-color 240ms ease, left 360ms cubic-bezier(0.34, 1.56, 0.64, 1), top 360ms cubic-bezier(0.34, 1.56, 0.64, 1), transform 360ms cubic-bezier(0.34, 1.56, 0.64, 1)",
     overflow: "hidden",
     cursor: state === "docked" ? "pointer" : "default",
   };
 
   return (
     <div
-      className="fixed comic-outline"
+      className={`fixed ${isCard ? "comic-outline" : "comic-outline-sm"}`}
       style={{ ...containerStyle, zIndex: 40 }}
       onClick={state === "docked" ? () => setState("expanded") : undefined}
       role={state === "docked" ? "button" : undefined}
@@ -161,9 +164,9 @@ export function ShareNotification({
         </div>
       </div>
 
-      {/* Docked icon — visible only in docked state */}
+      {/* Docked pill — matches the ROAD TO SF / scene-title badge style */}
       <div
-        className="absolute inset-0 flex items-center justify-center"
+        className="absolute inset-0 flex items-center justify-center font-display font-bold uppercase whitespace-nowrap"
         style={{
           opacity: state === "docked" ? 1 : 0,
           transition:
@@ -171,11 +174,14 @@ export function ShareNotification({
               ? "opacity 220ms ease 140ms"
               : "opacity 140ms ease",
           pointerEvents: state === "docked" ? "auto" : "none",
-          fontSize: 24,
+          fontSize: "0.78rem",
+          letterSpacing: "0.16em",
+          gap: "0.4rem",
         }}
         aria-hidden={state !== "docked"}
       >
-        📣
+        <span aria-hidden="true">📣</span>
+        <span>Share</span>
       </div>
     </div>
   );
