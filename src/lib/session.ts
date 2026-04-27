@@ -19,12 +19,16 @@ export const PAYWALL_AFTER_SCENE_INDEX = 2;
  *   0–2 pre-paywall (FaceTime with Jordan)
  *   3   post-paywall Q&A (the car ride)
  *   4–7 Group 1: "exploring SF" — narrator-led, one shared pre-gen image
- * After that, the LLM tail runs *unbounded* — generated 5 scenes at a time
- * (one episode), regenerating a new skeleton when an episode finishes.
- * The run only ends when the player picks "End my run" or via reset.
+ * After that, the LLM tail runs *unbounded* — generated 20 scenes at a time
+ * (one episode = 5 archetype groups × 4 sub-scenes each, sharing one image
+ * per group). Run ends when the player picks "End my run" or via reset.
  */
 export const AUTHORED_SCENE_COUNT = 8;
-export const EPISODE_LENGTH = 5;
+/** Sub-scenes per archetype encounter; one image per group of this size. */
+export const SCENES_PER_GROUP = 4;
+/** Archetype outlines per arc skeleton (one per group within an episode). */
+export const GROUPS_PER_EPISODE = 5;
+export const EPISODE_LENGTH = SCENES_PER_GROUP * GROUPS_PER_EPISODE; // 20
 
 export type MissingQuestionField =
   | "team"

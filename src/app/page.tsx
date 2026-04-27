@@ -14,6 +14,7 @@ import {
   useSessionStore,
   AUTHORED_SCENE_COUNT,
   EPISODE_LENGTH,
+  SCENES_PER_GROUP,
 } from "@/lib/session";
 import { ARCHETYPES } from "@/lib/archetypes";
 import type { ArcSkeleton, EndingKey, Scene as LLMScene } from "@/lib/types";
@@ -563,12 +564,14 @@ export default function HomePage() {
     exitGeneratingArc,
   ]);
 
-  // Parallel scene-text generation for the current episode: fires every
-  // not-yet-fired scene at once instead of chaining N→N+1. The chain pattern
-  // staggered imagePrompt arrival ~5–6s apart, which then staggered every
-  // image gen by the same gap. Parallel firing means all imagePrompts land
-  // within one scene-gen window, so all image gens overlap in time.
-  // Cross-episode generation is still handled by the regen effect below.
+  // Group-aware scene-text generation. Each archetype group has 4 sub-scenes:
+  //   - Sub 0 (leader): fires in parallel with all other groups' leaders the
+  //     moment the skeleton lands. No prior dependency.
+  //   - Sub 1, 2, 3 (followers): each fires after the player has made their
+  //     choice in the prior sub-scene, so the LLM has the actual choice in
+  //     `recentChoices` and can react to it instead of guessing.
+  // The recentChoices snapshot uses the latest history, which always contains
+  // any choice already recorded for prior sub-scenes of the same group.
   useEffect(() => {
     if (phase !== "scene") return;
     if (sceneIndex < AUTHORED_SCENE_COUNT) return;
@@ -576,11 +579,10 @@ export default function HomePage() {
     if (!skeleton) return;
     const epi = skeleton.episodeIndex;
 
-    for (let inEpi = 0; inEpi < skeleton.scenes.length; inEpi++) {
-      const globalLLMIndex = epi * EPISODE_LENGTH + inEpi;
-      if (sceneGenFiredRef.current.has(globalLLMIndex)) continue;
+    const fireSceneGen = (globalLLMIndex: number, inEpi: number) => {
+      if (sceneGenFiredRef.current.has(globalLLMIndex)) return;
       const stored = arc?.scenes[globalLLMIndex];
-      if (stored && stored.dialogue.length > 0) continue;
+      if (stored && stored.dialogue.length > 0) return;
       sceneGenFiredRef.current.add(globalLLMIndex);
 
       postWithTimeout<SceneGenResponse>(
@@ -615,6 +617,28 @@ export default function HomePage() {
           sceneGenFiredRef.current.delete(globalLLMIndex);
           console.error(`generate-scene[${globalLLMIndex}] failed`, err);
         });
+    };
+
+    for (let groupIdx = 0; groupIdx < skeleton.scenes.length; groupIdx++) {
+      // Leader (sub 0): fire immediately.
+      const leaderInEpi = groupIdx * SCENES_PER_GROUP;
+      fireSceneGen(epi * EPISODE_LENGTH + leaderInEpi, leaderInEpi);
+
+      // Followers (sub 1..SCENES_PER_GROUP-1): each gated on the prior sub
+      // having text AND the player having recorded a choice for that prior
+      // sub. The choice check is what makes the LLM's continuation reactive.
+      for (let sub = 1; sub < SCENES_PER_GROUP; sub++) {
+        const inEpi = groupIdx * SCENES_PER_GROUP + sub;
+        const globalLLMIndex = epi * EPISODE_LENGTH + inEpi;
+        const priorGlobalIdx = globalLLMIndex - 1;
+        const priorStored = arc?.scenes[priorGlobalIdx];
+        if (!priorStored || priorStored.dialogue.length === 0) continue;
+        // Scene IDs are 1-based and offset by AUTHORED_SCENE_COUNT.
+        const priorSceneId = AUTHORED_SCENE_COUNT + priorGlobalIdx + 1;
+        const priorChoiceMade = history.some((h) => h.sceneId === priorSceneId);
+        if (!priorChoiceMade) continue;
+        fireSceneGen(globalLLMIndex, inEpi);
+      }
     }
   }, [
     phase,
@@ -656,10 +680,13 @@ export default function HomePage() {
     }).catch((err) => console.error("persistArc failed", err));
   }, [playthroughId, arc]);
 
-  // Image generation watcher: any LLM scene with text but no imageUrl gets
-  // its gpt-image-2 render kicked off. Runs in parallel with scene/audio gen
-  // so the image lands while the player is reading prior dialogue. Failures
-  // are silent — the placeholder background stays in place.
+  // Image generation watcher (group-aware): one image per archetype group.
+  //   - Sub-scene 0 of each group fires gpt-image-2 with that scene's
+  //     imagePrompt + archetype.
+  //   - Sub-scenes 1–3 of the same group never call image gen — they copy
+  //     the leader's imageUrl as soon as it arrives. The dedicated effect
+  //     below fans the leader's imageUrl out to its followers.
+  // Failures are silent — the placeholder background stays in place.
   useEffect(() => {
     const scenes = arc?.scenes;
     if (!scenes) return;
@@ -667,6 +694,9 @@ export default function HomePage() {
       if (!scene || scene.dialogue.length === 0) return;
       if (scene.imageUrl) return;
       if (!scene.imagePrompt) return;
+      // Only the leader (sub-scene 0) of an archetype group fires image gen.
+      // SCENES_PER_GROUP sub-scenes per group, all sharing one image.
+      if (idx % SCENES_PER_GROUP !== 0) return;
       if (imageGenFiredRef.current.has(idx)) return;
       imageGenFiredRef.current.add(idx);
 
@@ -691,6 +721,24 @@ export default function HomePage() {
           imageGenFiredRef.current.delete(idx);
           console.error(`generate-image[${idx}] failed`, err);
         });
+    });
+  }, [arc?.scenes, sceneImageReady]);
+
+  // Image fan-out: when a group's leader scene gets its imageUrl, copy it to
+  // any sibling sub-scenes that already have text. Runs whenever scenes
+  // change, so a follower that arrives later than its leader picks up the
+  // imageUrl on the next render.
+  useEffect(() => {
+    const scenes = arc?.scenes;
+    if (!scenes) return;
+    scenes.forEach((scene, idx) => {
+      if (!scene || scene.dialogue.length === 0) return;
+      if (scene.imageUrl) return;
+      const subSceneIndex = idx % SCENES_PER_GROUP;
+      if (subSceneIndex === 0) return; // leader; image-gen path handles this
+      const leaderIdx = idx - subSceneIndex;
+      const leader = scenes[leaderIdx];
+      if (leader?.imageUrl) sceneImageReady(idx, leader.imageUrl);
     });
   }, [arc?.scenes, sceneImageReady]);
 
