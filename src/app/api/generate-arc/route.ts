@@ -57,7 +57,23 @@ function todayISO(): string {
 }
 
 function parseFromRaw(raw: string): ParsedArcSkeleton {
-  return arcSkeletonSchema.parse(extractJsonObject(raw))
+  let json: unknown
+  try {
+    json = extractJsonObject(raw)
+  } catch (e) {
+    console.warn('[generate-arc] JSON extraction failed. raw:', raw.slice(0, 800))
+    throw e
+  }
+  const result = arcSkeletonSchema.safeParse(json)
+  if (!result.success) {
+    console.warn(
+      '[generate-arc] Zod validation failed. issues:',
+      JSON.stringify(result.error.issues, null, 2),
+    )
+    console.warn('[generate-arc] payload was:', JSON.stringify(json).slice(0, 800))
+    throw result.error
+  }
+  return result.data
 }
 
 export async function POST(request: Request) {

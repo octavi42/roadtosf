@@ -58,7 +58,23 @@ function asPriorChoices(v: unknown): PriorChoiceSummary[] {
 }
 
 function parseFromRaw(raw: string): ParsedScene {
-  return sanitizeScene(sceneSchema.parse(extractJsonObject(raw)))
+  let json: unknown
+  try {
+    json = extractJsonObject(raw)
+  } catch (e) {
+    console.warn('[generate-scene] JSON extraction failed. raw:', raw.slice(0, 800))
+    throw e
+  }
+  const result = sceneSchema.safeParse(json)
+  if (!result.success) {
+    console.warn(
+      '[generate-scene] Zod validation failed. issues:',
+      JSON.stringify(result.error.issues, null, 2),
+    )
+    console.warn('[generate-scene] payload was:', JSON.stringify(json).slice(0, 800))
+    throw result.error
+  }
+  return sanitizeScene(result.data)
 }
 
 export async function POST(request: Request) {

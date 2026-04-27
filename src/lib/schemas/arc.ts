@@ -5,8 +5,8 @@ const ARCHETYPE_VALUES = ['vc', 'cofounder', 'reporter', 'hater', 'mentor'] as c
 export const sceneOutlineSchema = z.object({
   index: z.number().int().min(0).max(20),
   archetype: z.enum(ARCHETYPE_VALUES),
-  beat: z.string().min(8).max(220),
-  hingesOn: z.string().max(200).optional(),
+  beat: z.string().min(8).max(400),
+  hingesOn: z.string().max(280).optional(),
 })
 
 export const arcSkeletonSchema = z.object({

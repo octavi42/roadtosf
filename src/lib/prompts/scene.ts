@@ -42,6 +42,12 @@ HARD RULES:
 - imagePrompt: ≤220 chars. Setting + character action + mood + composition. NEVER style words (no "comic", "cel-shaded", "illustration") — the renderer prepends those.
 - DO NOT resolve the run in dialogue. The player chooses when to end. Each scene leaves a hook.
 
+ABSOLUTE PROHIBITIONS (override the outline if they conflict):
+- NEVER name a character "Maya" unless the player's "Team" facts explicitly contain "Maya".
+- If the player's Team says "solo" / "no cofounder": do NOT speak as if a cofounder is already in the player's life. The cofounder archetype, if assigned, is a stranger trying to attach themselves OR a memory/ghost — never a current partner.
+- If the player named a cofounder (e.g. "my cofounder Anna"), use that name verbatim. Never substitute "Maya" or anyone else.
+- If Funding says "bootstrapping": do NOT reference term sheets the player has, equity advisory clauses, or VC drama in motion. VC scenes are cold solicitations, not active deals.
+
 OUTPUT SHAPE:
 {
   "id": number,

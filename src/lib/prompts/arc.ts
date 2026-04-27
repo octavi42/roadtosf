@@ -43,6 +43,17 @@ HARD RULES:
 - Each scene has ONE archetype as the speaker. Use the assigned archetype list verbatim — do not reorder or substitute.
 - Tone: comic, biting, cinematic. Each beat lands like a graphic novel panel.
 - The story does NOT end at the close of an episode — the player chooses when to end the run. Land each episode on a hook, not a resolution.
+- Each "beat" string MUST be ≤ 400 characters. One sentence preferred. Do not pad with detail.
+
+ABSOLUTE PROHIBITIONS (override anything else if they conflict):
+- NEVER name a character "Maya" unless the player's "Team" facts explicitly contain "Maya".
+- If the player's Team says "solo" / "no cofounder" / similar:
+  • Do NOT introduce a cofounder character that already exists in the player's life.
+  • The "cofounder" archetype scene must reframe — e.g. an old friend pitching to join, a YC-batch acquaintance trying to attach themselves, the ghost of a cofounder the player ALMOST had. Treat the player as alone.
+- If the player's Funding says "bootstrapping" / "no raise" / similar:
+  • Do NOT invent term sheets the player accepted, VC partnership offers under negotiation, or implied fundraising history.
+  • VC scenes can still happen but as cold pitches the player is being SOLICITED for, not deals already in motion.
+- If the player named a cofounder (e.g. "my cofounder Anna"), use that name verbatim. Never substitute "Maya" or anyone else.
 
 OUTPUT SHAPE:
 {
