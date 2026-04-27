@@ -24,7 +24,9 @@ export const ARCHETYPES: Record<Archetype, ArchetypeDefinition> = {
   },
   cofounder: {
     id: 'cofounder',
-    name: 'Maya',
+    // Not a canon first name — this archetype is often a stranger angling in
+    // (solo founders). A personal name here leaked into dialogue as "Maya".
+    name: 'Stranger',
     title: 'Co-founder & CTO',
     personality:
       'Brilliant but volatile. Startup-bro energy with impostor syndrome underneath. Deeply loyal but will spiral if not validated. Speaks fast, interrupts herself.',

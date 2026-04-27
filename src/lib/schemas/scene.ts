@@ -1,7 +1,12 @@
 import { z } from 'zod'
+import { ARCHETYPES } from '@/lib/archetypes'
+import type { Archetype } from '@/lib/types'
 
 const ARCHETYPE_VALUES = ['vc', 'cofounder', 'reporter', 'hater', 'mentor'] as const
 const SPEAKER_VALUES = [...ARCHETYPE_VALUES, 'player', 'narrator'] as const
+
+const ARCHETYPE_SET = new Set<string>(ARCHETYPE_VALUES)
+const SPEAKER_SET = new Set<string>(SPEAKER_VALUES)
 
 /** Per-line cap in schema / coercion (prompt asks for shorter lines; model often exceeds). */
 export const MAX_DIALOGUE_LINE_CHARS = 320
@@ -100,14 +105,49 @@ function fitDialogueToBudget(
   return lines
 }
 
+function normalizeDialogueSpeaker(raw: unknown, assignedArchetype: Archetype): string {
+  if (typeof raw !== 'string') return assignedArchetype
+  const t = raw.trim()
+  const lower = t.toLowerCase()
+  if (SPEAKER_SET.has(lower)) return lower
+  const cardName = ARCHETYPES[assignedArchetype].name.toLowerCase()
+  if (lower === cardName) return assignedArchetype
+  // Common model mistake: paste the human roster line ("Stranger, Co-founder & CTO").
+  if (t.includes(',') || t.length > 24) return assignedArchetype
+  if (lower.includes('narrator')) return 'narrator'
+  if (lower.includes('player') || lower === 'founder' || lower === 'you') return 'player'
+  return assignedArchetype
+}
+
+export interface CoerceSceneOptions {
+  /** From the arc outline — JSON must use this archetype key, not the roster display string. */
+  assignedArchetype: Archetype
+}
+
 /**
  * Normalizes common LLM overshoots so Zod validation succeeds. Keeps gameplay on the LLM path
  * instead of falling back when the model is slightly over TTS / field limits.
  */
-export function coerceRawSceneJson(data: unknown): unknown {
+export function coerceRawSceneJson(data: unknown, opts?: CoerceSceneOptions): unknown {
   if (!data || typeof data !== 'object') return data
   const o = data as Record<string, unknown>
   const out: Record<string, unknown> = { ...o }
+
+  let assignedForSpeakers: Archetype
+  if (opts?.assignedArchetype) {
+    out.archetype = opts.assignedArchetype
+    assignedForSpeakers = opts.assignedArchetype
+  } else if (typeof out.archetype === 'string') {
+    const a = out.archetype.trim().toLowerCase()
+    if (ARCHETYPE_SET.has(a)) {
+      out.archetype = a
+      assignedForSpeakers = a as Archetype
+    } else {
+      assignedForSpeakers = 'cofounder'
+    }
+  } else {
+    assignedForSpeakers = 'cofounder'
+  }
 
   if (typeof out.timeoutSeconds === 'number' && Number.isFinite(out.timeoutSeconds)) {
     const n = Math.round(out.timeoutSeconds)
@@ -143,11 +183,13 @@ export function coerceRawSceneJson(data: unknown): unknown {
   }
 
   if (Array.isArray(out.dialogue)) {
-    out.dialogue = fitDialogueToBudget(
-      out.dialogue.filter((d) => d && typeof d === 'object') as Array<Record<string, unknown>>,
-      MAX_DIALOGUE_CHARS_PER_SCENE,
-      MAX_DIALOGUE_LINE_CHARS,
-    )
+    const lines = (
+      out.dialogue.filter((d) => d && typeof d === 'object') as Array<Record<string, unknown>>
+    ).map((d) => ({
+      ...d,
+      speaker: normalizeDialogueSpeaker(d.speaker, assignedForSpeakers),
+    }))
+    out.dialogue = fitDialogueToBudget(lines, MAX_DIALOGUE_CHARS_PER_SCENE, MAX_DIALOGUE_LINE_CHARS)
   }
 
   return out

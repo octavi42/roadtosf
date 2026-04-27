@@ -8,6 +8,7 @@ import {
 } from '@/lib/schemas/scene'
 import { arcSkeletonSchema } from '@/lib/schemas/arc'
 import { buildScenePromptParts, type PriorChoiceSummary } from '@/lib/prompts/scene'
+import type { Archetype } from '@/lib/types'
 import fallbackScenes from '@/lib/fallback/scenes.json'
 
 const AUTHORED_SCENE_COUNT = 4
@@ -63,7 +64,7 @@ function asPriorChoices(v: unknown): PriorChoiceSummary[] {
   })
 }
 
-function parseFromRaw(raw: string): ParsedScene {
+function parseFromRaw(raw: string, assignedArchetype: Archetype): ParsedScene {
   let json: unknown
   try {
     json = extractJsonObject(raw)
@@ -71,7 +72,7 @@ function parseFromRaw(raw: string): ParsedScene {
     console.warn('[generate-scene] JSON extraction failed. raw:', raw.slice(0, 800))
     throw e
   }
-  const result = sceneSchema.safeParse(coerceRawSceneJson(json))
+  const result = sceneSchema.safeParse(coerceRawSceneJson(json, { assignedArchetype }))
   if (!result.success) {
     console.warn(
       '[generate-scene] Zod validation failed. issues:',
@@ -144,7 +145,7 @@ export async function POST(request: Request) {
     if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY missing')
     const scene = await completeJson(
       { model: MODELS.scene, systemBlocks, userBlocks, maxTokens: 1000, temperature: 0.9 },
-      parseFromRaw,
+      (raw) => parseFromRaw(raw, outline.archetype),
     )
     return NextResponse.json({ scene, source: 'llm' as const })
   } catch (err) {
