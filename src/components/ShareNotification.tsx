@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type ShareNotificationState = "hidden" | "docked" | "expanded";
 
@@ -33,6 +33,18 @@ export function ShareNotification({
   // keyframes because they animate `transform`, which clobbers the morph's
   // inline translate(-50%, -50%) and shoves the box off-center.
   const [entered, setEntered] = useState(false);
+  // Auto-sequence timers held in a ref so any manual interaction can cancel
+  // them — otherwise the auto-collapse can slam-close a card the user just
+  // re-opened by tapping the docked pill.
+  const autoTimersRef = useRef<{
+    expand?: ReturnType<typeof setTimeout>;
+    collapse?: ReturnType<typeof setTimeout>;
+  }>({});
+  const cancelAutoTimers = useCallback(() => {
+    if (autoTimersRef.current.expand) clearTimeout(autoTimersRef.current.expand);
+    if (autoTimersRef.current.collapse) clearTimeout(autoTimersRef.current.collapse);
+    autoTimersRef.current = {};
+  }, []);
 
   useEffect(() => {
     // Effect runs only when `visible` flips, so the setState calls here are a
@@ -41,25 +53,24 @@ export function ShareNotification({
     if (!visible) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setEntered(false);
+      cancelAutoTimers();
       return setState("hidden");
     }
     // First-show sequence: appear docked at the left → auto-expand → auto-collapse.
-    // Manual dismiss/expand by the user short-circuits the auto timers via the
-    // setState callback guards below.
     setState("docked");
     const raf = requestAnimationFrame(() => setEntered(true));
-    const expandTimer = setTimeout(() => {
+    autoTimersRef.current.expand = setTimeout(() => {
       setState((s) => (s === "docked" ? "expanded" : s));
     }, expandAfterMs);
-    const collapseTimer = setTimeout(() => {
+    autoTimersRef.current.collapse = setTimeout(() => {
       setState((s) => (s === "expanded" ? "docked" : s));
+      autoTimersRef.current = {};
     }, expandAfterMs + expandedDurationMs);
     return () => {
       cancelAnimationFrame(raf);
-      clearTimeout(expandTimer);
-      clearTimeout(collapseTimer);
+      cancelAutoTimers();
     };
-  }, [visible, expandAfterMs, expandedDurationMs]);
+  }, [visible, expandAfterMs, expandedDurationMs, cancelAutoTimers]);
 
   if (state === "hidden") return null;
 
@@ -98,15 +109,35 @@ export function ShareNotification({
     cursor: state === "docked" ? "pointer" : "default",
   };
 
+  const expandFromDock = () => {
+    cancelAutoTimers();
+    setState("expanded");
+  };
+  const collapseToDock = () => {
+    cancelAutoTimers();
+    setState("docked");
+  };
+
   return (
     <div
       className={`fixed ${isCard ? "comic-outline" : "comic-outline-sm"}`}
       style={{ ...containerStyle, zIndex: 40 }}
-      onClick={state === "docked" ? () => setState("expanded") : undefined}
+      onClick={state === "docked" ? expandFromDock : undefined}
+      onKeyDown={
+        state === "docked"
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                expandFromDock();
+              }
+            }
+          : undefined
+      }
       role={state === "docked" ? "button" : undefined}
+      tabIndex={state === "docked" ? 0 : -1}
       aria-label={state === "docked" ? "Open share moment" : undefined}
     >
-      {/* Card layout — visible when peek or expanded */}
+      {/* Card layout — visible when expanded */}
       <div
         style={{
           opacity: isCard ? 1 : 0,
@@ -127,7 +158,7 @@ export function ShareNotification({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              setState("docked");
+              collapseToDock();
               onDismiss?.();
             }}
             className="text-base leading-none"
@@ -146,6 +177,7 @@ export function ShareNotification({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
+              cancelAutoTimers();
               onShare?.();
             }}
             className="comic-outline-sm comic-press flex-1 font-sans font-semibold uppercase tracking-[0.14em] text-[11px] py-2"
@@ -161,7 +193,7 @@ export function ShareNotification({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              setState("docked");
+              collapseToDock();
             }}
             className="comic-outline-sm comic-press font-sans font-semibold uppercase tracking-[0.14em] text-[11px] py-2 px-3"
             style={{
