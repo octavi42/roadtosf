@@ -20,10 +20,11 @@ export interface BuildArcPromptInput {
   startupDescription: string
   founderPersona: string
   stage?: string
-  // Captured in scene 4 Q&A. The LLM MUST honor these — never invent a
-  // contradicting cofounder name or funding situation.
+  // Captured in scene 4 Q&A (or extracted from the pitch). The LLM MUST honor
+  // these — never invent a contradicting cofounder name or funding situation.
   team?: string
   fundingModel?: string
+  targetCustomer?: string
   concern?: string
   flavorTags: string[]
   // For episode 0: choices from authored scenes. For 1+: only the LAST EPISODE's
@@ -142,6 +143,7 @@ Flavor tags: ${input.flavorTags.length ? input.flavorTags.join(', ') : '(none)'}
 ## PLAYER FACTS (HONOR THESE — never invent contradictions)
 Team: ${input.team || '(unstated; do not invent a cofounder, treat as solo)'}
 Funding: ${input.fundingModel || '(unstated; do not assume a fundraising track)'}
+Target customer: ${input.targetCustomer || '(unstated; keep generic — don\'t invent a wrong segment)'}
 Current concern: ${input.concern || '(unstated)'}
 
 Current stats — hype ${input.currentStats.hype}, integrity ${input.currentStats.integrity}.

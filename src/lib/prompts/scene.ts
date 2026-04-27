@@ -22,6 +22,7 @@ export interface BuildScenePromptInput {
   stage?: string
   team?: string
   fundingModel?: string
+  targetCustomer?: string
   concern?: string
   flavorTags: string[]
   recentChoices: PriorChoiceSummary[] // only the last few; older context lives in storySoFar
@@ -106,6 +107,7 @@ Stage: ${input.stage || '(unstated)'}
 ## PLAYER FACTS (HONOR THESE — never invent contradictions)
 Team: ${input.team || '(unstated; do not invent a cofounder, treat as solo)'}
 Funding: ${input.fundingModel || '(unstated; do not assume a fundraising track)'}
+Target customer: ${input.targetCustomer || '(unstated; keep generic — don\'t invent a wrong segment)'}
 Current concern: ${input.concern || '(unstated)'}`
 
   // Per-call (uncached): the recent choices + scene target.

@@ -15,7 +15,11 @@ import {
 } from "@/lib/session";
 import { ARCHETYPES } from "@/lib/archetypes";
 import type { ArcSkeleton, EndingKey, Scene as LLMScene } from "@/lib/types";
-import type { IntroData } from "@/lib/session";
+import type {
+  IntroData,
+  MissingQuestion,
+  MissingQuestionField,
+} from "@/lib/session";
 import {
   SCENES,
   HOME_BACKGROUND,
@@ -41,7 +45,7 @@ const ENDING_COPY: Record<
   ipo: {
     label: "IPO",
     subtitle:
-      "You rang the bell at NYSE on a Tuesday. You cried. Maya didn't come. The Bloomberg headline called you 'the unlikely conscience of fintech.' You framed it.",
+      "You rang the bell at NYSE on a Tuesday. You cried in the green room. The Bloomberg headline called you 'the unlikely conscience of fintech.' You framed it.",
     bg: "var(--color-mint)",
   },
   indicted: {
@@ -59,7 +63,7 @@ const ENDING_COPY: Record<
   acquihire: {
     label: "ACQUI-HIRED",
     subtitle:
-      "DraftKings bought the team for parts. You got a director title and a non-compete. Maya took her thirty percent and started something new without you.",
+      "DraftKings bought the team for parts. You got a director title and a non-compete. The acquirer kept the IP and quietly retired the brand.",
     bg: "var(--color-mustard)",
   },
   ghosted: {
@@ -127,6 +131,51 @@ function authoredAsUnified(scene: SceneData): UnifiedScene {
   };
 }
 
+const QA_PLACEHOLDERS: Record<MissingQuestionField, string> = {
+  team: "Solo, cofounder, or team?",
+  fundingModel: "Bootstrap, raised, runway?",
+  stage: "Idea, MVP, users, revenue?",
+  targetCustomer: "Who's actually using it?",
+  concern: "What's broken right now?",
+};
+
+// Scene 4 (the car-ride Q&A) has three modes:
+//   - extraction hasn't run yet (or failed) → use the hardcoded 3 questions
+//   - extraction returned >0 missing → ask only those, in Jordan's voice
+//   - extraction returned 0 missing → swap in a single beat + CTA, no inputs
+function buildScene4ForExtraction(
+  base: UnifiedScene,
+  missing: MissingQuestion[],
+): UnifiedScene {
+  if (missing.length === 0) {
+    return {
+      ...base,
+      dialogue: [
+        {
+          speaker: "Jordan · Friend, SF",
+          text: "Throw your bag in the back. You already told me everything I needed.",
+        },
+        {
+          speaker: "Jordan · Friend, SF",
+          text: "Good. You're ready. Drive faster.",
+        },
+      ],
+      questions: undefined,
+      textInput: undefined,
+      choices: undefined,
+      ctaLabel: "Hit the 101 →",
+    };
+  }
+  return {
+    ...base,
+    questions: missing.map((m) => ({
+      prompt: { speaker: "Jordan · Friend, SF", text: m.question },
+      placeholder: QA_PLACEHOLDERS[m.field] ?? "",
+      extractAs: m.field,
+    })),
+  };
+}
+
 const ARC_GEN_TIMEOUT_MS = 45000;
 const SCENE_GEN_TIMEOUT_MS = 30000;
 
@@ -179,6 +228,7 @@ export default function HomePage() {
     setPlaythroughId,
     welcomeStarted,
     captureIntro,
+    factsExtracted,
     paywallSatisfied,
     arcSkeletonReady,
     dynamicSceneReady,
@@ -195,6 +245,7 @@ export default function HomePage() {
       setPlaythroughId: s.setPlaythroughId,
       welcomeStarted: s.welcomeStarted,
       captureIntro: s.captureIntro,
+      factsExtracted: s.factsExtracted,
       paywallSatisfied: s.paywallSatisfied,
       arcSkeletonReady: s.arcSkeletonReady,
       dynamicSceneReady: s.dynamicSceneReady,
@@ -236,7 +287,14 @@ export default function HomePage() {
   const currentScene: UnifiedScene | null = (() => {
     if (sceneIndex < AUTHORED_SCENE_COUNT) {
       const a = SCENES[sceneIndex];
-      return a ? authoredAsUnified(a) : null;
+      if (!a) return null;
+      const unified = authoredAsUnified(a);
+      // Scene 4 (the car-ride Q&A) is the only authored scene that gets
+      // morphed by extraction results. Earlier scenes pass through.
+      if (a.id === 4 && intro.missingQuestions !== undefined) {
+        return buildScene4ForExtraction(unified, intro.missingQuestions);
+      }
+      return unified;
     }
     const llmIndex = sceneIndex - AUTHORED_SCENE_COUNT;
     const s = arc?.scenes[llmIndex];
@@ -288,6 +346,7 @@ export default function HomePage() {
         stage: arc?.stage ?? intro.stage,
         team: intro.team,
         fundingModel: intro.fundingModel,
+        targetCustomer: intro.targetCustomer,
         concern: intro.concern,
         flavorTags: arc?.flavorTags ?? intro.flavorTags,
         recentChoices,
@@ -301,10 +360,61 @@ export default function HomePage() {
   // Reset all per-run refs when playthroughId changes (new run)
   const arcGenFiredRef = useRef<Set<number>>(new Set()); // episodes already requested
   const sceneGenFiredRef = useRef<Set<number>>(new Set()); // global llm indices already requested
+  const extractFiredForRef = useRef<string | null>(null); // last startupDescription extracted for
   useEffect(() => {
     arcGenFiredRef.current = new Set();
     sceneGenFiredRef.current = new Set();
+    extractFiredForRef.current = null;
   }, [playthroughId]);
+
+  // Smart Q&A extraction: once the player submits the scene-2 pitch, fire one
+  // Haiku call that extracts the canonical facts AND generates Jordan-voice
+  // follow-ups for whatever's missing. Result drives scene 4.
+  useEffect(() => {
+    const desc = intro.startupDescription?.trim();
+    if (!desc) return;
+    if (extractFiredForRef.current === desc) return;
+    extractFiredForRef.current = desc;
+
+    fetch("/api/extract-facts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        startupDescription: desc,
+        founderPersona: intro.selfDescription ?? "",
+      }),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error(`extract-facts ${r.status}`);
+        return r.json() as Promise<{
+          extracted: Partial<IntroData>;
+          missing: MissingQuestion[];
+        }>;
+      })
+      .then((data) => {
+        const extractedKeys = Object.keys(data.extracted ?? {}).filter(
+          (k) =>
+            typeof (data.extracted as Record<string, unknown>)[k] === "string" &&
+            ((data.extracted as Record<string, string>)[k] ?? "").trim() !== "",
+        );
+        // Distinguish a true LLM failure (route returned the empty stub) from
+        // a legitimate "everything was already covered" response. If both
+        // halves are empty, leave missingQuestions undefined so the page
+        // falls back to the hardcoded 3 questions.
+        if (extractedKeys.length === 0 && (data.missing ?? []).length === 0) {
+          extractFiredForRef.current = null; // allow a retry on a future change
+          return;
+        }
+        factsExtracted({
+          extracted: data.extracted ?? {},
+          missing: data.missing ?? [],
+        });
+      })
+      .catch((err) => {
+        console.warn("extract-facts failed", err);
+        extractFiredForRef.current = null;
+      });
+  }, [intro.startupDescription, intro.selfDescription, factsExtracted]);
 
   // Episode 0 generation: fire when entering authored scene 5 (the last
   // authored). Sonnet runs in the background while the player reads / types.
@@ -354,6 +464,7 @@ export default function HomePage() {
         stage: arc?.stage,
         team: intro.team,
         fundingModel: intro.fundingModel,
+        targetCustomer: intro.targetCustomer,
         concern: intro.concern,
         flavorTags: arc?.flavorTags,
         recentChoices: history.slice(-EPISODE_LENGTH).map((h) => ({
@@ -420,6 +531,7 @@ export default function HomePage() {
         stage: arc.stage,
         team: intro.team,
         fundingModel: intro.fundingModel,
+        targetCustomer: intro.targetCustomer,
         concern: intro.concern,
         flavorTags: arc.flavorTags,
         recentChoices: history.slice(-EPISODE_LENGTH).map((h) => ({
@@ -505,6 +617,7 @@ export default function HomePage() {
         stage: arc?.stage,
         team: intro.team,
         fundingModel: intro.fundingModel,
+        targetCustomer: intro.targetCustomer,
         concern: intro.concern,
         flavorTags: arc?.flavorTags,
         recentChoices: history.slice(-EPISODE_LENGTH).map((h) => ({
@@ -561,6 +674,7 @@ export default function HomePage() {
         flavorTags: arc?.flavorTags ?? intro.flavorTags ?? [],
         team: intro.team,
         fundingModel: intro.fundingModel,
+        targetCustomer: intro.targetCustomer,
         concern: intro.concern,
         choiceHistory: history.map((h) => ({
           sceneId: h.sceneId,
@@ -763,6 +877,9 @@ export default function HomePage() {
           break;
         case "fundingModel":
           updates.fundingModel = text;
+          break;
+        case "targetCustomer":
+          updates.targetCustomer = text;
           break;
         case "concern":
           updates.concern = text;

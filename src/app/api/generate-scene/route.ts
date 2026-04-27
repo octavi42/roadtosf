@@ -20,6 +20,7 @@ type Body = {
   stage?: unknown
   team?: unknown
   fundingModel?: unknown
+  targetCustomer?: unknown
   concern?: unknown
   flavorTags?: unknown
   recentChoices?: unknown
@@ -119,6 +120,7 @@ export async function POST(request: Request) {
     stage: asString(body.stage, '') || undefined,
     team: asString(body.team, '') || undefined,
     fundingModel: asString(body.fundingModel, '') || undefined,
+    targetCustomer: asString(body.targetCustomer, '') || undefined,
     concern: asString(body.concern, '') || undefined,
     flavorTags: asStringArray(body.flavorTags),
     recentChoices: asPriorChoices(body.recentChoices ?? body.priorChoices),

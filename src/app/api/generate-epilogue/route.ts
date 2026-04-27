@@ -8,6 +8,7 @@ type Body = {
   flavorTags?: unknown
   team?: unknown
   fundingModel?: unknown
+  targetCustomer?: unknown
   concern?: unknown
   choiceHistory?: unknown
 }
@@ -66,6 +67,7 @@ export async function POST(request: Request) {
   const flavorTags = asStringArray(body.flavorTags)
   const team = asString(body.team, '')
   const fundingModel = asString(body.fundingModel, '')
+  const targetCustomer = asString(body.targetCustomer, '')
   const concern = asString(body.concern, '')
   const history = asChoiceHistory(body.choiceHistory)
 
@@ -80,6 +82,7 @@ Flavor tags: ${flavorTags.join(', ') || '(none)'}
 PLAYER FACTS (HONOR THESE):
 Team: ${team || '(unstated; treat as solo, do NOT invent a cofounder)'}
 Funding: ${fundingModel || '(unstated; do NOT assume a fundraising track)'}
+Target customer: ${targetCustomer || '(unstated; keep generic — do NOT invent a wrong segment)'}
 Current concern: ${concern || '(unstated)'}
 
 Choices made (in order):
