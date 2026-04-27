@@ -563,62 +563,68 @@ export default function HomePage() {
     exitGeneratingArc,
   ]);
 
-  // Eager next-scene generation: fire scene N+1 as soon as scene N mounts.
-  // Runs forever — no upper bound.
+  // Parallel scene-text generation for the current episode: fires every
+  // not-yet-fired scene at once instead of chaining N→N+1. The chain pattern
+  // staggered imagePrompt arrival ~5–6s apart, which then staggered every
+  // image gen by the same gap. Parallel firing means all imagePrompts land
+  // within one scene-gen window, so all image gens overlap in time.
+  // Cross-episode generation is still handled by the regen effect below.
   useEffect(() => {
     if (phase !== "scene") return;
     if (sceneIndex < AUTHORED_SCENE_COUNT) return;
-    if (!arc?.arcSkeleton) return;
+    const skeleton = arc?.arcSkeleton;
+    if (!skeleton) return;
+    const epi = skeleton.episodeIndex;
 
-    const llmIndex = sceneIndex - AUTHORED_SCENE_COUNT;
-    const nextLLMIndex = llmIndex + 1;
-    const skeleton = arc.arcSkeleton;
-    const nextInEpisode = nextLLMIndex - skeleton.episodeIndex * EPISODE_LENGTH;
+    for (let inEpi = 0; inEpi < skeleton.scenes.length; inEpi++) {
+      const globalLLMIndex = epi * EPISODE_LENGTH + inEpi;
+      if (sceneGenFiredRef.current.has(globalLLMIndex)) continue;
+      const stored = arc?.scenes[globalLLMIndex];
+      if (stored && stored.dialogue.length > 0) continue;
+      sceneGenFiredRef.current.add(globalLLMIndex);
 
-    // Only eager-trigger within the current episode. Cross-episode generation
-    // is handled by the regen effect below.
-    if (nextInEpisode < 0 || nextInEpisode >= skeleton.scenes.length) return;
-    if (sceneGenFiredRef.current.has(nextLLMIndex)) return;
-    const stored = arc.scenes[nextLLMIndex];
-    if (stored && stored.dialogue.length > 0) return;
-    sceneGenFiredRef.current.add(nextLLMIndex);
-
-    postWithTimeout<SceneGenResponse>(
-      "/api/generate-scene",
-      {
-        llmIndex: nextLLMIndex,
-        episodeIndex: skeleton.episodeIndex,
-        llmIndexInEpisode: nextInEpisode,
-        arcSkeleton: skeleton,
-        storySoFar: arc.storySoFar,
-        startupName: arc.startupName,
-        startupDescription: intro.startupDescription ?? "",
-        founderPersona: arc.founderPersona,
-        stage: arc.stage,
-        team: intro.team,
-        fundingModel: intro.fundingModel,
-        targetCustomer: intro.targetCustomer,
-        concern: intro.concern,
-        flavorTags: arc.flavorTags,
-        recentChoices: history.slice(-EPISODE_LENGTH).map((h) => ({
-          sceneId: h.sceneId,
-          choiceLabel: h.choiceLabel,
-          hypeDelta: h.hypeDelta,
-          integrityDelta: h.integrityDelta,
-        })),
-        currentStats: { hype, integrity },
-      },
-      SCENE_GEN_TIMEOUT_MS,
-    )
-      .then((data) => dynamicSceneReady(nextLLMIndex, data.scene))
-      .catch((err) =>
-        console.error(`generate-scene[${nextLLMIndex}] failed`, err),
-      );
+      postWithTimeout<SceneGenResponse>(
+        "/api/generate-scene",
+        {
+          llmIndex: globalLLMIndex,
+          episodeIndex: epi,
+          llmIndexInEpisode: inEpi,
+          arcSkeleton: skeleton,
+          storySoFar: arc?.storySoFar,
+          startupName: arc?.startupName,
+          startupDescription: intro.startupDescription ?? "",
+          founderPersona: arc?.founderPersona,
+          stage: arc?.stage,
+          team: intro.team,
+          fundingModel: intro.fundingModel,
+          targetCustomer: intro.targetCustomer,
+          concern: intro.concern,
+          flavorTags: arc?.flavorTags,
+          recentChoices: history.slice(-EPISODE_LENGTH).map((h) => ({
+            sceneId: h.sceneId,
+            choiceLabel: h.choiceLabel,
+            hypeDelta: h.hypeDelta,
+            integrityDelta: h.integrityDelta,
+          })),
+          currentStats: { hype, integrity },
+        },
+        SCENE_GEN_TIMEOUT_MS,
+      )
+        .then((data) => dynamicSceneReady(globalLLMIndex, data.scene))
+        .catch((err) => {
+          sceneGenFiredRef.current.delete(globalLLMIndex);
+          console.error(`generate-scene[${globalLLMIndex}] failed`, err);
+        });
+    }
   }, [
     phase,
     sceneIndex,
     arc,
     intro.startupDescription,
+    intro.team,
+    intro.fundingModel,
+    intro.targetCustomer,
+    intro.concern,
     history,
     hype,
     integrity,
@@ -671,7 +677,9 @@ export default function HomePage() {
           mode: "scene",
           scenePrompt: scene.imagePrompt,
           archetype: scene.archetype,
-          quality: "medium",
+          // "low" lands in ~15s vs ~60s at "medium" — required to beat the
+          // player to the scene. Hero/share image stays "high".
+          quality: "low",
         }),
       })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
