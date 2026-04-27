@@ -53,6 +53,7 @@ export interface SceneData {
 
 export const HOME_BACKGROUND = "/intro-v2/03-airport-bar.png";
 export const SF_BACKGROUND = "/intro-v2/05-sfo-arrival.png";
+export const GROUP1_BACKGROUND = "/groups/01-exploring-sf.png";
 
 export const SCENES: SceneData[] = [
   // -------- Pre-paywall: home, FaceTime with a friend already in SF --------
@@ -179,6 +180,152 @@ export const SCENES: SceneData[] = [
         },
         placeholder: "What keeps you up at night?",
         extractAs: "concern",
+      },
+    ],
+  },
+  // -------- Group 1: First Steps in SF (4 scenes, one shared image) --------
+  // Narrator-led, no archetype yet. The player has just been dropped off
+  // and is alone in the city for the first time. All four scenes share
+  // GROUP1_BACKGROUND — proves out the "one image per group of scenes"
+  // architecture, and gives the most important first impression a zero-
+  // latency landing. Choices feed into the LLM tail as recentChoices.
+  {
+    id: 5,
+    title: "Scene 5 · 4th & King",
+    background: GROUP1_BACKGROUND,
+    dialogue: [
+      {
+        speaker: "Narrator",
+        text: "Jordan's car peels off. The Caltrain rumbles past. You are standing on a sidewalk with a backpack and a startup name.",
+      },
+      {
+        speaker: "Narrator",
+        text: "Three streets fork off from this corner. The city is already deciding who you are.",
+      },
+    ],
+    choices: [
+      {
+        id: "a",
+        label: "Walk into the Mission",
+        hype: 0,
+        integrity: 1,
+      },
+      {
+        id: "b",
+        label: "Cut up toward SoMa",
+        hype: 1,
+        integrity: 0,
+      },
+      {
+        id: "c",
+        label: "Drift along the Embarcadero",
+        hype: 0,
+        integrity: 0,
+      },
+    ],
+  },
+  {
+    id: 6,
+    title: "Scene 6 · The Walk",
+    background: GROUP1_BACKGROUND,
+    dialogue: [
+      {
+        speaker: "Narrator",
+        text: "The city takes you in like it's done this a thousand times. Posters for AI summits. Founders on phones. A homeless camp three blocks from a Tesla showroom.",
+      },
+      {
+        speaker: "Narrator",
+        text: "It hits you somewhere specific.",
+      },
+    ],
+    choices: [
+      {
+        id: "a",
+        label: "The energy. You feel it.",
+        hype: 2,
+        integrity: 0,
+      },
+      {
+        id: "b",
+        label: "The contradictions. Loud.",
+        hype: 0,
+        integrity: 1,
+      },
+      {
+        id: "c",
+        label: "How alone you are here.",
+        hype: -1,
+        integrity: 1,
+      },
+    ],
+  },
+  {
+    id: 7,
+    title: "Scene 7 · A Place to Land",
+    background: GROUP1_BACKGROUND,
+    dialogue: [
+      {
+        speaker: "Narrator",
+        text: "Eventually you stop walking. A window seat. A laptop on the table. Steam off a cup you don't remember ordering.",
+      },
+      {
+        speaker: "Narrator",
+        text: "You have ten minutes before you need to be a person on purpose.",
+      },
+    ],
+    choices: [
+      {
+        id: "a",
+        label: "Open the deck. Read it cold.",
+        hype: 1,
+        integrity: 0,
+      },
+      {
+        id: "b",
+        label: "Text someone you know here",
+        hype: 1,
+        integrity: 0,
+      },
+      {
+        id: "c",
+        label: "Just look out the window",
+        hype: 0,
+        integrity: 1,
+      },
+    ],
+  },
+  {
+    id: 8,
+    title: "Scene 8 · The City Notices",
+    background: GROUP1_BACKGROUND,
+    dialogue: [
+      {
+        speaker: "Narrator",
+        text: "Your phone buzzes. A flyer slides across the table from somewhere. A stranger glances over and doesn't quite look away.",
+      },
+      {
+        speaker: "Narrator",
+        text: "The city has already started reading you. The next move is yours.",
+      },
+    ],
+    choices: [
+      {
+        id: "a",
+        label: "Lean in. Whatever's coming, take it.",
+        hype: 2,
+        integrity: 0,
+      },
+      {
+        id: "b",
+        label: "Hold steady. Let it come to you.",
+        hype: 0,
+        integrity: 1,
+      },
+      {
+        id: "c",
+        label: "Pretend you didn't see it.",
+        hype: -1,
+        integrity: 0,
       },
     ],
   },

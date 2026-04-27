@@ -15,12 +15,15 @@ export type Phase =
 export const PAYWALL_AFTER_SCENE_INDEX = 2;
 
 /**
- * Authored scenes (src/lib/scenes.ts) cover indices 0..AUTHORED_SCENE_COUNT-1.
+ * Authored scenes (src/lib/scenes.ts) cover indices 0..AUTHORED_SCENE_COUNT-1:
+ *   0–2 pre-paywall (FaceTime with Jordan)
+ *   3   post-paywall Q&A (the car ride)
+ *   4–7 Group 1: "exploring SF" — narrator-led, one shared pre-gen image
  * After that, the LLM tail runs *unbounded* — generated 5 scenes at a time
  * (one episode), regenerating a new skeleton when an episode finishes.
  * The run only ends when the player picks "End my run" or via reset.
  */
-export const AUTHORED_SCENE_COUNT = 4;
+export const AUTHORED_SCENE_COUNT = 8;
 export const EPISODE_LENGTH = 5;
 
 export type MissingQuestionField =

@@ -11,7 +11,9 @@ import { buildScenePromptParts, type PriorChoiceSummary } from '@/lib/prompts/sc
 import type { Archetype } from '@/lib/types'
 import fallbackScenes from '@/lib/fallback/scenes.json'
 
-const AUTHORED_SCENE_COUNT = 4
+// Mirrors the client-side constant in src/lib/session.ts. Used only for
+// computing display sceneId — the LLM tail itself uses llmIndex.
+const AUTHORED_SCENE_COUNT = 8
 const EPISODE_LENGTH = 5
 
 type Body = {
