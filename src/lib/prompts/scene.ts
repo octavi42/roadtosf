@@ -131,21 +131,34 @@ Current concern: ${input.concern || '(unstated)'}`
   // imagePrompt for sub 1–3 must describe the SAME setting as sub 0 —
   // the renderer reuses sub 0's image regardless, but consistency in the
   // narrated setting matters for the dialogue.
+  // The 4 sub-scenes of a group are generated in parallel (one batch per
+  // group). That means sub-scenes 1-3 do NOT have direct knowledge of which
+  // choice the player made in the prior sub. Write the conversation as a
+  // pre-scripted 4-beat scene that escalates regardless of branch. Any prior
+  // choice that happens to be in recentChoices can be used lightly, but
+  // never gate the dialogue on it — every line must land for any branch.
   const subSceneBlock =
     input.subSceneIndex === 0
-      ? `## SUB-SCENE 0 of ${4} (opens the encounter)
+      ? `## SUB-SCENE 0 of 4 (opens the encounter)
 This is the first beat of a 4-beat encounter with ${arche.name}.
 Establish the setting and the character's entrance. End on a choice that
 sets up the next exchange. The location you choose will anchor the next
 3 sub-scenes — pick a place the conversation can plausibly continue.`
-      : `## SUB-SCENE ${input.subSceneIndex} of 4 (continue the encounter)
-You are continuing the SAME conversation with ${arche.name} in the SAME
-location established in sub-scene 0. Same character, same scene, same
-imagePrompt setting. The player just made a choice — react to it directly
-in the opening line. Push the conversation forward; do not restart it.
-Each sub-scene 1–3 escalates: tension, stakes, or revelation.
-Sub-scene 3 is the final beat of this encounter — leave a clean exit
-for the next archetype to enter.`
+      : `## SUB-SCENE ${input.subSceneIndex} of 4 (continues a 4-beat encounter)
+You are writing beat ${input.subSceneIndex + 1} of 4 in the SAME scene with
+${arche.name}, at the SAME location established in sub-scene 0. Same
+character, same scene, same imagePrompt setting.
+This sub-scene is generated IN PARALLEL with the others — you do not see
+the player's prior choices in this group. Write a continuation that:
+  - works for ANY branch of the prior sub-scene's choices
+  - keeps the conversation moving forward, never restarting
+  - escalates the encounter narratively (tension / stakes / revelation)
+  - does NOT name a specific prior choice or quote it back
+${
+  input.subSceneIndex === 3
+    ? 'This is sub-scene 3 — the final beat. Close the encounter cleanly so the next archetype can enter; leave a hook, do NOT resolve the run.'
+    : ''
+}`
 
   const liveBlock = `## RECENT CHOICES (last few only)
 ${formatRecentChoices(input.recentChoices)}

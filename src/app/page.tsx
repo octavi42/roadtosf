@@ -564,14 +564,18 @@ export default function HomePage() {
     exitGeneratingArc,
   ]);
 
-  // Group-aware scene-text generation. Each archetype group has 4 sub-scenes:
-  //   - Sub 0 (leader): fires in parallel with all other groups' leaders the
-  //     moment the skeleton lands. No prior dependency.
-  //   - Sub 1, 2, 3 (followers): each fires after the player has made their
-  //     choice in the prior sub-scene, so the LLM has the actual choice in
-  //     `recentChoices` and can react to it instead of guessing.
-  // The recentChoices snapshot uses the latest history, which always contains
-  // any choice already recorded for prior sub-scenes of the same group.
+  // Group-batch scene-text generation. Each archetype group fires as a
+  // single burst of 4 parallel calls when its trigger condition is met:
+  //   - Group 0 batch fires the moment player enters the LLM tail (sub 0 may
+  //     have already been fired by the generating-arc effect; sceneGenFiredRef
+  //     dedups).
+  //   - Group N (N>=1) batch fires when player reaches sub 1 of group N-1
+  //     (the midpoint of the prior group). At ~15s per sub-scene, the player
+  //     has 3 sub-scenes worth of buffer (~45s) before they hit group N's
+  //     leader — comfortably enough for ~5s scene-gen + ~25s image-gen.
+  // No more "fire after every choice" pattern: a group is generated as a
+  // unit, then the player plays through all 4 sub-scenes uninterrupted by
+  // network activity for that group.
   useEffect(() => {
     if (phase !== "scene") return;
     if (sceneIndex < AUTHORED_SCENE_COUNT) return;
@@ -620,24 +624,27 @@ export default function HomePage() {
     };
 
     for (let groupIdx = 0; groupIdx < skeleton.scenes.length; groupIdx++) {
-      // Leader (sub 0): fire immediately.
-      const leaderInEpi = groupIdx * SCENES_PER_GROUP;
-      fireSceneGen(epi * EPISODE_LENGTH + leaderInEpi, leaderInEpi);
+      // Trigger condition for this group's batch.
+      let triggered = false;
+      if (groupIdx === 0) {
+        // Group 0 batch: triggered the moment we're in the LLM tail.
+        triggered = true;
+      } else {
+        // Group N (N>=1): triggered at the midpoint (sub 1) of group N-1.
+        const priorGroupSub1Index =
+          AUTHORED_SCENE_COUNT +
+          epi * EPISODE_LENGTH +
+          (groupIdx - 1) * SCENES_PER_GROUP +
+          1;
+        triggered = sceneIndex >= priorGroupSub1Index;
+      }
+      if (!triggered) continue;
 
-      // Followers (sub 1..SCENES_PER_GROUP-1): each gated on the prior sub
-      // having text AND the player having recorded a choice for that prior
-      // sub. The choice check is what makes the LLM's continuation reactive.
-      for (let sub = 1; sub < SCENES_PER_GROUP; sub++) {
+      // Fire all 4 sub-scenes of this group in parallel. sceneGenFiredRef
+      // dedups across renders so each sub fires exactly once.
+      for (let sub = 0; sub < SCENES_PER_GROUP; sub++) {
         const inEpi = groupIdx * SCENES_PER_GROUP + sub;
-        const globalLLMIndex = epi * EPISODE_LENGTH + inEpi;
-        const priorGlobalIdx = globalLLMIndex - 1;
-        const priorStored = arc?.scenes[priorGlobalIdx];
-        if (!priorStored || priorStored.dialogue.length === 0) continue;
-        // Scene IDs are 1-based and offset by AUTHORED_SCENE_COUNT.
-        const priorSceneId = AUTHORED_SCENE_COUNT + priorGlobalIdx + 1;
-        const priorChoiceMade = history.some((h) => h.sceneId === priorSceneId);
-        if (!priorChoiceMade) continue;
-        fireSceneGen(globalLLMIndex, inEpi);
+        fireSceneGen(epi * EPISODE_LENGTH + inEpi, inEpi);
       }
     }
   }, [
