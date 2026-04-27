@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSessionStore, type Phase } from "@/lib/session";
+import { SCENES } from "@/lib/scenes";
 
 const DEV_OVERRIDE_KEY = "rtsf_dev_phase";
 
@@ -30,6 +31,7 @@ const PHASES_REQUIRING_PLAYTHROUGH: Phase[] = ["scene", "paywall", "ending"];
 
 export default function DevPanel() {
   const [open, setOpen] = useState(false);
+  const [showTranscripts, setShowTranscripts] = useState(false);
   const phase = useSessionStore((s) => s.phase);
   const sceneIndex = useSessionStore((s) => s.progress.sceneIndex);
   const devSetPhase = useSessionStore((s) => s.devSetPhase);
@@ -95,7 +97,11 @@ export default function DevPanel() {
           DEV
         </button>
       ) : (
-        <div className="bg-black/90 border border-white/20 rounded-lg p-3 w-60 backdrop-blur shadow-2xl">
+        <div
+          className={`bg-black/90 border border-white/20 rounded-lg p-3 backdrop-blur shadow-2xl ${
+            showTranscripts ? "w-96" : "w-60"
+          }`}
+        >
           <div className="flex items-center justify-between mb-2">
             <span className="text-white/50 text-[10px] tracking-widest uppercase">
               Dev Nav
@@ -127,6 +133,79 @@ export default function DevPanel() {
               );
             })}
           </div>
+
+          <button
+            onClick={() => setShowTranscripts((v) => !v)}
+            className="w-full text-[10px] text-white/50 hover:text-white/90 py-1 border border-white/10 rounded mb-2 transition-colors flex items-center justify-center gap-1"
+          >
+            <span>{showTranscripts ? "▾" : "▸"}</span>
+            <span>SCENE TRANSCRIPTS</span>
+          </button>
+
+          {showTranscripts && (
+            <div className="max-h-[60vh] overflow-y-auto pr-1 mb-2 space-y-3">
+              {SCENES.map((scene) => (
+                <div
+                  key={scene.id}
+                  className="border border-white/10 rounded p-2 bg-white/[0.03]"
+                >
+                  <div className="text-[10px] tracking-widest uppercase text-white/60 mb-1.5">
+                    {scene.title}
+                  </div>
+                  <div className="space-y-1.5">
+                    {scene.dialogue.map((line, i) => (
+                      <div key={i} className="text-[11px] leading-snug">
+                        {line.speaker ? (
+                          <span className="text-white/40">
+                            {line.speaker}:{" "}
+                          </span>
+                        ) : (
+                          <span className="text-white/30 italic">
+                            (narration){" "}
+                          </span>
+                        )}
+                        <span className="text-white/85">{line.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {scene.textInput && (
+                    <div className="mt-2 pt-2 border-t border-white/10 text-[10px] text-white/50">
+                      <span className="uppercase tracking-widest text-white/40">
+                        text input →
+                      </span>{" "}
+                      <span className="italic text-white/65">
+                        {scene.textInput.placeholder}
+                      </span>
+                      <span className="text-white/35">
+                        {" "}
+                        ({scene.textInput.extractAs})
+                      </span>
+                    </div>
+                  )}
+                  {scene.choices && (
+                    <div className="mt-2 pt-2 border-t border-white/10 space-y-0.5">
+                      {scene.choices.map((c) => (
+                        <div
+                          key={c.id}
+                          className="text-[10px] text-white/55 leading-snug"
+                        >
+                          <span className="text-white/35">
+                            {c.id.toUpperCase()}.
+                          </span>{" "}
+                          {c.label}{" "}
+                          <span className="text-white/35 tabular-nums">
+                            (h{c.hype >= 0 ? "+" : ""}
+                            {c.hype} · i{c.integrity >= 0 ? "+" : ""}
+                            {c.integrity})
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
           <button
             onClick={clear}
