@@ -84,6 +84,12 @@ interface SessionState {
   ending?: EndingData;
   playthroughId?: string;
   paid: boolean;
+  // Tracks which sceneIndex already fired its share moment in the current
+  // episode. Reset to null on each new arc skeleton (= new episode) and on
+  // reset. Acts both as the per-episode frequency cap (max 1) and the
+  // already-shown guard for the current scene.
+  shareMomentFiredInEpisode: number | null;
+  markShareMomentFired: (sceneIndex: number) => void;
 
   hasHydrated: boolean;
   setHasHydrated: (value: boolean) => void;
@@ -149,6 +155,10 @@ export const useSessionStore = create<SessionState>()(
       stats: { hype: 0, integrity: 0 },
       ending: undefined,
       paid: false,
+      shareMomentFiredInEpisode: null,
+
+      markShareMomentFired: (sceneIndex) =>
+        set({ shareMomentFiredInEpisode: sceneIndex }),
 
       hasHydrated: false,
       setHasHydrated: (value) => set({ hasHydrated: value }),
@@ -213,8 +223,10 @@ export const useSessionStore = create<SessionState>()(
           // Episode 0+: replace current skeleton; episodes 1+ also update the
           // rolling storySoFar that the next scene calls will reference.
           const nextStorySoFar = skeleton.storySoFar ?? state.arc?.storySoFar;
+          // New episode → reset the per-episode share-moment cap.
           if (!state.arc) {
             return {
+              shareMomentFiredInEpisode: null,
               arc: {
                 startupName: state.intro.startupName ?? "the startup",
                 founderPersona: state.intro.selfDescription ?? "",
@@ -233,6 +245,7 @@ export const useSessionStore = create<SessionState>()(
             };
           }
           return {
+            shareMomentFiredInEpisode: null,
             arc: {
               ...state.arc,
               arcSkeleton: skeleton,
@@ -431,6 +444,7 @@ export const useSessionStore = create<SessionState>()(
           ending: undefined,
           playthroughId: undefined,
           paid: false,
+          shareMomentFiredInEpisode: null,
         }),
     }),
     {
@@ -449,6 +463,7 @@ export const useSessionStore = create<SessionState>()(
         ending: state.ending,
         playthroughId: state.playthroughId,
         paid: state.paid,
+        shareMomentFiredInEpisode: state.shareMomentFiredInEpisode,
       }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);

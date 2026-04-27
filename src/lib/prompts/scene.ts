@@ -47,6 +47,14 @@ HARD RULES:
 - imagePrompt: ≤220 chars. Setting + character action + mood + composition. NEVER style words (no "comic", "cel-shaded", "illustration") — the renderer prepends those.
 - DO NOT resolve the run in dialogue. The player chooses when to end. Each scene leaves a hook.
 
+SHARE MOMENT (OPTIONAL FIELD — default is to OMIT):
+- The player just made a choice. If — and only if — that choice (or this scene's beat) is genuinely brag-worthy, you MAY include a "shareMoment" object.
+- Trigger criteria (need at least one): a famous archetype just appeared (Thiel-coded VC, Sam-coded mentor, etc.); the player made a contrarian/bold call against the obvious option; a stat just crossed |hype| ≥ 4 or |integrity| ≥ 4; a stat reversed sign (e.g. went from +2 to -1).
+- Frequency budget: aim for at most one shareMoment per 5 scenes. When in doubt, OMIT.
+- title: ≤8 words, present-tense, punchy ("You walked from $5M."). Speaks to the player as "you".
+- blurb: 1–2 sentences, ≤180 chars, MUST name a specific in-fiction detail (the cameo archetype, a place, a dollar figure, the founder's startupName). Generic copy is forbidden — no "you made a bold move", no "what a moment".
+- If you cannot satisfy the specificity rule, omit shareMoment entirely.
+
 ABSOLUTE PROHIBITIONS (override the outline if they conflict):
 - The cofounder speaker has no fixed first name from the roster ("Stranger" is a label only). Use a name only if "Team" facts name someone, verbatim.
 - If the player's Team says "solo" / "no cofounder": do NOT speak as if a cofounder is already in the player's life. The cofounder archetype, if assigned, is a stranger trying to attach themselves OR a memory/ghost — never a current partner.
@@ -62,7 +70,8 @@ OUTPUT SHAPE:
   "dialogue": [{ "speaker": same archetype key OR "player" OR "narrator", "text": string }],
   "choices": [{ "id": "a"|"b"|"c", "label": string, "consequence": string, "hype": number, "integrity": number }],
   "timeoutSeconds": number,
-  "timeoutChoiceId": "a"|"b"|"c"
+  "timeoutChoiceId": "a"|"b"|"c",
+  "shareMoment"?: { "title": string, "blurb": string }   // OPTIONAL — see SHARE MOMENT rules; usually omit
 }`
 
 function formatArcSummary(arc: ArcSkeleton): string {

@@ -41,6 +41,11 @@ const choiceSchema = z.object({
 // down by making the cost surface to the player.
 export const MAX_DIALOGUE_CHARS_PER_SCENE = 600
 
+const shareMomentSchema = z.object({
+  title: z.string().min(1).max(60),
+  blurb: z.string().min(1).max(180),
+})
+
 export const sceneSchema = z
   .object({
     id: z.number().int().min(1).max(50),
@@ -51,6 +56,10 @@ export const sceneSchema = z
     choices: z.array(choiceSchema).min(2).max(3),
     timeoutSeconds: z.number().int().min(8).max(60).default(15),
     timeoutChoiceId: z.string().min(1).max(2),
+    // Optional: emitted only when the scene contains a genuinely shareable
+    // beat (cameo, contrarian choice, stat reversal). Frequency cap is
+    // enforced client-side, not in the schema.
+    shareMoment: shareMomentSchema.optional(),
   })
   .refine(
     (s) => s.dialogue.reduce((acc, l) => acc + l.text.length, 0) <= MAX_DIALOGUE_CHARS_PER_SCENE,
@@ -180,6 +189,24 @@ export function coerceRawSceneJson(data: unknown, opts?: CoerceSceneOptions): un
       }
       return ch
     })
+  }
+
+  // shareMoment: drop the field if malformed rather than failing the whole
+  // scene. A bad share blurb is much worse than no share moment. Trim first
+  // so a model that pads with whitespace still validates against the min(1)
+  // rule; if it still fails, just delete it.
+  if (out.shareMoment !== undefined) {
+    const sm = out.shareMoment as Record<string, unknown> | null
+    const trimmed =
+      sm && typeof sm === 'object'
+        ? {
+            title: typeof sm.title === 'string' ? sm.title.trim() : sm.title,
+            blurb: typeof sm.blurb === 'string' ? sm.blurb.trim() : sm.blurb,
+          }
+        : sm
+    const parsed = shareMomentSchema.safeParse(trimmed)
+    if (parsed.success) out.shareMoment = parsed.data
+    else delete out.shareMoment
   }
 
   if (Array.isArray(out.dialogue)) {

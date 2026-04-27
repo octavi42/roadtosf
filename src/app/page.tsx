@@ -10,13 +10,19 @@ import DialogueSubtitle from "@/components/DialogueSubtitle";
 import DialogueSpeaker from "@/components/DialogueSpeaker";
 import PaywallPanel from "@/components/PaywallPanel";
 import LoginModal from "@/components/LoginModal";
+import { ShareNotification } from "@/components/ShareNotification";
 import {
   useSessionStore,
   AUTHORED_SCENE_COUNT,
   EPISODE_LENGTH,
 } from "@/lib/session";
 import { ARCHETYPES } from "@/lib/archetypes";
-import type { ArcSkeleton, EndingKey, Scene as LLMScene } from "@/lib/types";
+import type {
+  ArcSkeleton,
+  EndingKey,
+  Scene as LLMScene,
+  ShareMoment,
+} from "@/lib/types";
 import type {
   IntroData,
   MissingQuestion,
@@ -88,6 +94,9 @@ interface UnifiedScene {
   // LLM scenes don't set it.
   ctaLabel?: string;
   isLLM: boolean;
+  // LLM-only — emitted when the scene contains a shareable beat. Frequency
+  // is capped client-side; see shareMomentFiredInEpisode in session.ts.
+  shareMoment?: ShareMoment;
 }
 
 function formatArchetypeSpeaker(speaker: string): string {
@@ -114,6 +123,7 @@ function adaptLLMScene(scene: LLMScene): UnifiedScene {
       integrity: c.integrity,
     })),
     isLLM: true,
+    shareMoment: scene.shareMoment,
   };
 }
 
@@ -226,6 +236,9 @@ export default function HomePage() {
   const intro = useSessionStore(useShallow((s) => s.intro));
   const arc = useSessionStore((s) => s.arc);
   const history = useSessionStore((s) => s.history);
+  const shareMomentFiredInEpisode = useSessionStore(
+    (s) => s.shareMomentFiredInEpisode,
+  );
   const startupName = intro.startupName;
 
   const {
@@ -244,6 +257,7 @@ export default function HomePage() {
     chooseOption,
     advanceScene,
     reset,
+    markShareMomentFired,
   } = useSessionStore(
     useShallow((s) => ({
       setPlaythroughId: s.setPlaythroughId,
@@ -261,6 +275,7 @@ export default function HomePage() {
       chooseOption: s.chooseOption,
       advanceScene: s.advanceScene,
       reset: s.reset,
+      markShareMomentFired: s.markShareMomentFired,
     })),
   );
 
@@ -333,6 +348,35 @@ export default function HomePage() {
     return adaptLLMScene(s);
   })();
   const currentLine = currentScene?.dialogue[currentLineIndex] ?? null;
+
+  // Share-moment trigger: an LLM scene may carry a `shareMoment` payload, but
+  // only one fires per episode. Once any scene in the episode has fired, the
+  // budget is spent — even if the player revisits the same scene later. New
+  // episodes reset the flag in arcSkeletonReady.
+  const shareMomentVisible =
+    phase === "scene" &&
+    !!currentScene?.shareMoment &&
+    shareMomentFiredInEpisode === null;
+
+  useEffect(() => {
+    // Synchronise the persisted "fired this episode" flag with the first
+    // render that actually shows the overlay. The deps narrow this to one
+    // run per scene transition, so the cascading-render concern doesn't
+    // apply — this is a one-shot ack, not a state-driven loop.
+    if (shareMomentVisible) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      markShareMomentFired(sceneIndex);
+    }
+  }, [shareMomentVisible, sceneIndex, markShareMomentFired]);
+
+  const handleShareMomentShare = useCallback(() => {
+    const sm = currentScene?.shareMoment;
+    if (!sm) return;
+    const playUrl = window.location.origin;
+    const text = `${sm.title}\n${sm.blurb}`;
+    const url = `https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(playUrl)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  }, [currentScene?.shareMoment]);
 
   const choiceShownAtRef = useRef<number | null>(null);
   useEffect(() => {
@@ -1401,6 +1445,15 @@ export default function HomePage() {
       >
         {centerContent}
       </GameShell>
+
+      {shareMomentVisible && currentScene?.shareMoment && (
+        <ShareNotification
+          visible
+          title={currentScene.shareMoment.title}
+          blurb={currentScene.shareMoment.blurb}
+          onShare={handleShareMomentShare}
+        />
+      )}
     </>
   );
 }
