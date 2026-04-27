@@ -77,6 +77,7 @@ interface UnifiedScene {
   dialogue: AuthoredDialogueLine[];
   choices?: AuthoredChoice[];
   textInput?: SceneData["textInput"];
+  ctaLabel?: string;
   isLLM: boolean;
 }
 
@@ -126,6 +127,7 @@ function authoredAsUnified(scene: SceneData): UnifiedScene {
     dialogue: scene.dialogue,
     choices: scene.choices,
     textInput: scene.textInput,
+    ctaLabel: scene.ctaLabel,
     isLLM: false,
   };
 }
@@ -691,6 +693,37 @@ export default function HomePage() {
     [currentScene, chooseOption, advanceScene, endRun, playthroughId],
   );
 
+  const handleCTA = useCallback(() => {
+    if (!currentScene) return;
+    chooseOption("commit", currentScene.ctaLabel ?? "commit", 0, 0);
+
+    if (playthroughId) {
+      const startedAt = choiceShownAtRef.current;
+      const timeToChooseMs =
+        startedAt !== null ? Date.now() - startedAt : null;
+      fetch(`/api/playthroughs/${playthroughId}/scenes`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sceneNumber: currentScene.id,
+          dialogue: currentScene.dialogue
+            .map((d) => `${d.speaker ?? ""}: ${d.text}`)
+            .join("\n"),
+          choicesShown: [],
+          choicePicked: "commit",
+          freeText: null,
+          wasTimeout: false,
+          timeToChooseMs,
+          statDeltas: { hype: 0, integrity: 0 },
+        }),
+      }).catch((err) => console.error("logSceneEvent failed", err));
+    }
+
+    setTimeout(() => {
+      advanceScene();
+    }, 600);
+  }, [currentScene, chooseOption, advanceScene, playthroughId]);
+
   const handleSceneTextSubmit = useCallback(
     (text: string) => {
       if (!currentScene?.textInput) return;
@@ -805,6 +838,24 @@ export default function HomePage() {
           onSubmit={handleSceneTextSubmit}
           disabled={choiceMade !== null}
         />
+      );
+    }
+
+    if (currentScene.ctaLabel) {
+      return (
+        <div className="w-full max-w-md mx-auto animate-bounce-in">
+          <button
+            onClick={handleCTA}
+            disabled={choiceMade !== null}
+            className="comic-outline comic-press font-sans font-semibold w-full rounded-xl py-3 text-base text-[var(--color-ink)] disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              background: "var(--color-sunset)",
+              letterSpacing: "-0.005em",
+            }}
+          >
+            {currentScene.ctaLabel}
+          </button>
+        </div>
       );
     }
 
