@@ -65,6 +65,7 @@ interface SessionState {
     transcript: string,
     extracted?: Partial<Omit<IntroData, "transcript">>,
   ) => void;
+  captureIntro: (updates: Partial<IntroData>) => void;
   paywallSatisfied: () => void;
   arcReady: (arc: StoryArc) => void;
   devSetPhase: (phase: Phase, sceneIndex?: number) => void;
@@ -121,7 +122,7 @@ export const useSessionStore = create<SessionState>()(
       welcomeStarted: () =>
         set((state) => {
           if (state.phase !== "welcome") return state;
-          return { phase: "onboarding" };
+          return { phase: "scene", progress: INITIAL_PROGRESS };
         }),
 
       introSubmitted: (transcript, extracted) =>
@@ -138,6 +139,23 @@ export const useSessionStore = create<SessionState>()(
             },
           };
         }),
+
+      captureIntro: (updates) =>
+        set((state) => ({
+          intro: {
+            ...state.intro,
+            ...updates,
+            transcript:
+              updates.transcript !== undefined
+                ? `${state.intro.transcript}${state.intro.transcript ? "\n" : ""}${updates.transcript}`
+                : state.intro.transcript,
+            flavorTags: updates.flavorTags
+              ? Array.from(
+                  new Set([...state.intro.flavorTags, ...updates.flavorTags]),
+                )
+              : state.intro.flavorTags,
+          },
+        })),
 
       arcReady: (arc) => set({ arc }),
 

@@ -7,17 +7,17 @@ import ChoicePanel from "@/components/ChoicePanel";
 import TextInputPanel from "@/components/TextInputPanel";
 import DialogueSubtitle from "@/components/DialogueSubtitle";
 import DialogueSpeaker from "@/components/DialogueSpeaker";
-import OnboardingPanel from "@/components/OnboardingPanel";
 import PaywallPanel from "@/components/PaywallPanel";
 import { useSessionStore } from "@/lib/session";
 import type { EndingKey } from "@/lib/types";
+import type { IntroData } from "@/lib/session";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 interface DialogueLine {
-  speaker: string;
+  speaker?: string;
   text: string;
 }
 
@@ -28,171 +28,187 @@ interface Choice {
   integrity: number;
 }
 
+type IntroExtractField = "startupDescription" | "selfDescription" | "stage";
+
+interface TextInputConfig {
+  placeholder: string;
+  extractAs: IntroExtractField;
+}
+
 interface SceneData {
   id: number;
   title: string;
+  background?: string;
   dialogue: DialogueLine[];
-  choices: Choice[];
+  choices?: Choice[];
+  textInput?: TextInputConfig;
 }
 
 // ---------------------------------------------------------------------------
-// Welcome narration — host explains the game over a static SF backdrop
+// Welcome narration — pre-trip, before the player has booked the flight
 // ---------------------------------------------------------------------------
 
 const WELCOME_LINES = [
-  "Welcome. You've just landed in San Francisco.",
-  "Five scenes. Five timed choices. Twelve endings.",
-  "What happens next is up to you.",
+  "You've been thinking about San Francisco for two years.",
+  "Tonight, someone calls.",
+  "Five scenes between you and the rest of your life.",
 ];
 
-const WELCOME_BACKGROUND = "/intro-v2/05-sfo-arrival.png";
+const WELCOME_BACKGROUND = "/intro-v2/01-departure-board.png";
 
-const ONBOARDING_LINES = [
-  "Now then.",
-  "Tell me about your startup.",
-];
-
-const ONBOARDING_BACKGROUND = "/intro-v2/03-airport-bar.png";
+const HOME_BACKGROUND = "/intro-v2/03-airport-bar.png";
+const SF_BACKGROUND = "/intro-v2/05-sfo-arrival.png";
 
 // ---------------------------------------------------------------------------
-// Prescripted story — Wagr (Venmo for sports bets between friends)
+// Onboarding-as-narrative — 5 scenes that extract startup info as story.
+// Pre-paywall: a friend in SF on FaceTime pulls you over.
+// Post-paywall: your co-founder, already in SF, shows you the real numbers.
 // ---------------------------------------------------------------------------
 
 const SCENES: SceneData[] = [
+  // -------- Pre-paywall: home, FaceTime with a friend already in SF --------
   {
     id: 1,
-    title: "Scene 1 · The Pivot",
+    title: "Scene 1 · The Call",
+    background: HOME_BACKGROUND,
     dialogue: [
       {
-        speaker: "Maya · Co-founder & CTO",
-        text: "We need to talk before the pitch. I've been thinking — Wagr needs to pivot to AI.",
+        speaker: "Jordan · Friend, SF",
+        text: "Look at you. One a.m. again. Some things never change.",
       },
       {
-        speaker: "Maya · Co-founder & CTO",
-        text: "Everyone on Sand Hill is asking about AI agents. Peer-to-peer betting is a tough sell right now.",
+        speaker: "Jordan · Friend, SF",
+        text: "You said you'd come out by spring. It's spring.",
       },
       {
-        speaker: "Maya · Co-founder & CTO",
-        text: "We wrap Wagr in an AI layer — 'your AI friend who handles all your bets' — and suddenly we're a platform play.",
-      },
-      {
-        speaker: "Maya · Co-founder & CTO",
-        text: "I can have a demo ready by Thursday. But I need you to back me on this. Right now.",
-      },
-    ],
-    choices: [
-      { id: "a", label: "No, ship the original", hype: -1, integrity: 1 },
-      { id: "b", label: "Yes, pivot to AI", hype: 1, integrity: -1 },
-    ],
-  },
-  {
-    id: 2,
-    title: "Scene 2 · The Scoop",
-    dialogue: [
-      {
-        speaker: "Journalist · TechCrunch",
-        text: "I heard from three sources that Wagr's payment processor dropped you over regulatory concerns. Care to comment?",
-      },
-      {
-        speaker: "Journalist · TechCrunch",
-        text: "I'm running this either way. The question is whether your version of the story is in it.",
-      },
-      {
-        speaker: "Journalist · TechCrunch",
-        text: "Off the record — I actually think what you're building is interesting. But my editor wants blood.",
-      },
-      {
-        speaker: "Journalist · TechCrunch",
-        text: "Give me something. Anything. A leak, a number, a name. I'll make it worth your while.",
+        speaker: "Jordan · Friend, SF",
+        text: "I've watched you almost-do-this for two years. Are you actually doing it, or you gonna ghost me on this one too?",
       },
     ],
     choices: [
       {
         id: "a",
-        label: "That's not true. No comment.",
-        hype: -1,
+        label: "I'm coming. Done overthinking it.",
+        hype: 1,
+        integrity: 0,
+      },
+      {
+        id: "b",
+        label: "I'm trying to do it right.",
+        hype: 0,
         integrity: 1,
       },
-      { id: "b", label: "Send her the details", hype: 1, integrity: -1 },
+      {
+        id: "c",
+        label: "Easy for you to say. You sold yours.",
+        hype: -1,
+        integrity: 0,
+      },
     ],
+  },
+  {
+    id: 2,
+    title: "Scene 2 · The Pitch",
+    background: HOME_BACKGROUND,
+    dialogue: [
+      {
+        speaker: "Jordan · Friend, SF",
+        text: "Okay. Walk me through it again.",
+      },
+      {
+        speaker: "Jordan · Friend, SF",
+        text: "Not the deck pitch. The version you tell yourself in the shower.",
+      },
+      {
+        speaker: "Jordan · Friend, SF",
+        text: "What are you actually building?",
+      },
+    ],
+    textInput: {
+      placeholder: "Your startup, in your own words…",
+      extractAs: "startupDescription",
+    },
   },
   {
     id: 3,
-    title: "Scene 3 · The Term Sheet",
+    title: "Scene 3 · The Ultimatum",
+    background: SF_BACKGROUND,
     dialogue: [
       {
-        speaker: "VC · Founders Fund",
-        text: "Tell me something that's true that almost nobody agrees with you on.",
+        speaker: "Jordan · Friend, SF",
+        text: "Real talk. Five years from now — the version where you didn't come.",
       },
       {
-        speaker: "VC · Founders Fund",
-        text: "We want to lead your seed. Three million, fifteen percent, standard pro-rata.",
+        speaker: "Jordan · Friend, SF",
+        text: "Where are they? What are they doing on a Tuesday night?",
       },
       {
-        speaker: "VC · Founders Fund",
-        text: "One condition. Maya steps back to an advisory role. We want you running point, solo.",
-      },
-      {
-        speaker: "VC · Founders Fund",
-        text: "This offer expires when I leave this table. The Caltrain back to the city is in eleven minutes.",
+        speaker: "Jordan · Friend, SF",
+        text: "Tell me, then open the airline app. I'll wait.",
       },
     ],
-    choices: [
-      { id: "a", label: "Take it", hype: 1, integrity: -1 },
-      { id: "b", label: "Walk away", hype: -1, integrity: 1 },
-    ],
+    textInput: {
+      placeholder: "The version of you that didn't come…",
+      extractAs: "selfDescription",
+    },
   },
+  // -------- Paywall fires here: boarding pass to SFO --------
+  // -------- Post-paywall: arrived in SF, the co-founder is waiting --------
   {
     id: 4,
-    title: "Scene 4 · Trust Crisis",
+    title: "Scene 4 · Baggage Claim",
+    background: SF_BACKGROUND,
     dialogue: [
+      { text: "The carousel stops. Yours wasn't on it." },
       {
-        speaker: "Maya · Co-founder & CTO",
-        text: "I saw the term sheet. The one with my name in the advisory clause.",
+        speaker: "Maya · Co-founder",
+        text: "sorry got held up at the place. just take an uber. key's under the mat",
       },
-      {
-        speaker: "Maya · Co-founder & CTO",
-        text: "You were going to tell me when, exactly?",
-      },
-      {
-        speaker: "Hater · Twitter / X",
-        text: "Wagr founder just pushed out his CTO for VC money. Classic. Thread incoming 🧵",
-      },
-      {
-        speaker: "Maya · Co-founder & CTO",
-        text: "I built the entire backend. I have thirty percent. Whatever you're about to say — think carefully.",
-      },
+      { text: "No apology. No call. The phone goes dark in your hand." },
     ],
     choices: [
-      { id: "a", label: "Lie. You never saw it.", hype: 0, integrity: -2 },
-      { id: "b", label: "Level with her", hype: 0, integrity: 2 },
+      {
+        id: "a",
+        label: "Let it slide. They're stressed.",
+        hype: 0,
+        integrity: 1,
+      },
+      {
+        id: "b",
+        label: "Send something sharp.",
+        hype: 1,
+        integrity: -1,
+      },
+      {
+        id: "c",
+        label: "Call. Talk like adults.",
+        hype: 0,
+        integrity: 0,
+      },
     ],
   },
   {
     id: 5,
-    title: "Scene 5 · Demo Day",
+    title: "Scene 5 · The Spreadsheet",
+    background: HOME_BACKGROUND,
     dialogue: [
       {
-        speaker: "Mentor · YC Partner",
-        text: "You're on in ten minutes. Five hundred people in that room, half of them writing checks.",
+        speaker: "Maya · Co-founder",
+        text: "Sit down. Open this.",
       },
       {
-        speaker: "Mentor · YC Partner",
-        text: "The number they remember is the one you say on stage. It lives forever.",
+        speaker: "Maya · Co-founder",
+        text: "We don't do the pitch-deck version anymore. Where are we, actually?",
       },
       {
-        speaker: "Mentor · YC Partner",
-        text: "Your actual MRR is eighty thousand. That's real. That's respectable.",
-      },
-      {
-        speaker: "Mentor · YC Partner",
-        text: "But I've seen founders say ten million ARR with a straight face and walk out with a term sheet. Your call.",
+        speaker: "Maya · Co-founder",
+        text: "Stage. Runway. What's broken. Be honest.",
       },
     ],
-    choices: [
-      { id: "a", label: "Understated truth", hype: -1, integrity: 2 },
-      { id: "b", label: "Full hype. $10M ARR.", hype: 2, integrity: -2 },
-    ],
+    textInput: {
+      placeholder: "Stage, runway, what's broken…",
+      extractAs: "stage",
+    },
   },
 ];
 
@@ -250,7 +266,7 @@ export default function HomePage() {
   const {
     setPlaythroughId,
     welcomeStarted,
-    introSubmitted,
+    captureIntro,
     paywallSatisfied,
     advanceLine,
     chooseOption,
@@ -260,7 +276,7 @@ export default function HomePage() {
     useShallow((s) => ({
       setPlaythroughId: s.setPlaythroughId,
       welcomeStarted: s.welcomeStarted,
-      introSubmitted: s.introSubmitted,
+      captureIntro: s.captureIntro,
       paywallSatisfied: s.paywallSatisfied,
       advanceLine: s.advanceLine,
       chooseOption: s.chooseOption,
@@ -280,23 +296,6 @@ export default function HomePage() {
       if (next >= WELCOME_LINES.length) {
         welcomeCompleteRef.current = true;
         setWelcomeDone(true);
-        return prev;
-      }
-      return next;
-    });
-  }, []);
-
-  const [onboardingLineIndex, setOnboardingLineIndex] = useState(0);
-  const [onboardingNarrationDone, setOnboardingNarrationDone] = useState(false);
-  const onboardingNarrationCompleteRef = useRef(false);
-
-  const handleOnboardingLineComplete = useCallback(() => {
-    if (onboardingNarrationCompleteRef.current) return;
-    setOnboardingLineIndex((prev) => {
-      const next = prev + 1;
-      if (next >= ONBOARDING_LINES.length) {
-        onboardingNarrationCompleteRef.current = true;
-        setOnboardingNarrationDone(true);
         return prev;
       }
       return next;
@@ -344,26 +343,23 @@ export default function HomePage() {
   // Handlers
   // -------------------------------------------------------------------------
 
-  const handleOnboardingSubmit = useCallback(
-    (transcript: string) => {
-      setPlaythroughId(undefined);
-      introSubmitted(transcript);
-      fetch("/api/playthroughs", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          flavorTags: [],
-          introTranscript: transcript,
-        }),
+  const handleStart = useCallback(() => {
+    setPlaythroughId(undefined);
+    welcomeStarted();
+    fetch("/api/playthroughs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        flavorTags: [],
+        introTranscript: "",
+      }),
+    })
+      .then((r) => r.json())
+      .then((data: { id?: string }) => {
+        if (data.id) setPlaythroughId(data.id);
       })
-        .then((r) => r.json())
-        .then((data: { id?: string }) => {
-          if (data.id) setPlaythroughId(data.id);
-        })
-        .catch((err) => console.error("createPlaythrough failed", err));
-    },
-    [introSubmitted, setPlaythroughId],
-  );
+      .catch((err) => console.error("createPlaythrough failed", err));
+  }, [welcomeStarted, setPlaythroughId]);
 
   const handleLineComplete = useCallback(() => {
     const scene = SCENES[sceneIndex];
@@ -387,9 +383,9 @@ export default function HomePage() {
   }, [ending, startupName]);
 
   const handleChoice = useCallback(
-    (choiceId: string, freeText?: string) => {
+    (choiceId: string) => {
       const scene = SCENES[sceneIndex];
-      const choice = scene?.choices.find((c) => c.id === choiceId);
+      const choice = scene?.choices?.find((c) => c.id === choiceId);
       const hypeDelta = choice?.hype ?? 0;
       const integrityDelta = choice?.integrity ?? 0;
       chooseOption(choiceId, hypeDelta, integrityDelta);
@@ -404,14 +400,14 @@ export default function HomePage() {
           body: JSON.stringify({
             sceneNumber: scene.id,
             dialogue: scene.dialogue
-              .map((d) => `${d.speaker}: ${d.text}`)
+              .map((d) => `${d.speaker ?? ""}: ${d.text}`)
               .join("\n"),
-            choicesShown: scene.choices.map((c) => ({
+            choicesShown: (scene.choices ?? []).map((c) => ({
               id: c.id,
               label: c.label,
             })),
             choicePicked: choiceId,
-            freeText: freeText ?? null,
+            freeText: null,
             wasTimeout: false,
             timeToChooseMs,
             statDeltas: { hype: hypeDelta, integrity: integrityDelta },
@@ -426,12 +422,54 @@ export default function HomePage() {
     [sceneIndex, chooseOption, advanceScene, playthroughId],
   );
 
-  const handleTextSubmit = useCallback(
+  const handleSceneTextSubmit = useCallback(
     (text: string) => {
-      // Scene 3 counter-offer: classify as "walk" for now (integrity boost)
-      handleChoice("b", text);
+      const scene = SCENES[sceneIndex];
+      if (!scene?.textInput) return;
+
+      const updates: Partial<IntroData> = { transcript: text };
+      switch (scene.textInput.extractAs) {
+        case "startupDescription":
+          updates.startupDescription = text;
+          break;
+        case "selfDescription":
+          updates.selfDescription = text;
+          break;
+        case "stage":
+          updates.flavorTags = [`stage:${text}`];
+          break;
+      }
+      captureIntro(updates);
+
+      chooseOption("text", 0, 0);
+
+      if (playthroughId) {
+        const startedAt = choiceShownAtRef.current;
+        const timeToChooseMs =
+          startedAt !== null ? Date.now() - startedAt : null;
+        fetch(`/api/playthroughs/${playthroughId}/scenes`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            sceneNumber: scene.id,
+            dialogue: scene.dialogue
+              .map((d) => `${d.speaker ?? ""}: ${d.text}`)
+              .join("\n"),
+            choicesShown: [],
+            choicePicked: "text",
+            freeText: text,
+            wasTimeout: false,
+            timeToChooseMs,
+            statDeltas: { hype: 0, integrity: 0 },
+          }),
+        }).catch((err) => console.error("logSceneEvent failed", err));
+      }
+
+      setTimeout(() => {
+        advanceScene(SCENES.length);
+      }, 600);
     },
-    [handleChoice],
+    [sceneIndex, captureIntro, chooseOption, advanceScene, playthroughId],
   );
 
   // -------------------------------------------------------------------------
@@ -451,20 +489,6 @@ export default function HomePage() {
             text={WELCOME_LINES[welcomeLineIndex]}
             wordInterval={100}
             onComplete={handleWelcomeLineComplete}
-          />
-        </div>
-      );
-    }
-
-    if (phase === "onboarding" && !onboardingNarrationDone) {
-      return (
-        <div className="w-full max-w-2xl mx-auto px-2 select-none">
-          <DialogueSpeaker speaker={undefined} />
-          <DialogueSubtitle
-            key={`onboarding-line${onboardingLineIndex}`}
-            text={ONBOARDING_LINES[onboardingLineIndex]}
-            wordInterval={110}
-            onComplete={handleOnboardingLineComplete}
           />
         </div>
       );
@@ -497,7 +521,7 @@ export default function HomePage() {
       return (
         <div className="w-full max-w-md mx-auto animate-bounce-in">
           <button
-            onClick={() => welcomeStarted()}
+            onClick={handleStart}
             className="comic-outline comic-press font-sans font-semibold w-full rounded-xl py-3 text-base text-[var(--color-ink)]"
             style={{
               background: "var(--color-sunset)",
@@ -512,21 +536,13 @@ export default function HomePage() {
 
     if (phase !== "scene" || !showChoices) return null;
 
-    // Scene 3 gets an extra free-text counter-offer option
-    if (currentScene?.id === 3) {
+    if (currentScene?.textInput) {
       return (
-        <div className="flex flex-col gap-3">
-          <ChoicePanel
-            choices={currentScene.choices}
-            onChoice={handleChoice}
-            disabled={choiceMade !== null}
-          />
-          <TextInputPanel
-            placeholder="Counter-offer… (e.g. Keep Maya, drop the clause)"
-            onSubmit={handleTextSubmit}
-            disabled={choiceMade !== null}
-          />
-        </div>
+        <TextInputPanel
+          placeholder={currentScene.textInput.placeholder}
+          onSubmit={handleSceneTextSubmit}
+          disabled={choiceMade !== null}
+        />
       );
     }
 
@@ -552,10 +568,9 @@ export default function HomePage() {
         return null;
 
       case "onboarding":
-        if (!onboardingNarrationDone) return null;
-        return (
-          <OnboardingPanel onSubmit={handleOnboardingSubmit} />
-        );
+        // Vestigial — current flow goes welcome → scene directly. Kept so
+        // any persisted sessions on the old phase don't crash the renderer.
+        return null;
 
       case "scene":
         return (
@@ -659,8 +674,8 @@ export default function HomePage() {
         backgroundSrc={
           phase === "welcome"
             ? WELCOME_BACKGROUND
-            : phase === "onboarding"
-              ? ONBOARDING_BACKGROUND
+            : phase === "scene"
+              ? (currentScene?.background ?? HOME_BACKGROUND)
               : "/intro-v2/01-departure-board.png"
         }
         dialogueSlot={dialogueSlot}
