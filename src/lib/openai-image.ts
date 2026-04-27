@@ -12,9 +12,11 @@ export type ImageQuality = "low" | "medium" | "high";
 export type ImageFormat = "jpeg" | "png" | "webp";
 
 // Locked presets — never change per call. Define the fixed "look" of every image.
+// Size is 1536x1024 (3:2 landscape) — the closest gpt-image-2 preset to 16:9.
+// True 16:9 (1792x1024) is dall-e-3 only.
 const PRESETS = {
   model: "gpt-image-2" as const,
-  size: "1024x1024" as const,
+  size: "1536x1024" as const,
   defaultQuality: "medium" as ImageQuality,
   defaultFormat: "jpeg" as ImageFormat,
   styleRefPath: path.join(process.cwd(), "references", "style-ref.png"),
