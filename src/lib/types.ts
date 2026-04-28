@@ -1,4 +1,5 @@
 import type { RolledCameo, ToneId } from './cameos/types'
+import type { StoryletState } from './storylets/types'
 
 export type Archetype = 'vc' | 'cofounder' | 'reporter' | 'hater' | 'mentor'
 
@@ -79,6 +80,10 @@ export interface StoryArc {
   // ending screen.
   rolledCameos?: RolledCameo[]
   tone?: ToneId
+  // Storylet engine state — fired list + flags. Carried across episodes
+  // so cooldowns and cross-episode flag gates work. Updated server-side
+  // by /api/generate-arc and persisted on each arcSkeletonReady.
+  storyletState?: StoryletState
 }
 
 export interface GenerateImageResult {

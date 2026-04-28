@@ -68,6 +68,11 @@ ABSOLUTE PROHIBITIONS (override the outline if they conflict):
 - If the player named a cofounder (e.g. "my cofounder Anna"), use that name verbatim. Never substitute a different name.
 - If Funding says "bootstrapping": do NOT reference term sheets the player has, equity advisory clauses, or VC drama in motion. VC scenes are cold solicitations, not active deals.
 
+CAST LIST LOCK (anti-retroactive-worldbuilding — see Hidden Door findings in STORYLETS.md):
+- The ONLY named characters you may reference are: (a) the player's startup, (b) the player's cofounder if "Team" names one, (c) any real person already named in the scene's beat (these came from the storylet engine and are intentional).
+- Do NOT invent new named NPCs ("Jessica from Sequoia", "Arman the technical lead", etc.). Strangers stay strangers.
+- The speaker for THIS scene is the assigned archetype — do not introduce a second named character into the dialogue.
+
 OUTPUT SHAPE:
 {
   "id": number,
@@ -104,6 +109,25 @@ function formatRecentChoices(choices: PriorChoiceSummary[]): string {
         `Scene ${c.sceneId}: "${c.choiceLabel}" (hype ${c.hypeDelta >= 0 ? '+' : ''}${c.hypeDelta}, integrity ${c.integrityDelta >= 0 ? '+' : ''}${c.integrityDelta})`,
     )
     .join('\n')
+}
+
+// Choice-illusion fix: surface the single most-recent choice and its
+// stat delta in its OWN block at the top of the live prompt, separate
+// from the bulk recent-choices history. The dialogue must acknowledge
+// this choice's effect — without this hoist, the renderer tends to
+// produce prose that floats free of what the player actually picked.
+// See STORYLETS.md (Hidden Door findings).
+function formatPriorChoiceCallout(
+  choices: PriorChoiceSummary[],
+): string | null {
+  if (choices.length === 0) return null
+  const last = choices[choices.length - 1]!
+  const hypeStr = `${last.hypeDelta >= 0 ? '+' : ''}${last.hypeDelta}`
+  const integStr = `${last.integrityDelta >= 0 ? '+' : ''}${last.integrityDelta}`
+  return `## PRIOR CHOICE (acknowledge this — its effect must show in dialogue/body language)
+Player just chose: "${last.choiceLabel}"
+Effect: hype ${hypeStr}, integrity ${integStr}.
+The opening line(s) of THIS scene must visibly react to that choice (a callback, a tone shift, a side-effect in the world, an NPC reading it back). Do not write generic dialogue that would land for any branch.`
 }
 
 export function buildScenePromptParts(input: BuildScenePromptInput) {
@@ -177,7 +201,9 @@ ${
     : ''
 }`
 
-  const liveBlock = `${input.tone ? `${input.tone.oneLiner}\n\n` : ''}## RECENT CHOICES (last few only)
+  const priorChoiceBlock = formatPriorChoiceCallout(input.recentChoices)
+
+  const liveBlock = `${input.tone ? `${input.tone.oneLiner}\n\n` : ''}${priorChoiceBlock ? `${priorChoiceBlock}\n\n` : ''}## RECENT CHOICES (last few only)
 ${formatRecentChoices(input.recentChoices)}
 
 Current stats — hype ${input.currentStats.hype}, integrity ${input.currentStats.integrity}.
