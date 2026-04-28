@@ -77,6 +77,41 @@ export async function completeJson<T>(
   }
 }
 
+export interface StreamJsonTextOptions extends CompleteJsonOptions {
+  // Called for each text delta, with the cumulative text so far. Used by
+  // generate-arc to incrementally parse out scene outlines as they finish.
+  onText?: (delta: string, full: string) => void
+  signal?: AbortSignal
+}
+
+// Streams an Anthropic message and returns the full assembled text. Errors
+// in the stream propagate; the caller is responsible for fallback logic.
+export async function streamJsonText(opts: StreamJsonTextOptions): Promise<string> {
+  const { model, systemBlocks, userBlocks, maxTokens = 2400, temperature = 0.85, onText, signal } = opts
+
+  const stream = client().messages.stream(
+    {
+      model,
+      max_tokens: maxTokens,
+      temperature,
+      system: toContentBlocks(systemBlocks),
+      messages: [
+        { role: 'user', content: toContentBlocks(userBlocks) },
+      ],
+    },
+    signal ? { signal } : undefined,
+  )
+
+  let full = ''
+  stream.on('text', (delta: string) => {
+    full += delta
+    onText?.(delta, full)
+  })
+
+  await stream.finalMessage()
+  return full
+}
+
 // Tolerant JSON extraction:
 // - Strips an optional ```json or ``` fence
 // - Tolerates JS-style leading + on positive numbers ("integrity": +1) which

@@ -82,7 +82,12 @@ function formatArcSummary(arc: ArcSkeleton): string {
   const lines: string[] = []
   lines.push(`Episode ${arc.episodeIndex} premise: ${arc.premise}`)
   lines.push('Group outlines (each group = 4 sub-scenes with the same archetype, same location):')
+  // Skip placeholder outlines from a streaming-partial skeleton (see
+  // makePartialArcSkeleton in page.tsx). The first scene-gen of each
+  // episode is fired before the full arc finishes streaming; only the
+  // current (real) outline is shown to keep cross-group context honest.
   arc.scenes.forEach((s) => {
+    if (s.beat === '__pending') return
     lines.push(`  group ${s.index}: ${s.archetype} — ${s.beat}${s.hingesOn ? ` (hinges on: ${s.hingesOn})` : ''}`)
   })
   return lines.join('\n')
