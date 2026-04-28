@@ -437,12 +437,18 @@ export async function POST(request: Request) {
           }
         }
 
+        // Temperature: sub 0 (storylet setup) keeps 0.9 for prose
+        // creativity. Sub 1-3 (choice-driven) drops to 0.6 — at high
+        // temp the model overrode "render the choice as action" with
+        // its own "natural narrative continuation" preference. Lower
+        // temp = stronger compliance with the prior-choice directive.
+        const sceneTemperature = subSceneIndex === 0 ? 0.9 : 0.6
         const raw = await streamJsonText({
           model: MODELS.scene,
           systemBlocks,
           userBlocks,
           maxTokens: 1000,
-          temperature: 0.9,
+          temperature: sceneTemperature,
           onText: (_delta, full) => tryEmitProgress(full),
           signal: request.signal,
         })

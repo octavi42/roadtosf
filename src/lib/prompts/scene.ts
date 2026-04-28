@@ -148,7 +148,13 @@ export function buildScenePromptParts(input: BuildScenePromptInput) {
   const arcSummary = formatArcSummary(input.arcSkeleton)
 
   // Cached block: stable across all scene calls in the same episode.
-  // Replaces the prior "dump all history" approach with a compressed summary.
+  // CURRENT EPISODE SKELETON moved OUT of the cached context — see the
+  // live block. The skeleton lists all 5 storylet beats including this
+  // group's anchor; cached, it leaks the canonical setup into every
+  // sub-scene's render and re-anchors Haiku away from the player's
+  // choice. We only include the skeleton for sub 0 (the storylet's
+  // setup beat); sub 1-3 should generate freely from prior choice +
+  // archetype + player context, no anchor.
   const cachedContext = `## CHARACTER (this scene's speaker)
 JSON keys — use EXACTLY for "archetype" and for NPC dialogue "speaker": ${input.outline.archetype}
 Role card (voice flavor only; never paste this label into JSON): ${arche.name}, ${arche.title}.
@@ -158,9 +164,6 @@ ${
     ? '\nNote: "Stranger" is UI flavor only — not a spoken name. If Team facts say solo, they must not claim to be an existing cofounder unless Team names someone.'
     : ''
 }
-
-## CURRENT EPISODE SKELETON
-${arcSummary}
 
 ## STORY SO FAR (compressed, covers everything before this episode)
 ${input.storySoFar ?? '(this is the opening episode — no prior summary)'}
@@ -262,20 +265,27 @@ Episode ${input.episodeIndex}, group ${input.groupIndex} sub ${input.subSceneInd
 ${
   input.subSceneIndex === 0
     ? // Sub 0: render the storylet's anchor beat verbatim. This is the
-      // canonical situation the storylet template encodes.
-      `Beat to render: ${input.outline.beat}
-${input.outline.hingesOn ? `Should hinge on: ${input.outline.hingesOn}` : ''}`
-    : // Sub 1-3: do NOT re-anchor to the storylet's beat. The beat is
-      // shown as STORYLET CONTEXT (so the model knows the broader
-      // situation) but the actual scene is whatever follows from the
-      // PRIOR CHOICE. This is the architectural fix for "every sub-scene
-      // re-loops the same beat" — passing the storylet beat as "Beat to
-      // render" was pulling Haiku back to the anchor every time.
-      `Storylet context (already established by sub-scene 0): ${input.outline.beat}
-${input.outline.hingesOn ? `Storylet pivot point: ${input.outline.hingesOn}` : ''}
+      // canonical situation the storylet template encodes. The episode
+      // skeleton goes here too (sub-0 only) for through-line context.
+      `## CURRENT EPISODE SKELETON
+${arcSummary}
 
-Render the scene that follows from the player's PRIOR CHOICE above.
-Do NOT re-render the storylet context — that's already happened.`
+Beat to render: ${input.outline.beat}
+${input.outline.hingesOn ? `Should hinge on: ${input.outline.hingesOn}` : ''}`
+    : // Sub 1-3: ZERO storylet anchors. No beat. No skeleton. No
+      // hingesOn. The model gets archetype + kind + prior choice +
+      // player context only. This is the architectural fix the user
+      // has been demanding: skeleton-only, generate-on-the-fly. The
+      // prior choice is the SOLE driver of what happens in this scene.
+      `Render this scene from scratch. The ONLY hard inputs are:
+  - Archetype voice: ${arche.name} (${arche.title})
+  - The PRIOR CHOICE above (the player's literal action)
+  - Player context (startup, persona, team, funding) above
+
+Do NOT refer to a prior storylet beat or canonical setup. There is no
+canonical setup for this scene — invent it as the natural consequence
+of the player's prior choice. Generate beat, dialogue, choices, and
+imagePrompt fresh.`
 }
 
 Output the JSON object for this scene now.`
