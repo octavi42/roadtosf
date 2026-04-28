@@ -9,6 +9,10 @@ export const sceneOutlineSchema = z.object({
   // Sonnet 4.6 emits explicit `null` instead of omitting optional fields, so
   // accept null here. Downstream readers already short-circuit on falsy.
   hingesOn: z.string().max(280).nullable().optional(),
+  // Storylet kind: encounter (default) | solo | world-event. Solo and
+  // world-event scenes render with narrator + player only — no NPC of
+  // the assigned archetype speaks.
+  kind: z.enum(['encounter', 'solo', 'world-event']).optional(),
 })
 
 export const arcSkeletonSchema = z.object({

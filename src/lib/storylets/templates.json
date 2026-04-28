@@ -167,5 +167,85 @@
     "beat": "A mentor you trust takes you to the back of Tartine and tells you, calmly, that you're becoming someone they wouldn't introduce to their friends. They mean it kindly. It still hits.",
     "effects": { "mentorEncounter": true, "wasCalledOut": true },
     "tags": ["mentor", "late", "gut-punch", "integrity"]
+  },
+  {
+    "id": "solo_dolores_park_3am",
+    "archetype": "mentor",
+    "kind": "solo",
+    "tier": "mid",
+    "requires": { "hypeLte": 0 },
+    "beat": "3am. Dolores Park is empty except for raccoons and the city humming below. You're on the cracked bench by the J-line tracks, laptop open to a deck you haven't touched in two hours, asking yourself the question you've been postponing.",
+    "effects": { "hadSoloMoment": true },
+    "tags": ["solo", "reflection", "mentor", "late-night"]
+  },
+  {
+    "id": "solo_caltrain_breakdown",
+    "archetype": "hater",
+    "kind": "solo",
+    "tier": "mid",
+    "requires": { "integrityLte": -1 },
+    "beat": "Caltrain to Mountain View, 4:35pm, half-empty car. The hills past Burlingame roll by. Your phone hasn't pinged in 47 minutes and you realize you can't remember the last time it was that quiet.",
+    "effects": { "hadSoloMoment": true },
+    "tags": ["solo", "reflection", "hater", "transit"]
+  },
+  {
+    "id": "solo_sunday_twitter_spiral",
+    "archetype": "hater",
+    "kind": "solo",
+    "tier": "early",
+    "requires": {},
+    "beat": "Sunday, 11am. You meant to write code. Instead you've refreshed Twitter for forty minutes — there's a thread about your space and you're 30 quote-tweets deep on someone you don't know.",
+    "effects": { "hadSoloMoment": true, "sundaySpiraled": true },
+    "tags": ["solo", "twitter", "hater", "distraction"]
+  },
+  {
+    "id": "solo_4am_production_bug",
+    "archetype": "cofounder",
+    "kind": "solo",
+    "tier": "mid",
+    "requires": { "hypeGte": 1 },
+    "beat": "4:13am. Sentry alert. The scaling bug from beta is back, hitting paying customers now. The office is empty. Your coffee went cold three hours ago. Your laptop is the only light on the floor.",
+    "effects": { "hadSoloMoment": true, "productionFire": true },
+    "tags": ["solo", "bug", "cofounder", "late-night"]
+  },
+  {
+    "id": "world_competitor_launches",
+    "archetype": "hater",
+    "kind": "world-event",
+    "tier": "mid",
+    "requires": { "hypeGte": 1 },
+    "beat": "Tuesday morning. Product Hunt #1 is a startup that does what you do — but with an AI agent layer you weren't planning. Their landing page reads like someone with $4M in the bank wrote it.",
+    "effects": { "worldChanged": true, "competitorLaunched": true },
+    "tags": ["world-event", "hater", "launch", "competitor"]
+  },
+  {
+    "id": "world_x_account_locked",
+    "archetype": "reporter",
+    "kind": "world-event",
+    "tier": "mid",
+    "requires": { "hypeGte": 2 },
+    "beat": "X locks your account at 2:14pm. The notice is one paragraph and three appeal links. Yesterday's 12k-impression mentions tab is a 404. The DMs you needed for tomorrow's call are gone.",
+    "effects": { "worldChanged": true, "xAccountLocked": true },
+    "tags": ["world-event", "reporter", "platform", "incident"]
+  },
+  {
+    "id": "world_viral_tweet_aftermath",
+    "archetype": "reporter",
+    "kind": "world-event",
+    "tier": "mid",
+    "requires": { "hypeGte": 3 },
+    "beat": "You wake to 14,318 unread notifications. The one-line tweet from 11pm — the one ending in 'unhinged take' — is at 2.3M impressions. Three reporters and two recruiters have DMed 'are you free?'",
+    "effects": { "worldChanged": true, "wentViral": true },
+    "tags": ["world-event", "reporter", "viral", "hype"]
+  },
+  {
+    "id": "world_yc_deadline_panic",
+    "archetype": "mentor",
+    "kind": "world-event",
+    "tier": "early",
+    "requires": {},
+    "beat": "9:14pm Friday. The W26 application closes at 11:59. You haven't submitted. You opened the form last week and saved a draft that says 'we're building…' and trailed off.",
+    "effects": { "worldChanged": true, "ycDeadlineFaced": true },
+    "tags": ["world-event", "mentor", "yc", "deadline"]
   }
 ]

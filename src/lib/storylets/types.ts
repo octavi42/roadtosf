@@ -6,6 +6,18 @@ import type { Archetype } from '../types'
 
 export type StoryletTier = 'early' | 'mid' | 'late'
 
+// What KIND of moment this storylet is. Defaults to "encounter" — a
+// scene where the assigned archetype walks in and speaks. Other kinds
+// break that pattern, which the research (Failbetter, Reigns, Hades,
+// Hidden Door review) identifies as the dominant "every run feels the
+// same" failure mode for narrative-LLM games:
+//   - "solo" — no NPC. Player + narrator only. A 4am bug fix, a
+//     Dolores Park walk, a Caltrain reflection.
+//   - "world-event" — something happens in the world the player reacts
+//     to. A competitor launch, an X account ban, a viral tweet. May or
+//     may not have an NPC speaker.
+export type StoryletKind = 'encounter' | 'solo' | 'world-event'
+
 export type TeamCondition = 'solo' | 'named'
 export type FundingCondition = 'raising' | 'bootstrapping' | 'unstated'
 
@@ -36,8 +48,14 @@ export interface StoryletRequires {
 
 export interface Storylet {
   id: string
+  /** Archetype anchor — for encounter storylets, this is the speaking
+   *  NPC. For solo/world-event storylets, the archetype is a thematic
+   *  category only (used for salience scoring + image flavor); no
+   *  NPC of that archetype actually speaks in the rendered scene. */
   archetype: Archetype
   tier: StoryletTier
+  /** What kind of moment. Defaults to "encounter" when omitted. */
+  kind?: StoryletKind
   /** Predicate over run state. Empty `{}` = always eligible. */
   requires: StoryletRequires
   /** One-line plot template (≤220 chars). The LLM may incorporate the

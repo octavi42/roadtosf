@@ -173,12 +173,26 @@ Current concern: ${input.concern || '(unstated)'}`
   // imagePrompt for sub 1–3 must describe the SAME setting as sub 0 —
   // the renderer reuses sub 0's image regardless, but consistency in the
   // narrated setting matters for the dialogue.
-  // The 4 sub-scenes of a group are generated in parallel (one batch per
-  // group). That means sub-scenes 1-3 do NOT have direct knowledge of which
-  // choice the player made in the prior sub. Write the conversation as a
-  // pre-scripted 4-beat scene that escalates regardless of branch. Any prior
-  // choice that happens to be in recentChoices can be used lightly, but
-  // never gate the dialogue on it — every line must land for any branch.
+  // Sub 1-3 are generated SEQUENTIALLY: each call is dispatched only after
+  // the player has made their choice in the prior sub. recentChoices
+  // therefore ALWAYS contains the immediately-prior pick, and the dialogue
+  // must honor it as a literal in-fiction action — not gloss past it.
+  // Storylet kind drives the rendering mode. Solo/world-event scenes
+  // render with narrator + player only — no NPC of this archetype
+  // speaks. The arc-skeleton schema carries kind through; encounter is
+  // the default when missing (preserves old skeleton behavior).
+  const kind = input.outline.kind ?? 'encounter'
+  const kindBlock =
+    kind === 'solo'
+      ? `## SCENE KIND: SOLO (no NPC speaks)
+This scene has NO NPC of any archetype as a speaking character. Dialogue uses ONLY "narrator" and "player" speakers. The "${arche.name}" archetype on this outline is a THEMATIC ANCHOR for tone/image — not a character that walks in.
+Render the scene as: narrator describes the moment + place + time, player has 1–2 internal-monologue lines, the choices are about what the player does next (alone). No second character.`
+      : kind === 'world-event'
+        ? `## SCENE KIND: WORLD-EVENT (an event, not an encounter)
+Something changed in the world; the player reacts. Dialogue is mostly "narrator" describing the event and its visible consequence, optionally one "player" line. The "${arche.name}" archetype is a THEMATIC ANCHOR for tone/image — an NPC of that archetype may be REFERENCED in narration ("a Thiel-coded VC's tweet went viral", "a competitor's blog post drops") but DOES NOT appear as a speaking character.
+The choices are about what the player does in response to the event.`
+        : ''
+
   const subSceneBlock =
     input.subSceneIndex === 0
       ? `## SUB-SCENE 0 of 4 (opens the encounter)
@@ -189,13 +203,23 @@ sets up the next exchange. The location you choose will anchor the next
       : `## SUB-SCENE ${input.subSceneIndex} of 4 (continues a 4-beat encounter)
 You are writing beat ${input.subSceneIndex + 1} of 4 in the SAME scene with
 ${arche.name}, at the SAME location established in sub-scene 0. Same
-character, same scene, same imagePrompt setting.
-This sub-scene is generated IN PARALLEL with the others — you do not see
-the player's prior choices in this group. Write a continuation that:
-  - works for ANY branch of the prior sub-scene's choices
-  - keeps the conversation moving forward, never restarting
-  - escalates the encounter narratively (tension / stakes / revelation)
-  - does NOT name a specific prior choice or quote it back
+character, same scene, same imagePrompt setting (unless the prior choice
+explicitly moved the player elsewhere — see below).
+
+The PRIOR CHOICE block above is the player's most recent action. Treat
+its label as a LITERAL in-fiction action and honor it:
+  - If the choice describes a physical action ("take her email and leave
+    the room", "walk out", "hand over the laptop"), the scene OPENS with
+    that action having JUST happened — they are out of the room, holding
+    the email, the laptop is gone — and the next beat plays from there.
+  - If the choice is verbal ("agree", "deflect", "lie", "counter-offer"),
+    the NPC's first line reacts to those exact words.
+  - Never restart the conversation, never repeat the prior beat, never
+    write dialogue that would land identically for a different choice.
+  - If the choice changed the location/state, the dialogue AND the
+    imagePrompt must reflect that — otherwise keep them anchored to the
+    sub-0 setting.
+Continue forward — escalate the encounter (tension / stakes / revelation).
 ${
   input.subSceneIndex === 3
     ? 'This is sub-scene 3 — the final beat. Close the encounter cleanly so the next archetype can enter; leave a hook, do NOT resolve the run.'
@@ -209,7 +233,7 @@ ${formatRecentChoices(input.recentChoices)}
 
 Current stats — hype ${input.currentStats.hype}, integrity ${input.currentStats.integrity}.
 
-${subSceneBlock}
+${kindBlock ? `${kindBlock}\n\n` : ''}${subSceneBlock}
 
 ## THIS SCENE
 Episode ${input.episodeIndex}, group ${input.groupIndex} sub ${input.subSceneIndex} (id=${input.sceneId})
