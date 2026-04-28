@@ -173,6 +173,18 @@ for (const fx of fixtures) {
   console.log(`  Picked: ${ids.join(', ') || '(none)'}`)
   console.log(`  ${DIM}Flags after: ${JSON.stringify(finalState.flags)}${RESET}`)
 
+  // Universal assertion: no two storylets in one episode share the
+  // same archetype (unless the eligible pool genuinely had no fresh
+  // alternative — rare in practice). Tracks the bug from the
+  // play-test data where one episode had 2 cofounder beats.
+  const archetypes = storylets.map((s) => s.archetype)
+  const uniqueArchetypes = new Set(archetypes).size
+  expect(
+    `archetype diversity (${uniqueArchetypes}/5 unique)`,
+    uniqueArchetypes >= 4,
+    `archetypes: ${archetypes.join(', ')}`,
+  )
+
   // Per-fixture expectations
   if (fx.name.startsWith('Solo + bootstrapping')) {
     expect(

@@ -1,5 +1,6 @@
 import templatesData from './templates.json'
 import { evaluateRequires } from './predicate'
+import type { Archetype } from '../types'
 import type {
   FiredStorylet,
   SelectionState,
@@ -120,14 +121,26 @@ export function selectEpisodeStorylets(
   const picked: Storylet[] = []
   let state = initialState
   const pickedIds = new Set<string>()
+  // Archetype-diversity bookkeeping. Without this, the selector
+  // happily fires two cofounder beats in one episode (e.g.
+  // solo_yc_recruit + cofounder_pitch_generic) because both are
+  // eligible and salience ties go to whichever sorts first. Hard
+  // de-duplication: prefer fresh archetypes; only allow a repeat if
+  // the fresh-archetype pool is empty.
+  const usedArchetypes = new Set<Archetype>()
 
   for (let i = 0; i < SCENES_PER_EPISODE; i++) {
-    const eligible = TEMPLATES.filter((s) => {
+    const baseEligible = TEMPLATES.filter((s) => {
       if (pickedIds.has(s.id)) return false
       if (!tierEligibleAtEpisode(s.tier, state.episodeIndex)) return false
       if (isInCooldown(s, state.storyletState.fired, state.episodeIndex)) return false
       return evaluateRequires(s.requires, state)
     })
+    // First pass: storylets whose archetype hasn't fired yet this
+    // episode. Falls back to baseEligible if that pool is empty so
+    // we never break the 5-scene schema.
+    const fresh = baseEligible.filter((s) => !usedArchetypes.has(s.archetype))
+    const eligible = fresh.length > 0 ? fresh : baseEligible
 
     let chosen: Storylet | undefined
     if (eligible.length > 0) {
@@ -158,6 +171,7 @@ export function selectEpisodeStorylets(
     if (!chosen) break
     picked.push(chosen)
     pickedIds.add(chosen.id)
+    usedArchetypes.add(chosen.archetype)
     state = applyEffects(state, chosen.effects)
   }
 
