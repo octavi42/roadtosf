@@ -15,7 +15,7 @@
     "requires": { "cameo": "peter-thiel" },
     "beat": "Peter Thiel slides a contrarian term sheet across the bar at Rosewood Sand Hill: no board seat, conditional on you saying something publicly heretical about your industry.",
     "effects": { "vcEncounter": true, "metContrarianMoney": true },
-    "tags": ["vc", "fundraising", "thiel", "contrarian"],
+    "tags": ["vc", "fundraising", "peter-thiel", "thiel", "contrarian"],
     "cooldownEpisodes": 6
   },
   {
@@ -25,7 +25,7 @@
     "requires": { "cameo": "marc-andreessen", "flavorTag": "ai" },
     "beat": "Marc Andreessen pulls you aside at an a16z dinner and quotes his own essay at you, then sketches a $20M Series A on a napkin if you reframe the company as 'AI-native' on the spot.",
     "effects": { "vcEncounter": true, "metHypeMoney": true },
-    "tags": ["vc", "fundraising", "marc", "hype", "ai"],
+    "tags": ["vc", "fundraising", "marc-andreessen", "marc", "hype", "ai"],
     "cooldownEpisodes": 6
   },
   {
@@ -77,11 +77,12 @@
   {
     "id": "solo_yc_recruit",
     "archetype": "cofounder",
+    "kind": "solo",
     "tier": "early",
     "requires": { "team": "solo" },
-    "beat": "An old YC batchmate emails: their startup folded, they have eight months of runway left as severance, and they want to 'help out' for equity. They're 60% ready, 40% drowning.",
-    "effects": { "cofounderEncounter": true },
-    "tags": ["cofounder", "solo", "yc"]
+    "beat": "7am, your kitchen, half a mug of cold brew. The email from an old YC batchmate has been open on your laptop for an hour — they want to be your cofounder. You re-read it three times looking for the catch. The room is very quiet.",
+    "effects": { "cofounderEncounter": true, "hadSoloMoment": true },
+    "tags": ["solo", "cofounder", "yc", "morning"]
   },
   {
     "id": "reporter_generic_curiosity",
@@ -127,7 +128,7 @@
     "requires": { "cameo": "sahil-lavingia", "funding": "bootstrapping" },
     "beat": "Sahil Lavingia sub-tweets you specifically: 'another bootstrapper who'll fold by Q4.' His thread already has 800 likes. Your DMs are a graveyard of 'you good?' messages.",
     "effects": { "twitterDunked": true },
-    "tags": ["hater", "twitter", "sahil", "bootstrapping"],
+    "tags": ["hater", "twitter", "sahil-lavingia", "sahil", "bootstrapping"],
     "cooldownEpisodes": 6
   },
   {
@@ -146,7 +147,7 @@
     "requires": { "cameo": "paul-graham" },
     "beat": "Paul Graham emails you a four-line response. It's a link to one of his old essays and the words 'this one.' The essay is twelve years old and exactly about what you're doing wrong.",
     "effects": { "mentorEncounter": true, "wasEssayed": true },
-    "tags": ["mentor", "pg", "essays", "yc"],
+    "tags": ["mentor", "paul-graham", "pg", "essays", "yc"],
     "cooldownEpisodes": 6
   },
   {
@@ -156,7 +157,7 @@
     "requires": { "cameo": "sam-altman", "hypeGte": 3 },
     "beat": "Sam Altman replies to your DM in 90 seconds. 'Interesting. Send me a deck.' That's it. Three words, three hours, and your inbox lights up with seventeen new investor cold-emails.",
     "effects": { "mentorEncounter": true, "altmanNoticed": true },
-    "tags": ["mentor", "altman", "blessing", "ai"],
+    "tags": ["mentor", "sam-altman", "altman", "blessing", "ai"],
     "cooldownEpisodes": 8
   },
   {
