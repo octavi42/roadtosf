@@ -252,9 +252,27 @@ export function sanitizeScene(s: ParsedScene): ParsedScene {
   // Strip empty-text dialogue lines (LLM sometimes uses them for "silent
   // beats"; the renderer can't display them as voiced lines).
   const dialogue = s.dialogue.filter((d) => d.text.trim().length > 0)
+  // CAST LOCK enforcement: the only valid speakers in a scene's
+  // dialogue are 'player', 'narrator', and the scene's assigned
+  // archetype. Haiku has been emitting cross-archetype speakers
+  // (a 'cofounder' scene with 'vc' speaker lines, etc.), which
+  // creates the "different person each sub-scene" feel the user
+  // has been complaining about. Clamp any disallowed speaker to
+  // 'narrator' — the line still plays, but as narration rather
+  // than as a different character speaking. This is server-side
+  // enforcement after the LLM has already drifted; ideally the
+  // prompt + assistant prefix prevent it upstream.
+  const allowedSpeakers: ReadonlySet<string> = new Set([
+    'player',
+    'narrator',
+    s.archetype,
+  ])
+  const clamped = dialogue.map((d) =>
+    allowedSpeakers.has(d.speaker) ? d : { ...d, speaker: 'narrator' as const },
+  )
   return {
     ...s,
-    dialogue: dialogue.length > 0 ? dialogue : s.dialogue, // never strip everything
+    dialogue: clamped.length > 0 ? clamped : s.dialogue, // never strip everything
     choices: s.choices.map((c) => ({
       ...c,
       hype: clampDelta(c.hype),
