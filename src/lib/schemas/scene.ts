@@ -35,11 +35,11 @@ const choiceSchema = z.object({
 })
 
 // Total dialogue char budget per scene. BUSINESS.md target was 350 (TTS lever
-// #1) but Sonnet/Haiku naturally write 400-500 char scenes for comic pacing.
-// Setting at 600 — ~70% over the BUSINESS.md target — to keep generation
-// reliable. Phase 2 (credit-aware UI) is the right place to push this back
-// down by making the cost surface to the player.
-export const MAX_DIALOGUE_CHARS_PER_SCENE = 600
+// #1) but Sonnet/Haiku naturally write 600-700 char scenes for comic pacing.
+// At 800 — ~2.3× the BUSINESS.md target — truncation is rare in practice.
+// Phase 2 (credit-aware UI) is the right place to push this back down by
+// making the cost surface to the player.
+export const MAX_DIALOGUE_CHARS_PER_SCENE = 800
 
 const shareMomentSchema = z.object({
   title: z.string().min(1).max(60),
@@ -88,6 +88,27 @@ function dialogueCharTotal(lines: Array<Record<string, unknown>>): number {
   }, 0)
 }
 
+/**
+ * Snap a string to ≤maxLen at the nearest preceding sentence-end, falling
+ * back to a word boundary, then to a hard slice. Why: a raw char-slice
+ * produces mid-word artefacts ("…actually knows t") that surface in voiced
+ * dialogue and on the share card.
+ */
+function snapTrim(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text
+  if (maxLen <= 0) return text.slice(0, 1)
+  const slice = text.slice(0, maxLen)
+  const sentenceBoundary = Math.max(
+    slice.lastIndexOf('. '),
+    slice.lastIndexOf('! '),
+    slice.lastIndexOf('? '),
+  )
+  if (sentenceBoundary > 0) return slice.slice(0, sentenceBoundary + 1)
+  const wordBoundary = slice.lastIndexOf(' ')
+  if (wordBoundary > 0) return slice.slice(0, wordBoundary).trimEnd()
+  return slice
+}
+
 /** Shrink dialogue so total chars ≤ budget without dropping lines (trim from the end of lines). */
 function fitDialogueToBudget(
   dialogue: Array<Record<string, unknown>>,
@@ -96,19 +117,24 @@ function fitDialogueToBudget(
 ): Array<Record<string, unknown>> {
   const lines = dialogue.map((d) => {
     const text = typeof d.text === 'string' ? d.text : ''
-    return { ...d, text: text.slice(0, lineCap) }
+    return { ...d, text: snapTrim(text, lineCap) }
   })
   let total = dialogueCharTotal(lines)
   let i = lines.length - 1
   while (total > budget && i >= 0) {
-    const over = total - budget
     const t = typeof lines[i].text === 'string' ? lines[i].text : ''
     if (t.length <= 1) {
       i--
       continue
     }
-    const cut = Math.min(over, t.length - 1)
-    lines[i] = { ...lines[i], text: t.slice(0, t.length - cut) }
+    const targetLen = Math.max(1, t.length - (total - budget))
+    const trimmed = snapTrim(t, targetLen)
+    const cut = t.length - trimmed.length
+    if (cut <= 0) {
+      i--
+      continue
+    }
+    lines[i] = { ...lines[i], text: trimmed }
     total -= cut
   }
   return lines
