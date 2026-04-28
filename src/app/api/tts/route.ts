@@ -26,12 +26,18 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let upstream;
   try {
-    upstream = await elevenLabsClient().textToSpeech.streamWithTimestamps(parsed.voiceId, {
-      text: parsed.text,
-      modelId: MODEL_ID,
-      outputFormat: OUTPUT_FORMAT,
+    const result = await elevenLabsClient().textToSpeech.convertWithTimestamps(
+      parsed.voiceId,
+      {
+        text: parsed.text,
+        modelId: MODEL_ID,
+        outputFormat: OUTPUT_FORMAT,
+      },
+    );
+    return Response.json({
+      audioBase64: result.audioBase64,
+      alignment: result.alignment ?? null,
     });
   } catch (err) {
     const status = (err as { statusCode?: number })?.statusCode ?? 500;
@@ -40,35 +46,4 @@ export async function POST(req: NextRequest) {
       { status: status >= 400 && status < 600 ? status : 502 },
     );
   }
-
-  const encoder = new TextEncoder();
-  const body = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      try {
-        for await (const chunk of upstream) {
-          controller.enqueue(encoder.encode(JSON.stringify(chunk) + "\n"));
-        }
-        controller.close();
-      } catch (err) {
-        controller.enqueue(
-          encoder.encode(
-            JSON.stringify({
-              error: "tts_stream_aborted",
-              detail: err instanceof Error ? err.message : String(err),
-            }) + "\n",
-          ),
-        );
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(body, {
-    status: 200,
-    headers: {
-      "Content-Type": "application/x-ndjson",
-      "Cache-Control": "no-store",
-      "X-Accel-Buffering": "no",
-    },
-  });
 }
