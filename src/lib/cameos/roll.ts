@@ -74,7 +74,12 @@ function weightedPick(
     const total = remaining.reduce((a, b) => a + b.score, 0)
     if (total <= 0) break
     let r = rng() * total
-    let idx = 0
+    // Initialize idx to the LAST item, not the first. Floating-point
+    // round-off can leave r > 0 after iterating all items; the natural
+    // cumulative-weight semantics is that the last bucket catches the
+    // remainder. With idx=0, a round-off would silently bias toward the
+    // first item (alphabetically first cameo by id).
+    let idx = remaining.length - 1
     for (let i = 0; i < remaining.length; i++) {
       r -= remaining[i]!.score
       if (r <= 0) {
