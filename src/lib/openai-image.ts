@@ -41,7 +41,6 @@ export interface GenerateHeroImageOptions {
 export interface ImageResult {
   b64Json: string;
   format: ImageFormat;
-  dataUrl: string;
 }
 
 async function loadRef(p: string, name: string, type: string) {
@@ -103,11 +102,7 @@ export async function generateSceneImage(
 
   const b64Json = response.data?.[0]?.b64_json;
   if (!b64Json) throw new Error("No image data returned from OpenAI images API");
-  return {
-    b64Json,
-    format,
-    dataUrl: `data:image/${format};base64,${b64Json}`,
-  };
+  return { b64Json, format };
 }
 
 /**
@@ -152,9 +147,5 @@ export async function generateHeroImage(
 
   const b64Json = response.data?.[0]?.b64_json;
   if (!b64Json) throw new Error("No image data returned from OpenAI images API");
-  return {
-    b64Json,
-    format,
-    dataUrl: `data:image/${format};base64,${b64Json}`,
-  };
+  return { b64Json, format };
 }

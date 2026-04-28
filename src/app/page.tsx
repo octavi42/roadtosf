@@ -1059,11 +1059,11 @@ export default function HomePage() {
         }),
       })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-        .then((data: { dataUrl?: string }) => {
+        .then((data: { url?: string }) => {
           const dt = ((performance.now() - t0) / 1000).toFixed(1);
-          if (data.dataUrl) {
+          if (data.url) {
             console.log(`[image-gen] done group=${groupIdx} in ${dt}s`);
-            sceneImageReady(idx, data.dataUrl);
+            sceneImageReady(idx, data.url);
           } else {
             console.warn(`[image-gen] empty response group=${groupIdx} after ${dt}s`);
           }

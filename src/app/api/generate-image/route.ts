@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { put } from '@vercel/blob'
 import {
   generateSceneImage,
   generateScenesParallel,
   generateHeroImage,
+  type ImageFormat,
 } from '@/lib/openai-image'
 import { Archetype } from '@/lib/types'
 
@@ -30,6 +32,27 @@ interface HeroRequestBody {
 
 type RequestBody = SceneRequestBody | ScenesBatchRequestBody | HeroRequestBody
 
+const CONTENT_TYPE: Record<ImageFormat, string> = {
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+}
+
+// Upload the b64-encoded image to Vercel Blob and return its public URL.
+// Why: persisting data URLs in sessionStorage blew the 5MB quota and forced
+// regeneration on every refresh. With a stable URL we can skip the strip
+// entirely and rehydrate keeps the original asset.
+async function uploadToBlob(b64: string, format: ImageFormat): Promise<string> {
+  const bytes = Buffer.from(b64, 'base64')
+  const filename = `scenes/${crypto.randomUUID()}.${format}`
+  const blob = await put(filename, bytes, {
+    access: 'public',
+    contentType: CONTENT_TYPE[format],
+    addRandomSuffix: false,
+  })
+  return blob.url
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body: RequestBody = await req.json()
@@ -46,7 +69,8 @@ export async function POST(req: NextRequest) {
         archetype: body.archetype,
         quality: body.quality ?? 'medium',
       })
-      return NextResponse.json({ dataUrl: result.dataUrl, format: result.format })
+      const url = await uploadToBlob(result.b64Json, result.format)
+      return NextResponse.json({ url, format: result.format })
     }
 
     if (body.mode === 'scenes') {
@@ -63,10 +87,21 @@ export async function POST(req: NextRequest) {
           quality: s.quality ?? 'medium',
         })),
       )
-      const results = settled.map((r) =>
-        r.status === 'fulfilled'
-          ? { ok: true as const, dataUrl: r.value.dataUrl, format: r.value.format }
-          : { ok: false as const, error: String(r.reason?.message ?? r.reason) },
+      const results = await Promise.all(
+        settled.map(async (r) => {
+          if (r.status !== 'fulfilled') {
+            return { ok: false as const, error: String(r.reason?.message ?? r.reason) }
+          }
+          try {
+            const url = await uploadToBlob(r.value.b64Json, r.value.format)
+            return { ok: true as const, url, format: r.value.format }
+          } catch (err) {
+            return {
+              ok: false as const,
+              error: err instanceof Error ? err.message : String(err),
+            }
+          }
+        }),
       )
       return NextResponse.json({ results })
     }
@@ -82,7 +117,8 @@ export async function POST(req: NextRequest) {
         prompt: body.prompt,
         quality: body.quality ?? 'high',
       })
-      return NextResponse.json({ dataUrl: result.dataUrl, format: result.format })
+      const url = await uploadToBlob(result.b64Json, result.format)
+      return NextResponse.json({ url, format: result.format })
     }
 
     return NextResponse.json(

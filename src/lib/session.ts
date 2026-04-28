@@ -630,18 +630,10 @@ export const useSessionStore = create<SessionState>()(
       partialize: (state) => ({
         phase: state.phase,
         intro: state.intro,
-        // Strip base64 imageUrls — they're hundreds of KB each and would blow
-        // past sessionStorage's ~5MB quota after a dozen or so scenes in
-        // endless mode. They regenerate on rehydrate via the image-gen
-        // watcher in page.tsx; until then the placeholder background renders.
-        arc: state.arc
-          ? {
-              ...state.arc,
-              scenes: state.arc.scenes.map(
-                ({ imageUrl: _imageUrl, ...rest }) => rest,
-              ),
-            }
-          : undefined,
+        // imageUrls are now short Vercel Blob URLs (a few hundred bytes), so
+        // they fit in sessionStorage and survive rehydrate without re-firing
+        // image-gen.
+        arc: state.arc,
         progress: state.progress,
         history: state.history,
         stats: state.stats,

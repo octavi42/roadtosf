@@ -8,7 +8,7 @@ type Mode = "scene" | "hero";
 type Quality = "low" | "medium" | "high";
 
 interface TestResult {
-  dataUrl: string;
+  url: string;
   format: string;
   elapsed: number;
 }
@@ -49,7 +49,7 @@ export default function TestImagePage() {
       if (!res.ok) throw new Error(data.error ?? "Unknown error");
 
       setResult({
-        dataUrl: data.dataUrl,
+        url: data.url,
         format: data.format,
         elapsed: Date.now() - start,
       });
@@ -203,12 +203,12 @@ export default function TestImagePage() {
             </span>
           </div>
           <img
-            src={result.dataUrl}
+            src={result.url}
             alt="Generated scene"
             className="rounded-lg border border-zinc-800 max-w-xl w-full"
           />
           <a
-            href={result.dataUrl}
+            href={result.url}
             download={`test-${mode}.${result.format}`}
             onClick={(e) => {
               const a = e.currentTarget;
