@@ -50,6 +50,21 @@ export default function AudioBed({ ambienceSrc, musicSrc }: AudioBedProps) {
   const muted = useAudioBedStore((s) => s.muted);
   const dialoguePlaying = useAudioBedStore((s) => s.dialoguePlaying);
 
+  // eslint-disable-next-line no-console
+  console.log("[AudioBed] render", { ambienceSrc, musicSrc, dialoguePlaying, muted });
+
+  useEffect(() => {
+    const a = ambienceRef.current;
+    // eslint-disable-next-line no-console
+    console.log("[AudioBed] ambience effect", {
+      ambienceSrc,
+      hasRef: !!a,
+      paused: a?.paused,
+      readyState: a?.readyState,
+      currentSrc: a?.currentSrc,
+    });
+  }, [ambienceSrc]);
+
   // Apply ambience volume / mute imperatively on every relevant change.
   useEffect(() => {
     const a = ambienceRef.current;
