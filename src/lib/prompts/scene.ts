@@ -262,34 +262,45 @@ ${kindBlock ? `${kindBlock}\n\n` : ''}${subSceneBlock}
 
 ## THIS SCENE
 Episode ${input.episodeIndex}, group ${input.groupIndex} sub ${input.subSceneIndex} (id=${input.sceneId})
-${
-  input.subSceneIndex === 0
-    ? // Sub 0: render the storylet's anchor beat verbatim. This is the
-      // canonical situation the storylet template encodes. The episode
-      // skeleton goes here too (sub-0 only) for through-line context.
-      `## CURRENT EPISODE SKELETON
-${arcSummary}
 
-Beat to render: ${input.outline.beat}
-${input.outline.hingesOn ? `Should hinge on: ${input.outline.hingesOn}` : ''}`
-    : // Sub 1-3: SKELETON + CHOICE only. The skeleton is the storylet
-      // summary (~140 chars: who you're talking to + what about). No
-      // verbose beat, no episode skeleton. The choice drives the
-      // scene's content. PR #36 stripped EVERYTHING and Haiku invented
-      // a fresh archetype per sub-scene (group 0 came out as cofounder
-      // → VC → hater → cofounder). Restoring the summary as a
-      // skeleton anchor keeps the conversation coherent across the 4
-      // sub-scenes while letting choices drive the actual content.
-      `## SCENE SKELETON (the situation across all 4 sub-scenes of this group)
+## SCENE SKELETON (THE SITUATION — same for all 4 sub-scenes of this group)
 ${input.outline.summary ?? input.outline.beat}
 
-This is the SAME conversation as sub 0, just one beat later. SAME archetype,
-SAME subject. The player's PRIOR CHOICE above drove this beat — render what
-HAPPENS NEXT in that conversation given the choice. Do NOT switch to a
-different scene, archetype, or topic. Do NOT re-render the storylet's verbose
-opening (that was sub 0's job). Generate the dialogue, choices, and
-imagePrompt as the natural consequence of the prior choice within this same
-situation.`
+## CAST LOCK (HARD RULE — no exceptions)
+This entire 4-sub-scene group has exactly THREE allowed dialogue speakers:
+  - "narrator"
+  - "player"
+  - "${input.outline.archetype}" (the archetype's role: ${arche.name})
+
+That's the cast. NO OTHER SPEAKERS. The "${input.outline.archetype}" speaker is
+ONE specific person — the SAME person across all 4 sub-scenes. They do not
+leave and a different "${input.outline.archetype}" arrive; they do not get
+replaced by a different archetype. New characters DO NOT appear mid-group.
+If your dialogue needs a third character, render them via narration only —
+they do not get a "speaker" line.
+
+${
+  input.subSceneIndex === 0
+    ? // Sub 0: generate the OPENING from the skeleton. No verbose
+      // beat — the user has been clear: skeleton + on-the-fly. Sub 0
+      // establishes the cast (the specific person playing the
+      // archetype) and the opening situation; sub 1-3 extend.
+      `## YOUR JOB FOR THIS SUB-SCENE
+This is sub-scene 0 — the OPENER. Establish the situation described in the
+SCENE SKELETON above. Introduce the "${input.outline.archetype}" character
+(give them a coherent voice; if the storylet hints at a real public figure,
+use that name; otherwise leave them unnamed and refer to them as "the
+${arche.name.toLowerCase()}" or similar). End on choices that the player's
+NEXT scene will literally enact.
+
+Generate the dialogue, choices, and imagePrompt fresh from the skeleton. No
+prewritten lines.`
+    : // Sub 1-3: skeleton + choice only.
+      `## YOUR JOB FOR THIS SUB-SCENE
+The PRIOR CHOICE above is the player's literal action. This sub-scene is what
+HAPPENS NEXT in the same conversation, with the same cast. Render the dialogue
+and player response; offer choices that drive the next sub-scene. Do not
+switch settings or characters; do not introduce new people.`
 }
 
 Output the JSON object for this scene now.`

@@ -443,21 +443,23 @@ export async function POST(request: Request) {
         // creative variation. We tried 0.6 and the model still drifted.
         const sceneTemperature = subSceneIndex === 0 ? 0.9 : 0.4
 
-        // Forced assistant prefix for sub 1-3: pre-fills the JSON so
-        // the FIRST dialogue line starts with `"You ` — pushing the
-        // model into past-tense action voice no matter what choice
-        // it's reacting to. The prompt persuasion ("PAST TENSE. The
-        // action has happened") didn't fully land at any temperature;
-        // the prefix is mechanical enforcement. Skipped for sub 0
-        // because that's the storylet setup and shouldn't be forced
-        // into "You [verb]" framing.
+        // Forced assistant prefix: pre-fills JSON to pin the
+        // structural metadata (id + archetype) so Haiku can't drift
+        // the archetype mid-stream. Sub 1-3 additionally pre-fills
+        // the FIRST dialogue line with "You " to force past-tense
+        // action voice. Sub 0 only pins the id + archetype (the
+        // opener still needs to introduce the situation freely).
         const assistantPrefix =
-          subSceneIndex >= 1
+          subSceneIndex === 0
             ? `{
   "id": ${sceneId},
+  "archetype": "${outline.archetype}",
+`
+            : `{
+  "id": ${sceneId},
+  "archetype": "${outline.archetype}",
   "dialogue": [
     {"speaker": "narrator", "text": "You `
-            : undefined
 
         const raw = await streamJsonText({
           model: MODELS.scene,
