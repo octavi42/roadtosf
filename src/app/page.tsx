@@ -8,6 +8,13 @@ import ChoicePanel from "@/components/ChoicePanel";
 import TextInputPanel from "@/components/TextInputPanel";
 import DialogueSubtitle from "@/components/DialogueSubtitle";
 import DialogueSpeaker from "@/components/DialogueSpeaker";
+import AudioBed from "@/components/AudioBed";
+import {
+  ambienceKeyForBackground,
+  ambiencePath,
+  musicKeyForEnding,
+  musicPath,
+} from "@/lib/audio-keys";
 import PaywallPanel from "@/components/PaywallPanel";
 import LoginModal from "@/components/LoginModal";
 import { ShareNotification } from "@/components/ShareNotification";
@@ -107,6 +114,7 @@ interface UnifiedScene {
   // Authored-only — the single-CTA dare → paywall scene relies on this.
   // LLM scenes don't set it.
   ctaLabel?: string;
+  ambienceKey?: SceneData["ambienceKey"];
   isLLM: boolean;
   // LLM-only — emitted when the scene contains a shareable beat. Frequency
   // is capped client-side; see shareMomentFiredInEpisode in session.ts.
@@ -161,6 +169,7 @@ function authoredAsUnified(scene: SceneData): UnifiedScene {
     textInput: scene.textInput,
     questions: scene.questions,
     ctaLabel: scene.ctaLabel,
+    ambienceKey: scene.ambienceKey,
     isLLM: false,
   };
 }
@@ -1861,6 +1870,27 @@ export default function HomePage() {
       >
         {centerContent}
       </GameShell>
+
+      <AudioBed
+        ambienceSrc={ambiencePath(
+          ambienceKeyForBackground(
+            phase === "welcome"
+              ? WELCOME_BACKGROUND
+              : phase === "scene"
+                ? (currentScene?.background ?? HOME_BACKGROUND)
+                : HOME_BACKGROUND,
+            currentScene?.ambienceKey,
+          ),
+        )}
+        musicSrc={
+          phase === "ending" && ending
+            ? (() => {
+                const k = musicKeyForEnding(ending.key);
+                return k ? musicPath(k) : null;
+              })()
+            : null
+        }
+      />
 
       {shareMomentVisible && currentScene?.shareMoment && (
         <ShareNotification

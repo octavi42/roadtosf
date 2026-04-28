@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useDialogueAudio } from "@/hooks/useDialogueAudio";
+import { useAudioBedStore } from "@/components/AudioBed";
 
 export interface DialogueSubtitleProps {
   text: string;
@@ -100,9 +101,21 @@ export default function DialogueSubtitle({
     setVisibleCount((prev) => (idx > prev ? idx : prev));
   };
 
-  const handleAudioPlaying = () => setAudioStarted(true);
+  const setDialoguePlaying = useAudioBedStore((s) => s.setDialoguePlaying);
+
+  // Always release the duck flag when this component unmounts or the line
+  // changes, so the bed never gets stuck at low volume mid-scene.
+  useEffect(() => {
+    return () => setDialoguePlaying(false);
+  }, [text, setDialoguePlaying]);
+
+  const handleAudioPlaying = () => {
+    setAudioStarted(true);
+    setDialoguePlaying(true);
+  };
   const handleAudioEnded = () => {
     setAudioEnded(true);
+    setDialoguePlaying(false);
     setVisibleCount(words.length);
     // Short tail before fade so the last word doesn't disappear instantly.
     setTimeout(() => setAnimPhase("out"), 200);
@@ -110,6 +123,7 @@ export default function DialogueSubtitle({
   const handleAudioError = () => {
     // Stop waiting on audio; let fixed cadence finish the line.
     setAudioEnded(true);
+    setDialoguePlaying(false);
   };
 
   const handleTransitionEnd = () => {
