@@ -9,6 +9,8 @@ import {
 import { arcSkeletonSchema } from '@/lib/schemas/arc'
 import { buildScenePromptParts, type PriorChoiceSummary } from '@/lib/prompts/scene'
 import type { Archetype } from '@/lib/types'
+import { getToneSpec } from '@/lib/cameos/tone'
+import type { ToneId, ToneSpec } from '@/lib/cameos/types'
 import fallbackScenes from '@/lib/fallback/scenes.json'
 import { readAnonId } from '@/lib/anon-id'
 import { readSessionEmail } from '@/lib/auth'
@@ -46,6 +48,21 @@ type Body = {
   // Optional: routed through to the credit_ledger row created on debit so
   // we can answer "which playthrough burned this credit?" later.
   playthroughId?: unknown
+  tone?: unknown
+}
+
+const VALID_TONES: ReadonlySet<ToneId> = new Set([
+  'paranoid-thriller',
+  'hype-pilled-comedy',
+  'slow-burn-tragedy',
+  'delusional-mania',
+  'contrarian-fable',
+])
+
+function asToneSpec(v: unknown): ToneSpec | undefined {
+  if (typeof v !== 'string') return undefined
+  if (!VALID_TONES.has(v as ToneId)) return undefined
+  return getToneSpec(v as ToneId)
 }
 
 function asString(v: unknown, fallback = ''): string {
@@ -217,6 +234,7 @@ export async function POST(request: Request) {
         0,
       ),
     },
+    tone: asToneSpec(body.tone),
   }
 
   const { systemBlocks, userBlocks } = buildScenePromptParts(promptInput)

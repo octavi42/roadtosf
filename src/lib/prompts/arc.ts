@@ -2,6 +2,7 @@ import { ARCHETYPES } from '../archetypes'
 import { filterLore } from '../lore'
 import type { Archetype } from '../types'
 import type { SMItem } from '../silicon-mania/types'
+import type { RolledCameo, ToneSpec } from '../cameos/types'
 
 export const EPISODE_LENGTH = 5
 
@@ -38,6 +39,13 @@ export interface BuildArcPromptInput {
   // Silicon Mania Weekly digest. When non-empty, they are spliced into the
   // prompt as fate so the arc can name real people verbatim.
   siliconManiaItems?: SMItem[]
+  // Curated SF figures rolled per-player from /lib/cameos. Same real-name
+  // override as Silicon Mania but seeded from the player's flavor tags
+  // and persona, so two users almost never roll the same set.
+  rolledCameos?: RolledCameo[]
+  // Per-run tone, one of five categorical flavors. Spliced as a one-liner
+  // into the system block to color voice without changing structure.
+  tone?: ToneSpec
 }
 
 const SYSTEM_RULES = `You are the arc-skeleton engine for "Road to SF", a satirical comic-book founder game running in ENDLESS MODE. The story is delivered as 5-scene episodes; you produce one episode at a time.
@@ -81,6 +89,15 @@ OUTPUT SHAPE:
 Constraints by episode:
 - episodeIndex = 0: "recentChoices" comes from the player's authored onboarding scenes. No priorStorySoFar.
 - episodeIndex >= 1: "recentChoices" is just the last 5 (most recent episode's). Use "priorStorySoFar" for everything older. Your "storySoFar" output must extend the prior summary with the last episode's events.`
+
+function formatRolledCameos(items: RolledCameo[]): string {
+  return items
+    .map(
+      (c) =>
+        `- ${c.displayName} (anchor: ${c.archetype}) — ${c.blurb}`,
+    )
+    .join('\n')
+}
 
 function formatSiliconManiaItems(items: SMItem[]): string {
   // Compact, ~400-token-bounded rendering. Each item: headline, summary,
@@ -154,7 +171,7 @@ function formatLoreBundle(input: BuildArcPromptInput): string {
 export function buildArcPromptParts(input: BuildArcPromptInput) {
   const isOpening = input.episodeIndex === 0
 
-  const userPlayerBlock = `## PLAYER STATE
+  const userPlayerBlock = `${input.tone ? `${input.tone.oneLiner}\n\n` : ''}## PLAYER STATE
 Startup: ${input.startupName}
 Pitch: ${input.startupDescription || '(unstated)'}
 Founder vibe: ${input.founderPersona || '(unstated)'}
@@ -176,6 +193,16 @@ Real SF tech news from this week. You MUST name at least 2 of the people/compani
 <items>
 ${formatSiliconManiaItems(input.siliconManiaItems)}
 </items>
+`
+    : ''
+}${
+  input.rolledCameos && input.rolledCameos.length > 0
+    ? `
+## ROLLED CAMEOS (this player's fate)
+Three SF figures the city has decided to put in this player's path. Each is anchored to ONE archetype below. You MUST place each cameo BY NAME in their anchored archetype's scene "beat" — not in dialogue (that comes later), in the beat itself. Use the real name verbatim; this overrides the "never name real people" rule for these specific people only. The cameo's blurb is a voice/personality cue — do not paste it back; let it shape what they do in the beat.
+<cameos>
+${formatRolledCameos(input.rolledCameos)}
+</cameos>
 `
     : ''
 }

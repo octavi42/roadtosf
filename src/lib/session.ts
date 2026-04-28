@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { ArcSkeleton, EndingKey, Scene, StoryArc } from "./types";
+import type { RolledCameo, ToneId } from "./cameos/types";
 
 // Phase no longer includes "paywall" — the paywall is now an overlay
 // (paywallOpen: boolean) that floats on top of whatever phase the player
@@ -154,6 +155,12 @@ interface SessionState {
   paywallSatisfied: (creditsGranted?: number) => void;
   arcReady: (arc: StoryArc) => void;
   arcSkeletonReady: (skeleton: ArcSkeleton) => void;
+  /**
+   * Sets the per-run "fate" — rolled cameos + tone — once after intro
+   * extraction settles. Idempotent: subsequent calls during the same run
+   * are ignored so re-renders don't change the seed.
+   */
+  setRunFate: (payload: { rolledCameos: RolledCameo[]; tone: ToneId }) => void;
   dynamicSceneReady: (llmIndex: number, scene: Scene) => void;
   sceneImageReady: (llmIndex: number, imageUrl: string) => void;
   setEpilogue: (epilogue: string) => void;
@@ -300,6 +307,42 @@ export const useSessionStore = create<SessionState>()(
         }),
 
       arcReady: (arc) => set({ arc }),
+
+      setRunFate: ({ rolledCameos, tone }) =>
+        set((state) => {
+          // Idempotent: never overwrite once set, so re-renders / strict-mode
+          // double-fires don't reroll the seed mid-run.
+          if (state.arc?.rolledCameos && state.arc?.tone) return state;
+          if (state.arc) {
+            return {
+              arc: {
+                ...state.arc,
+                rolledCameos,
+                tone,
+              },
+            };
+          }
+          // No arc yet (rolling fires after intro extraction, before
+          // arc-skeleton lands). Create a minimal stub; arcSkeletonReady's
+          // merge branch will pick up these fields when the skeleton arrives.
+          return {
+            arc: {
+              startupName: state.intro.startupName ?? "the startup",
+              founderPersona: state.intro.selfDescription ?? "",
+              stage: state.intro.stage,
+              flavorTags: state.intro.flavorTags,
+              scenes: [],
+              stats: {
+                firedCofounder: false,
+                tookVCMoney: false,
+                leakedToPress: false,
+                playedSafeDemoDay: false,
+              },
+              rolledCameos,
+              tone,
+            },
+          };
+        }),
 
       arcSkeletonReady: (skeleton) =>
         set((state) => {

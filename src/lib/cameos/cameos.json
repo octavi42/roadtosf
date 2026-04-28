@@ -1,0 +1,139 @@
+[
+  {
+    "id": "sam-altman",
+    "displayName": "Sam Altman",
+    "archetype": "mentor",
+    "baseRarity": 0.04,
+    "tagWeights": { "ai": 4, "fundraising": 2, "hype": 2 },
+    "personaHints": ["yc", "ambitious", "manic", "ai"],
+    "statHint": { "field": "hype", "direction": "high" },
+    "blurb": "OpenAI CEO; speaks in beige aphorisms; reads everyone's pitch in 90 seconds and either blesses or ghosts."
+  },
+  {
+    "id": "peter-thiel",
+    "displayName": "Peter Thiel",
+    "archetype": "vc",
+    "baseRarity": 0.04,
+    "tagWeights": { "fundraising": 4, "crypto": 2, "ai": 2 },
+    "personaHints": ["contrarian", "philosophical", "heretic"],
+    "statHint": { "field": "integrity", "direction": "low" },
+    "blurb": "Founders Fund; quotes Girard and pays for monopolies; offers money the way other people offer cigarettes."
+  },
+  {
+    "id": "marc-andreessen",
+    "displayName": "Marc Andreessen",
+    "archetype": "vc",
+    "baseRarity": 0.05,
+    "tagWeights": { "fundraising": 3, "ai": 3, "hype": 2 },
+    "personaHints": ["techno-optimist", "loud", "manifesto"],
+    "blurb": "a16z founder; Twitter-poasting maximalist; will quote his own essays at you mid-pitch."
+  },
+  {
+    "id": "elon-musk",
+    "displayName": "Elon Musk",
+    "archetype": "hater",
+    "baseRarity": 0.03,
+    "tagWeights": { "ai": 3, "hype": 3 },
+    "personaHints": ["aggressive", "bombastic", "memes"],
+    "blurb": "shows up only to quote-post and dunk; treats your launch like a mention-spam field; can vaporize or vault you."
+  },
+  {
+    "id": "paul-graham",
+    "displayName": "Paul Graham",
+    "archetype": "mentor",
+    "baseRarity": 0.07,
+    "tagWeights": { "yc": 4, "founder": 2, "product": 2 },
+    "personaHints": ["yc", "essays", "first-time"],
+    "blurb": "PG; speaks in essays you've already read; will tell you to do things that don't scale and then leave."
+  },
+  {
+    "id": "garry-tan",
+    "displayName": "Garry Tan",
+    "archetype": "mentor",
+    "baseRarity": 0.08,
+    "tagWeights": { "yc": 3, "fundraising": 2, "founder": 1 },
+    "personaHints": ["yc", "san francisco", "twitter"],
+    "blurb": "current YC president; posts vibe charts about SF; alternates between hype-coach and city-politics rant."
+  },
+  {
+    "id": "naval-ravikant",
+    "displayName": "Naval Ravikant",
+    "archetype": "mentor",
+    "baseRarity": 0.08,
+    "tagWeights": { "founder": 2, "crypto": 2, "ai": 1 },
+    "personaHints": ["philosophical", "stoic", "spiritual"],
+    "blurb": "AngelList founder; speaks only in tweet-shaped truths; never finishes a thought, but somehow it lands."
+  },
+  {
+    "id": "vinod-khosla",
+    "displayName": "Vinod Khosla",
+    "archetype": "vc",
+    "baseRarity": 0.09,
+    "tagWeights": { "fundraising": 3, "ai": 2, "climate": 2 },
+    "personaHints": ["heretic", "contrarian"],
+    "blurb": "Khosla Ventures; tells founders 90% of them will fail and seems delighted about it."
+  },
+  {
+    "id": "reid-hoffman",
+    "displayName": "Reid Hoffman",
+    "archetype": "vc",
+    "baseRarity": 0.09,
+    "tagWeights": { "fundraising": 2, "community": 2, "founder": 1 },
+    "personaHints": ["network", "linkedin"],
+    "blurb": "Greylock; LinkedIn founder; writes books between board meetings; offers to introduce you to fourteen people."
+  },
+  {
+    "id": "patrick-collison",
+    "displayName": "Patrick Collison",
+    "archetype": "mentor",
+    "baseRarity": 0.12,
+    "tagWeights": { "founder": 3, "product": 2 },
+    "personaHints": ["irish", "books", "high-agency"],
+    "blurb": "Stripe CEO; reads more books than you do; politely terrifying when he asks what your activation rate is."
+  },
+  {
+    "id": "brian-chesky",
+    "displayName": "Brian Chesky",
+    "archetype": "mentor",
+    "baseRarity": 0.13,
+    "tagWeights": { "founder": 2, "product": 3 },
+    "personaHints": ["design", "product", "founder mode"],
+    "blurb": "Airbnb CEO; designs everything himself now; will explain Founder Mode to you whether you asked or not."
+  },
+  {
+    "id": "sahil-lavingia",
+    "displayName": "Sahil Lavingia",
+    "archetype": "hater",
+    "baseRarity": 0.14,
+    "tagWeights": { "founder": 2, "community": 1 },
+    "personaHints": ["bootstrapped", "no-vc", "indie"],
+    "blurb": "Gumroad founder; tweets you should fire half your team; the patron saint of told-you-so."
+  },
+  {
+    "id": "casey-newton",
+    "displayName": "Casey Newton",
+    "archetype": "reporter",
+    "baseRarity": 0.12,
+    "tagWeights": { "press": 4, "ai": 2 },
+    "personaHints": ["polished", "press"],
+    "blurb": "Platformer; will frame your launch in the kindest possible way before quietly burying you in paragraph 12."
+  },
+  {
+    "id": "eric-newcomer",
+    "displayName": "Eric Newcomer",
+    "archetype": "reporter",
+    "baseRarity": 0.14,
+    "tagWeights": { "press": 3, "fundraising": 2 },
+    "personaHints": ["press", "vc"],
+    "blurb": "Newcomer newsletter; has the term sheet before you do; emails 'just confirming' as a cover story."
+  },
+  {
+    "id": "kara-swisher",
+    "displayName": "Kara Swisher",
+    "archetype": "reporter",
+    "baseRarity": 0.10,
+    "tagWeights": { "press": 4, "hype": 1 },
+    "personaHints": ["press", "old-guard"],
+    "blurb": "podcaster; calls you back at 11pm; flips compliments into knives mid-sentence."
+  }
+]

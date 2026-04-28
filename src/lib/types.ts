@@ -1,3 +1,5 @@
+import type { RolledCameo, ToneId } from './cameos/types'
+
 export type Archetype = 'vc' | 'cofounder' | 'reporter' | 'hater' | 'mentor'
 
 export type EndingKey = 'ipo' | 'acquihire' | 'indicted' | 'ai-wrapper' | 'ghosted'
@@ -72,6 +74,11 @@ export interface StoryArc {
     leakedToPress: boolean
     playedSafeDemoDay: boolean
   }
+  // Per-run "fate" — rolled once at run-start, stable across episodes.
+  // Drives both the arc/scene prompts and the rarity reveal on the
+  // ending screen.
+  rolledCameos?: RolledCameo[]
+  tone?: ToneId
 }
 
 export interface GenerateImageResult {

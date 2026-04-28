@@ -11,6 +11,7 @@ import DialogueSpeaker from "@/components/DialogueSpeaker";
 import PaywallPanel from "@/components/PaywallPanel";
 import LoginModal from "@/components/LoginModal";
 import { ShareNotification } from "@/components/ShareNotification";
+import EndingFateCard from "@/components/EndingFateCard";
 import {
   useSessionStore,
   AUTHORED_SCENE_COUNT,
@@ -28,6 +29,8 @@ import type {
   ShareMoment,
 } from "@/lib/types";
 import { streamArc } from "@/lib/streamArc";
+import { rollCameos } from "@/lib/cameos/roll";
+import { rollTone } from "@/lib/cameos/tone";
 import fallbackArcJson from "@/lib/fallback/arc.json";
 import type {
   IntroData,
@@ -365,6 +368,7 @@ export default function HomePage() {
       setSessionEmail: s.setSessionEmail,
     })),
   );
+  const setRunFate = useSessionStore((s) => s.setRunFate);
   // Read sessionEmail directly off the store so any code path that flips
   // it (LoginModal success, /history logout) re-renders this component
   // and re-runs the balance refetch effect without depending on Next.js's
@@ -553,6 +557,8 @@ export default function HomePage() {
         recentChoices,
         currentStats: { hype, integrity },
         seed: playthroughId ?? `local-${Date.now()}`,
+        rolledCameos: arc?.rolledCameos,
+        tone: arc?.tone,
       };
     },
     [arc, intro, history, hype, integrity, playthroughId],
@@ -653,6 +659,33 @@ export default function HomePage() {
     factsExtracted,
   ]);
 
+  // Roll per-run "fate" — cameos + tone — once after intro extraction
+  // settles. Both are seeded by playthroughId, so the same player gets the
+  // same cameos on rehydrate, and two players almost never roll the same
+  // set. Idempotent: setRunFate is a no-op once arc.rolledCameos exists.
+  // Mirrors the arc-gen gate so the dev-skip path (no pitch) also rolls.
+  useEffect(() => {
+    if (arc?.rolledCameos && arc?.tone) return;
+    if (!playthroughId) return;
+    const noPitchSubmitted = !intro.startupDescription?.trim();
+    if (!extractionResolved && !noPitchSubmitted) return;
+    const seed = playthroughId;
+    const flavorTags = intro.flavorTags ?? [];
+    const founderPersona = intro.selfDescription ?? "";
+    const rolledCameos = rollCameos({ seed, flavorTags, founderPersona });
+    const tone = rollTone({ seed, flavorTags, founderPersona });
+    setRunFate({ rolledCameos, tone: tone.id });
+  }, [
+    extractionResolved,
+    arc?.rolledCameos,
+    arc?.tone,
+    playthroughId,
+    intro.flavorTags,
+    intro.selfDescription,
+    intro.startupDescription,
+    setRunFate,
+  ]);
+
   // Episode 0 generation: fire as soon as the player has cleared the QA
   // scene (sceneIndex 3 — see session.ts authored layout). At that point
   // every player-facts field Sonnet needs (team, fundingModel, stage,
@@ -671,6 +704,10 @@ export default function HomePage() {
     if (arcGenFiredRef.current.has(0)) return;
     const noPitchSubmitted = !intro.startupDescription?.trim();
     if (!extractionResolved && !noPitchSubmitted) return;
+    // Wait for the fate roll to commit so the first arc-gen call carries
+    // rolledCameos + tone. The roll effect above runs synchronously the
+    // tick before this one is satisfied — the next render gates through.
+    if (!arc?.rolledCameos || !arc?.tone) return;
     arcGenFiredRef.current.add(0);
 
     const controller = new AbortController();
@@ -699,6 +736,8 @@ export default function HomePage() {
     phase,
     sceneIndex,
     arc?.arcSkeleton,
+    arc?.rolledCameos,
+    arc?.tone,
     extractionResolved,
     intro.startupDescription,
     buildArcRequestBody,
@@ -753,6 +792,7 @@ export default function HomePage() {
         })),
         currentStats: { hype, integrity },
         playthroughId,
+        tone: arc?.tone,
       },
       SCENE_GEN_TIMEOUT_MS,
     )
@@ -864,6 +904,7 @@ export default function HomePage() {
           })),
           currentStats: { hype, integrity },
           playthroughId,
+          tone: arc?.tone,
         },
         SCENE_GEN_TIMEOUT_MS,
       )
@@ -1124,6 +1165,7 @@ export default function HomePage() {
         })),
         currentStats: { hype, integrity },
         playthroughId,
+        tone: arc?.tone,
       },
       SCENE_GEN_TIMEOUT_MS,
     )
@@ -1763,6 +1805,10 @@ export default function HomePage() {
               </span>
               <span>{historyCount} choices made</span>
             </div>
+            <EndingFateCard
+              rolledCameos={arc?.rolledCameos}
+              tone={arc?.tone}
+            />
             <div className="mt-2 flex flex-col gap-2">
               <button
                 onClick={handleShareX}

@@ -6,6 +6,8 @@ import {
 } from '@/lib/schemas/arc'
 import { buildArcPromptParts, type PriorChoiceSummary } from '@/lib/prompts/arc'
 import { selectFlavorPool } from '@/lib/silicon-mania/select'
+import { getToneSpec } from '@/lib/cameos/tone'
+import type { RolledCameo, ToneId, ToneSpec } from '@/lib/cameos/types'
 import fallbackArc from '@/lib/fallback/arc.json'
 
 type Body = {
@@ -25,6 +27,48 @@ type Body = {
   priorChoices?: unknown
   currentStats?: unknown
   seed?: unknown
+  rolledCameos?: unknown
+  tone?: unknown
+}
+
+const VALID_TONES: ReadonlySet<ToneId> = new Set([
+  'paranoid-thriller',
+  'hype-pilled-comedy',
+  'slow-burn-tragedy',
+  'delusional-mania',
+  'contrarian-fable',
+])
+
+function asRolledCameos(v: unknown): RolledCameo[] {
+  if (!Array.isArray(v)) return []
+  return v.flatMap((item): RolledCameo[] => {
+    if (!item || typeof item !== 'object') return []
+    const o = item as Record<string, unknown>
+    if (
+      typeof o.id !== 'string' ||
+      typeof o.displayName !== 'string' ||
+      typeof o.archetype !== 'string' ||
+      typeof o.blurb !== 'string' ||
+      typeof o.rarity !== 'number'
+    ) {
+      return []
+    }
+    return [
+      {
+        id: o.id,
+        displayName: o.displayName,
+        archetype: o.archetype as RolledCameo['archetype'],
+        rarity: o.rarity,
+        blurb: o.blurb,
+      },
+    ]
+  })
+}
+
+function asToneSpec(v: unknown): ToneSpec | undefined {
+  if (typeof v !== 'string') return undefined
+  if (!VALID_TONES.has(v as ToneId)) return undefined
+  return getToneSpec(v as ToneId)
 }
 
 function asString(v: unknown, fallback = ''): string {
@@ -185,6 +229,8 @@ export async function POST(request: Request) {
     seed: asString(body.seed, '') || undefined,
     todayISO: todayISO(),
     siliconManiaItems,
+    rolledCameos: asRolledCameos(body.rolledCameos),
+    tone: asToneSpec(body.tone),
   }
 
   const { systemBlocks, userBlocks } = buildArcPromptParts(promptInput)
