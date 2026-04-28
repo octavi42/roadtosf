@@ -298,6 +298,9 @@ export async function POST(request: Request) {
     rolledCameos: rolledCameoIds.length > 0 ? rolledCameoIds : undefined,
     tone,
     flavorTags,
+    // Seed the salience tiebreak per-playthrough so two players with
+    // identical state pick different storylets when scores tie.
+    seed: asString(body.seed, '') || undefined,
   }
   const { storylets: chosenStorylets, finalState: nextStoryletState } =
     selectEpisodeStorylets(selectionState)

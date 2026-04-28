@@ -66,13 +66,18 @@ function saliencyScore(storylet: Storylet, state: SelectionState): number {
   return score + specificity * 0.5
 }
 
-// Tiebreaker: stable per-state hash so re-selections within the same
-// run state are deterministic. Uses storylet id only — the variance
-// across runs comes from state divergence, not from the tiebreaker.
-function stableHash(s: string): number {
+// Tiebreaker hash. Stable per (storylet id, seed) so two players with
+// identical run-state pick DIFFERENT storylets when scores tie — that
+// was a real bug observed in the 2026-04-28 play data: same startup +
+// pitch + persona produced the same 5-storylet sequence across two
+// playthroughs. Mixing the playthrough seed in here breaks that
+// determinism per-player while keeping it stable for the SAME player
+// across re-selections (e.g. /history replay).
+function stableHash(s: string, seed?: string): number {
   let h = 2166136261 >>> 0
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i)
+  const input = seed ? `${s}|${seed}` : s
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i)
     h = Math.imul(h, 16777619) >>> 0
   }
   return h >>> 0
@@ -98,6 +103,56 @@ export interface SelectionResult {
    *  passes this back so the client can persist updated flags + fired
    *  list as part of the new arc skeleton. */
   finalState: StoryletState
+}
+
+// Inner-loop pick. Used by both selectEpisodeStorylets (called 5 times
+// at episode start) and selectNextStorylet (called once at each group
+// boundary mid-episode for choice-responsive re-selection). Pure
+// function over (state, pickedIds, usedArchetypes) — no side effects.
+function pickOneStorylet(
+  state: SelectionState,
+  pickedIds: ReadonlySet<string>,
+  usedArchetypes: ReadonlySet<Archetype>,
+): { chosen: Storylet | undefined; nextState: SelectionState } {
+  const baseEligible = TEMPLATES.filter((s) => {
+    if (pickedIds.has(s.id)) return false
+    if (!tierEligibleAtEpisode(s.tier, state.episodeIndex)) return false
+    if (isInCooldown(s, state.storyletState.fired, state.episodeIndex)) return false
+    return evaluateRequires(s.requires, state)
+  })
+  // First pass: storylets whose archetype hasn't fired yet this
+  // episode. Falls back to baseEligible if that pool is empty so
+  // we never break the 5-scene schema.
+  const fresh = baseEligible.filter((s) => !usedArchetypes.has(s.archetype))
+  const eligible = fresh.length > 0 ? fresh : baseEligible
+
+  let chosen: Storylet | undefined
+  if (eligible.length > 0) {
+    // Sort by salience desc, then by seed-aware stable hash for
+    // deterministic ties that VARY across players.
+    const scored = eligible
+      .map((s) => ({ s, score: saliencyScore(s, state) }))
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score
+        return stableHash(a.s.id, state.seed) - stableHash(b.s.id, state.seed)
+      })
+    chosen = scored[0]!.s
+  } else {
+    // Fallback: pick the least-recently-fired generic template (any
+    // tier, ignoring cooldown) so we always emit 5 scenes. This is a
+    // schema-preservation safety net and should be rare in practice
+    // — the templates pack always includes at least 5 generics with
+    // empty `requires`.
+    // Sort by stableHash before picking [0] so the fallback choice is
+    // deterministic across template-file edits.
+    const genericFallbacks = TEMPLATES.filter(
+      (s) => Object.keys(s.requires).length === 0 && !pickedIds.has(s.id),
+    ).sort((a, b) => stableHash(a.id, state.seed) - stableHash(b.id, state.seed))
+    chosen = genericFallbacks[0]
+  }
+
+  const nextState = chosen ? applyEffects(state, chosen.effects) : state
+  return { chosen, nextState }
 }
 
 /**
@@ -130,49 +185,12 @@ export function selectEpisodeStorylets(
   const usedArchetypes = new Set<Archetype>()
 
   for (let i = 0; i < SCENES_PER_EPISODE; i++) {
-    const baseEligible = TEMPLATES.filter((s) => {
-      if (pickedIds.has(s.id)) return false
-      if (!tierEligibleAtEpisode(s.tier, state.episodeIndex)) return false
-      if (isInCooldown(s, state.storyletState.fired, state.episodeIndex)) return false
-      return evaluateRequires(s.requires, state)
-    })
-    // First pass: storylets whose archetype hasn't fired yet this
-    // episode. Falls back to baseEligible if that pool is empty so
-    // we never break the 5-scene schema.
-    const fresh = baseEligible.filter((s) => !usedArchetypes.has(s.archetype))
-    const eligible = fresh.length > 0 ? fresh : baseEligible
-
-    let chosen: Storylet | undefined
-    if (eligible.length > 0) {
-      // Sort by salience desc, then by stable hash for deterministic ties.
-      const scored = eligible
-        .map((s) => ({ s, score: saliencyScore(s, state) }))
-        .sort((a, b) => {
-          if (b.score !== a.score) return b.score - a.score
-          return stableHash(a.s.id) - stableHash(b.s.id)
-        })
-      chosen = scored[0]!.s
-    } else {
-      // Fallback: pick the least-recently-fired generic template (any
-      // tier, ignoring cooldown) so we always emit 5 scenes. This is a
-      // schema-preservation safety net and should be rare in practice
-      // — the templates pack always includes at least 5 generics with
-      // empty `requires`.
-      // Sort by stableHash before picking [0] so the fallback choice is
-      // deterministic across template-file edits. Without this, adding a
-      // new template at the top of templates.json would change which
-      // generic the fallback picks, silently breaking /history replays.
-      const genericFallbacks = TEMPLATES.filter(
-        (s) => Object.keys(s.requires).length === 0 && !pickedIds.has(s.id),
-      ).sort((a, b) => stableHash(a.id) - stableHash(b.id))
-      chosen = genericFallbacks[0]
-    }
-
+    const { chosen, nextState } = pickOneStorylet(state, pickedIds, usedArchetypes)
     if (!chosen) break
     picked.push(chosen)
     pickedIds.add(chosen.id)
     usedArchetypes.add(chosen.archetype)
-    state = applyEffects(state, chosen.effects)
+    state = nextState
   }
 
   const newFired: FiredStorylet[] = [
@@ -188,6 +206,51 @@ export function selectEpisodeStorylets(
     finalState: {
       fired: newFired,
       flags: state.storyletState.flags,
+    },
+  }
+}
+
+export interface NextStoryletInput {
+  /** Already-picked-this-episode (id + archetype) so we don't repeat ids
+   *  or break archetype-diversity. */
+  alreadyPicked: { id: string; archetype: Archetype }[]
+}
+
+export interface NextStoryletResult {
+  storylet: Storylet | null
+  /** Updated storylet state after applying the chosen storylet's
+   *  effects + appending it to the fired list. The client persists
+   *  this on the arc and passes it back into the next call. */
+  finalState: StoryletState
+}
+
+/**
+ * Single-storylet variant of selectEpisodeStorylets. Used by
+ * /api/storylet/next to re-pick the upcoming storylet at every group
+ * boundary, given the player's choices so far. Choice-responsive
+ * selection — the whole point is that scene N+1's beat depends on
+ * what happened in scene N.
+ */
+export function selectNextStorylet(
+  state: SelectionState,
+  input: NextStoryletInput,
+): NextStoryletResult {
+  const pickedIds = new Set(input.alreadyPicked.map((p) => p.id))
+  const usedArchetypes = new Set<Archetype>(
+    input.alreadyPicked.map((p) => p.archetype),
+  )
+  const { chosen, nextState } = pickOneStorylet(state, pickedIds, usedArchetypes)
+  if (!chosen) {
+    return { storylet: null, finalState: state.storyletState }
+  }
+  return {
+    storylet: chosen,
+    finalState: {
+      fired: [
+        ...nextState.storyletState.fired,
+        { id: chosen.id, firedAtEpisode: state.episodeIndex },
+      ],
+      flags: nextState.storyletState.flags,
     },
   }
 }
