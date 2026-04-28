@@ -1,0 +1,138 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+interface AlignmentResponse {
+  characters: string[];
+  characterStartTimesSeconds: number[];
+  characterEndTimesSeconds: number[];
+}
+
+interface TtsResponse {
+  audioBase64?: string;
+  alignment?: AlignmentResponse | null;
+  error?: string;
+}
+
+export type DialogueAudioStatus = "idle" | "fetching" | "ready" | "error";
+
+export interface UseDialogueAudioInput {
+  voiceId: string | null | undefined;
+  text: string;
+  enabled?: boolean;
+}
+
+export interface UseDialogueAudioResult {
+  audioUrl: string | null;
+  wordStartsMs: number[] | null;
+  status: DialogueAudioStatus;
+}
+
+function base64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+// Walk text words against the alignment characters; whitespace in alignment
+// is skipped, then the start time of each word's first char becomes that
+// word's reveal point. Robust to punctuation drift between text and
+// alignment.
+function computeWordStarts(
+  text: string,
+  charSequence: string[],
+  charStartsSeconds: number[],
+): number[] {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  const result: number[] = [];
+  let charIdx = 0;
+  for (const word of words) {
+    while (charIdx < charSequence.length && /\s/.test(charSequence[charIdx])) {
+      charIdx++;
+    }
+    if (charIdx >= charSequence.length) {
+      result.push(result[result.length - 1] ?? 0);
+      continue;
+    }
+    result.push(charStartsSeconds[charIdx] * 1000);
+    charIdx += word.length;
+  }
+  return result;
+}
+
+export function useDialogueAudio({
+  voiceId,
+  text,
+  enabled = true,
+}: UseDialogueAudioInput): UseDialogueAudioResult {
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [wordStartsMs, setWordStartsMs] = useState<number[] | null>(null);
+  const [status, setStatus] = useState<DialogueAudioStatus>("idle");
+
+  useEffect(() => {
+    if (!enabled || !voiceId || !text) {
+      setStatus("idle");
+      return;
+    }
+
+    let canceled = false;
+    const ac = new AbortController();
+    let createdUrl: string | null = null;
+
+    setStatus("fetching");
+
+    (async () => {
+      try {
+        const resp = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ voiceId, text }),
+          signal: ac.signal,
+        });
+        if (!resp.ok) {
+          throw new Error(`tts http ${resp.status}`);
+        }
+        const data = (await resp.json()) as TtsResponse;
+        if (canceled) return;
+        if (data.error || !data.audioBase64) {
+          throw new Error(data.error ?? "tts empty response");
+        }
+        const bytes = base64ToBytes(data.audioBase64);
+        const blob = new Blob([bytes.buffer as ArrayBuffer], { type: "audio/mpeg" });
+        const url = URL.createObjectURL(blob);
+        createdUrl = url;
+        setAudioUrl(url);
+        if (data.alignment) {
+          setWordStartsMs(
+            computeWordStarts(
+              text,
+              data.alignment.characters,
+              data.alignment.characterStartTimesSeconds,
+            ),
+          );
+        }
+        setStatus("ready");
+      } catch (err) {
+        if ((err as Error).name === "AbortError") return;
+        if (!canceled) setStatus("error");
+      }
+    })();
+
+    return () => {
+      canceled = true;
+      ac.abort();
+      if (createdUrl) {
+        try {
+          URL.revokeObjectURL(createdUrl);
+        } catch {
+          /* swallow */
+        }
+      }
+      setAudioUrl(null);
+      setWordStartsMs(null);
+    };
+  }, [voiceId, text, enabled]);
+
+  return { audioUrl, wordStartsMs, status };
+}

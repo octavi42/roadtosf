@@ -18,6 +18,7 @@ import {
   SCENES_PER_GROUP,
 } from "@/lib/session";
 import { ARCHETYPES } from "@/lib/archetypes";
+import { voiceIdForSpeaker, NARRATOR_VOICE_ID } from "@/lib/voices/speaker";
 import type {
   ArcSkeleton,
   EndingKey,
@@ -1406,6 +1407,7 @@ export default function HomePage() {
             text={WELCOME_LINES[welcomeLineIndex]}
             wordInterval={100}
             onComplete={handleWelcomeLineComplete}
+            voiceId={NARRATOR_VOICE_ID}
           />
         </div>
       );
@@ -1422,6 +1424,7 @@ export default function HomePage() {
               key={`scene${sceneIndex}-q${qaStepIndex}`}
               text={qaPromptLine.text}
               wordInterval={110}
+              voiceId={voiceIdForSpeaker(qaPromptLine.speaker)}
             />
           </div>
         );
@@ -1439,6 +1442,7 @@ export default function HomePage() {
                 text={currentLine.text}
                 wordInterval={110}
                 onComplete={handleLineComplete}
+                voiceId={voiceIdForSpeaker(currentLine.speaker)}
               />
             )}
           </div>
