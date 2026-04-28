@@ -145,9 +145,13 @@ export function selectEpisodeStorylets(
       // schema-preservation safety net and should be rare in practice
       // — the templates pack always includes at least 5 generics with
       // empty `requires`.
+      // Sort by stableHash before picking [0] so the fallback choice is
+      // deterministic across template-file edits. Without this, adding a
+      // new template at the top of templates.json would change which
+      // generic the fallback picks, silently breaking /history replays.
       const genericFallbacks = TEMPLATES.filter(
         (s) => Object.keys(s.requires).length === 0 && !pickedIds.has(s.id),
-      )
+      ).sort((a, b) => stableHash(a.id) - stableHash(b.id))
       chosen = genericFallbacks[0]
     }
 
