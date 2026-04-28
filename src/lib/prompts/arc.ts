@@ -172,7 +172,7 @@ ${
   input.siliconManiaItems && input.siliconManiaItems.length > 0
     ? `
 ## REAL SF TECH NEWS — THIS WEEK
-Real SF tech news from this week — weave 2–3 of these in as fate (the player did not choose them; they appear because they are happening right now in the city). Use real names verbatim — this overrides the "never name real people" rule for these specific items only.
+Real SF tech news from this week. You MUST name at least 2 of the people/companies below, BY NAME, in the scene "beat" strings. The player did not choose them; they appear as fate because they are happening right now in the city. Use real names verbatim — this overrides the "never name real people" rule for these specific items only. Pick the items that fit each archetype most naturally (a podcast cameo fits the reporter or vc; a fundraise fits the vc; a public spat fits the hater); do not force-fit.
 <items>
 ${formatSiliconManiaItems(input.siliconManiaItems)}
 </items>

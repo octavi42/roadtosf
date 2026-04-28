@@ -12,7 +12,8 @@
     "generate:portraits": "node --env-file=.env.local scripts/generate-portraits.mjs",
     "generate:intro": "node --env-file=.env.local scripts/generate-intro.mjs",
     "generate:group-images": "node --env-file=.env.local scripts/generate-group-images.mjs",
-    "db:migrate": "node --env-file=.env.local scripts/migrate.mjs"
+    "db:migrate": "node --env-file=.env.local scripts/migrate.mjs",
+    "probe:silicon-mania": "node --env-file=.env.local scripts/probe-silicon-mania.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",
