@@ -272,20 +272,24 @@ ${arcSummary}
 
 Beat to render: ${input.outline.beat}
 ${input.outline.hingesOn ? `Should hinge on: ${input.outline.hingesOn}` : ''}`
-    : // Sub 1-3: ZERO storylet anchors. No beat. No skeleton. No
-      // hingesOn. The model gets archetype + kind + prior choice +
-      // player context only. This is the architectural fix the user
-      // has been demanding: skeleton-only, generate-on-the-fly. The
-      // prior choice is the SOLE driver of what happens in this scene.
-      `Render this scene from scratch. The ONLY hard inputs are:
-  - Archetype voice: ${arche.name} (${arche.title})
-  - The PRIOR CHOICE above (the player's literal action)
-  - Player context (startup, persona, team, funding) above
+    : // Sub 1-3: SKELETON + CHOICE only. The skeleton is the storylet
+      // summary (~140 chars: who you're talking to + what about). No
+      // verbose beat, no episode skeleton. The choice drives the
+      // scene's content. PR #36 stripped EVERYTHING and Haiku invented
+      // a fresh archetype per sub-scene (group 0 came out as cofounder
+      // → VC → hater → cofounder). Restoring the summary as a
+      // skeleton anchor keeps the conversation coherent across the 4
+      // sub-scenes while letting choices drive the actual content.
+      `## SCENE SKELETON (the situation across all 4 sub-scenes of this group)
+${input.outline.summary ?? input.outline.beat}
 
-Do NOT refer to a prior storylet beat or canonical setup. There is no
-canonical setup for this scene — invent it as the natural consequence
-of the player's prior choice. Generate beat, dialogue, choices, and
-imagePrompt fresh.`
+This is the SAME conversation as sub 0, just one beat later. SAME archetype,
+SAME subject. The player's PRIOR CHOICE above drove this beat — render what
+HAPPENS NEXT in that conversation given the choice. Do NOT switch to a
+different scene, archetype, or topic. Do NOT re-render the storylet's verbose
+opening (that was sub 0's job). Generate the dialogue, choices, and
+imagePrompt as the natural consequence of the prior choice within this same
+situation.`
 }
 
 Output the JSON object for this scene now.`

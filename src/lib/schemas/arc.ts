@@ -13,6 +13,9 @@ export const sceneOutlineSchema = z.object({
   // world-event scenes render with narrator + player only — no NPC of
   // the assigned archetype speaks.
   kind: z.enum(['encounter', 'solo', 'world-event']).optional(),
+  // Short scenario summary used by sub 1-3 prompts. Set server-side
+  // from the chosen storylet's `summary` field.
+  summary: z.string().max(280).nullable().optional(),
 })
 
 export const arcSkeletonSchema = z.object({

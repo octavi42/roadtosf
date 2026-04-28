@@ -170,6 +170,7 @@ export async function POST(request: Request) {
       archetype: result.storylet.archetype,
       beat: result.storylet.beat,
       kind: result.storylet.kind ?? 'encounter',
+      summary: result.storylet.summary,
     },
     storyletId: result.storylet.id,
     storyletState: result.finalState,

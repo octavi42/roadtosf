@@ -62,6 +62,14 @@ export interface Storylet {
    *  player's startup name + persona when rendering, but cannot
    *  fundamentally alter the action. */
   beat: string
+  /** ≤140-char "what is this scene's situation" — the SKELETON the
+   *  LLM uses for sub 1-3 to keep the same archetype + subject across
+   *  the 4 sub-scenes of a group. Without this, sub 1-3 had no anchor
+   *  and Haiku invented a fresh archetype per sub-scene (group 0 came
+   *  out as cofounder-then-VC-then-hater-then-stranger — no skeleton).
+   *  Sub 0 still uses the verbose `beat`; sub 1-3 use this summary
+   *  plus the prior choice as the only context. */
+  summary?: string
   /** Flags this storylet flips on selection. Other storylets within the
    *  same episode see these flags; they also persist across episodes. */
   effects?: Record<string, boolean>
