@@ -78,7 +78,6 @@ export function useDialogueAudio({
 
     let canceled = false;
     const ac = new AbortController();
-    let createdUrl: string | null = null;
 
     setStatus("fetching");
 
@@ -101,7 +100,6 @@ export function useDialogueAudio({
         const bytes = base64ToBytes(data.audioBase64);
         const blob = new Blob([bytes.buffer as ArrayBuffer], { type: "audio/mpeg" });
         const url = URL.createObjectURL(blob);
-        createdUrl = url;
         setAudioUrl(url);
         if (data.alignment) {
           setWordStartsMs(
@@ -119,16 +117,13 @@ export function useDialogueAudio({
       }
     })();
 
+    // Deliberately do not URL.revokeObjectURL here — Safari/Chrome may stop
+    // the underlying <audio> element when its src blob is invalidated, even
+    // if the cleanup runs from an unrelated parent re-render. We accept the
+    // tiny per-line memory leak; the browser frees blobs on tab close.
     return () => {
       canceled = true;
       ac.abort();
-      if (createdUrl) {
-        try {
-          URL.revokeObjectURL(createdUrl);
-        } catch {
-          /* swallow */
-        }
-      }
       setAudioUrl(null);
       setWordStartsMs(null);
     };
