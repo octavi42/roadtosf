@@ -15,6 +15,7 @@ import {
   useSessionStore,
   AUTHORED_SCENE_COUNT,
   EPISODE_LENGTH,
+  POST_QA_SCENE_INDEX,
   SCENES_PER_GROUP,
 } from "@/lib/session";
 import { ARCHETYPES } from "@/lib/archetypes";
@@ -652,8 +653,7 @@ export default function HomePage() {
   // arc-gen anyway so the run isn't soft-locked.
   useEffect(() => {
     if (phase !== "scene") return;
-    // QA lives at sceneIndex 3; fire the moment the player advances past it.
-    if (sceneIndex < 4) return;
+    if (sceneIndex < POST_QA_SCENE_INDEX) return;
     if (arc?.arcSkeleton?.episodeIndex === 0) return;
     if (arcGenFiredRef.current.has(0)) return;
     const noPitchSubmitted = !intro.startupDescription?.trim();
