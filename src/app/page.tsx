@@ -29,6 +29,8 @@ import type {
   ShareMoment,
 } from "@/lib/types";
 import { streamArc } from "@/lib/streamArc";
+import { streamScene } from "@/lib/streamScene";
+import { PaywallRequiredError } from "@/lib/paywall";
 import { rollCameos } from "@/lib/cameos/roll";
 import { rollTone } from "@/lib/cameos/tone";
 import fallbackArcJson from "@/lib/fallback/arc.json";
@@ -224,17 +226,6 @@ interface SceneGenResponse {
   creditsRemaining?: number | null;
 }
 
-/**
- * Thrown by postWithTimeout when the server returns 402 — used by the
- * scene-gen call sites to flip into the paywall phase mid-run.
- */
-class PaywallRequiredError extends Error {
-  constructor(public readonly balance: number) {
-    super("paywall_required");
-    this.name = "PaywallRequiredError";
-  }
-}
-
 // Synthesizes a placeholder skeleton from a single arriving scene outline so
 // the `generating-arc` effect can fire group 0's leader scene-gen while the
 // rest of the arc is still streaming. The scene prompt filters out outlines
@@ -370,6 +361,8 @@ export default function HomePage() {
   );
   const setRunFate = useSessionStore((s) => s.setRunFate);
   const replaceOutline = useSessionStore((s) => s.replaceOutline);
+  const setSceneImagePrompt = useSessionStore((s) => s.setSceneImagePrompt);
+  const appendDialogueLine = useSessionStore((s) => s.appendDialogueLine);
   // Read sessionEmail directly off the store so any code path that flips
   // it (LoginModal success, /history logout) re-renders this component
   // and re-runs the balance refetch effect without depending on Next.js's
@@ -778,8 +771,7 @@ export default function HomePage() {
     if (!inCinematic && creditsRemaining < 1) return;
     firstSceneFiredRef.current = epi;
 
-    postWithTimeout<SceneGenResponse>(
-      "/api/generate-scene",
+    streamScene(
       {
         llmIndex: globalLLMIndex,
         episodeIndex: epi,
@@ -805,7 +797,11 @@ export default function HomePage() {
         playthroughId,
         tone: arc?.tone,
       },
-      SCENE_GEN_TIMEOUT_MS,
+      {
+        onImagePrompt: (imagePrompt) =>
+          setSceneImagePrompt(globalLLMIndex, imagePrompt),
+        onDialogueLine: (line) => appendDialogueLine(globalLLMIndex, line),
+      },
     )
       .then((data) => {
         sceneGenFiredRef.current.add(globalLLMIndex);
@@ -1000,8 +996,7 @@ export default function HomePage() {
       if (stored && stored.dialogue.length > 0) return;
       sceneGenFiredRef.current.add(globalLLMIndex);
 
-      postWithTimeout<SceneGenResponse>(
-        "/api/generate-scene",
+      streamScene(
         {
           llmIndex: globalLLMIndex,
           episodeIndex: epi,
@@ -1027,7 +1022,11 @@ export default function HomePage() {
           playthroughId,
           tone: arc?.tone,
         },
-        SCENE_GEN_TIMEOUT_MS,
+        {
+          onImagePrompt: (imagePrompt) =>
+            setSceneImagePrompt(globalLLMIndex, imagePrompt),
+          onDialogueLine: (line) => appendDialogueLine(globalLLMIndex, line),
+        },
       )
         .then((data) => {
           dynamicSceneReady(globalLLMIndex, data.scene);
@@ -1272,8 +1271,7 @@ export default function HomePage() {
     if (stored && stored.dialogue.length > 0) return;
     sceneGenFiredRef.current.add(firstSceneOfNewEpisode);
 
-    postWithTimeout<SceneGenResponse>(
-      "/api/generate-scene",
+    streamScene(
       {
         llmIndex: firstSceneOfNewEpisode,
         episodeIndex: epi,
@@ -1299,7 +1297,12 @@ export default function HomePage() {
         playthroughId,
         tone: arc?.tone,
       },
-      SCENE_GEN_TIMEOUT_MS,
+      {
+        onImagePrompt: (imagePrompt) =>
+          setSceneImagePrompt(firstSceneOfNewEpisode, imagePrompt),
+        onDialogueLine: (line) =>
+          appendDialogueLine(firstSceneOfNewEpisode, line),
+      },
     )
       .then((data) => {
         dynamicSceneReady(firstSceneOfNewEpisode, data.scene);
