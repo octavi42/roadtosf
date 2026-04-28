@@ -11,8 +11,8 @@ const AMBIENCE_GAIN = 0.45;
 const AMBIENCE_DUCKED = 0.2;
 const MUSIC_GAIN = 0.3;
 const MUSIC_DUCKED = 0.12;
-const FADE_SECONDS = 1;
-const DUCK_SECONDS = 0.25;
+const FADE_MS = 1000;
+const DUCK_MS = 250;
 
 // ---------------------------------------------------------------------------
 // Shared store — DialogueSubtitle flips dialoguePlaying on TTS events; the
@@ -36,9 +36,9 @@ export const useAudioBedStore = create<AudioBedState>((set) => ({
 }));
 
 // ---------------------------------------------------------------------------
-// Single-track player. One AudioContext, two MediaElementSource → GainNode
-// chains (ambience + music). On src change we crossfade with sample-accurate
-// gain ramps; on dialogue play we duck both beds.
+// Two HTMLAudioElement refs (ambience + music). Volume animated on rAF for
+// crossfade and ducking. No AudioContext — sidesteps the
+// suspended-context-blocks-MediaElementSource trap entirely.
 // ---------------------------------------------------------------------------
 
 export interface AudioBedProps {
@@ -46,163 +46,159 @@ export interface AudioBedProps {
   musicSrc: string | null;
 }
 
-interface Track {
-  audio: HTMLAudioElement;
-  gain: GainNode;
-  baseGain: number;
-  duckedGain: number;
-  src: string | null;
+function animateVolume(
+  audio: HTMLAudioElement,
+  target: number,
+  durationMs: number,
+  cancelRef: { current: number },
+) {
+  const start = audio.volume;
+  const t0 = performance.now();
+  cancelAnimationFrame(cancelRef.current);
+  const tick = () => {
+    const t = Math.min(1, (performance.now() - t0) / Math.max(1, durationMs));
+    audio.volume = start + (target - start) * t;
+    if (t < 1) {
+      cancelRef.current = requestAnimationFrame(tick);
+    }
+  };
+  cancelRef.current = requestAnimationFrame(tick);
 }
 
 export default function AudioBed({ ambienceSrc, musicSrc }: AudioBedProps) {
-  const ctxRef = useRef<AudioContext | null>(null);
-  const ambienceRef = useRef<Track | null>(null);
-  const musicRef = useRef<Track | null>(null);
-  const masterRef = useRef<GainNode | null>(null);
+  const ambienceAudioRef = useRef<HTMLAudioElement | null>(null);
+  const musicAudioRef = useRef<HTMLAudioElement | null>(null);
+  const ambienceRaf = useRef(0);
+  const musicRaf = useRef(0);
 
   const muted = useAudioBedStore((s) => s.muted);
   const dialoguePlaying = useAudioBedStore((s) => s.dialoguePlaying);
 
-  // Lazy-init audio graph. Browsers block AudioContext until a user gesture;
-  // resume() is called from the gesture path further down.
-  const ensureGraph = () => {
-    if (ctxRef.current) return;
-    const Ctx =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext })
-        .webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
-    const master = ctx.createGain();
-    master.gain.value = 1;
-    master.connect(ctx.destination);
-
-    const buildTrack = (baseGain: number, duckedGain: number): Track => {
-      const audio = new Audio();
-      audio.loop = true;
-      audio.preload = "auto";
-      audio.crossOrigin = "anonymous";
-      const src = ctx.createMediaElementSource(audio);
-      const gain = ctx.createGain();
-      gain.gain.value = 0;
-      src.connect(gain);
-      gain.connect(master);
-      return { audio, gain, baseGain, duckedGain, src: null };
-    };
-
-    ctxRef.current = ctx;
-    masterRef.current = master;
-    ambienceRef.current = buildTrack(AMBIENCE_GAIN, AMBIENCE_DUCKED);
-    musicRef.current = buildTrack(MUSIC_GAIN, MUSIC_DUCKED);
-  };
-
-  // Resume the AudioContext on the first user gesture anywhere in the
-  // document. After that, the listeners detach themselves. Also retries
-  // play() on each loaded track — the initial swapTrack() before any
-  // gesture would have been blocked by autoplay policy.
+  // First user gesture: try to start any track that is loaded but paused.
+  // Browsers block autoplay until a gesture; this catches up.
   useEffect(() => {
-    const resume = () => {
-      ensureGraph();
-      const ctx = ctxRef.current;
-      if (ctx && ctx.state === "suspended") {
-        void ctx.resume();
-      }
-      const retry = (track: Track | null) => {
-        if (!track || !track.src) return;
-        if (track.audio.paused) {
-          void track.audio.play().catch(() => {});
-        }
+    const kick = () => {
+      const tryPlay = (a: HTMLAudioElement | null) => {
+        if (!a || !a.src) return;
+        if (a.paused) void a.play().catch(() => {});
       };
-      retry(ambienceRef.current);
-      retry(musicRef.current);
-      window.removeEventListener("pointerdown", resume);
-      window.removeEventListener("keydown", resume);
+      tryPlay(ambienceAudioRef.current);
+      tryPlay(musicAudioRef.current);
     };
-    window.addEventListener("pointerdown", resume);
-    window.addEventListener("keydown", resume);
+    window.addEventListener("pointerdown", kick);
+    window.addEventListener("keydown", kick);
     return () => {
-      window.removeEventListener("pointerdown", resume);
-      window.removeEventListener("keydown", resume);
+      window.removeEventListener("pointerdown", kick);
+      window.removeEventListener("keydown", kick);
     };
   }, []);
 
-  // Crossfade a track to a new src. Pass null to fade out and pause.
-  const swapTrack = (track: Track | null, nextSrc: string | null) => {
-    const ctx = ctxRef.current;
-    if (!ctx || !track) return;
-    if (track.src === nextSrc) return;
-
-    const now = ctx.currentTime;
-    track.gain.gain.cancelScheduledValues(now);
-    track.gain.gain.setValueAtTime(track.gain.gain.value, now);
-    track.gain.gain.linearRampToValueAtTime(0, now + FADE_SECONDS);
-
-    const previousAudio = track.audio;
-    setTimeout(() => {
-      try {
-        previousAudio.pause();
-      } catch {
-        // ignore pause races
-      }
-    }, FADE_SECONDS * 1000);
+  // Swap helper: ramp volume to 0, change src, ramp volume to base.
+  const swap = (
+    audio: HTMLAudioElement | null,
+    raf: { current: number },
+    nextSrc: string | null,
+    baseGain: number,
+  ) => {
+    if (!audio) return;
+    const currentSrc = audio.src ? new URL(audio.src).pathname : null;
+    if (currentSrc === nextSrc) return;
 
     if (!nextSrc) {
-      track.src = null;
+      animateVolume(audio, 0, FADE_MS, raf);
+      setTimeout(() => {
+        try {
+          audio.pause();
+          audio.removeAttribute("src");
+          audio.load();
+        } catch {
+          /* ignore */
+        }
+      }, FADE_MS);
       return;
     }
 
-    track.audio.src = nextSrc;
-    track.src = nextSrc;
-    const target = dialoguePlaying ? track.duckedGain : track.baseGain;
-
-    void track.audio.play().catch(() => {
-      // Autoplay blocked or src 404; bed stays silent. The user gesture
-      // listener will retry on next interaction.
-    });
-
-    // Schedule the fade-in slightly after the play() call so the audio
-    // element has a chance to start producing samples.
-    const start = ctx.currentTime;
-    track.gain.gain.cancelScheduledValues(start);
-    track.gain.gain.setValueAtTime(0, start);
-    track.gain.gain.linearRampToValueAtTime(target, start + FADE_SECONDS);
+    // Fade out current source, then switch.
+    animateVolume(audio, 0, FADE_MS / 2, raf);
+    setTimeout(() => {
+      audio.src = nextSrc;
+      audio.volume = 0;
+      const target = useAudioBedStore.getState().dialoguePlaying
+        ? baseGain * (DUCK_RATIO[baseGain] ?? 0.45)
+        : baseGain;
+      void audio.play().catch(() => {
+        // Autoplay blocked — gesture handler will retry.
+      });
+      animateVolume(audio, target, FADE_MS / 2, raf);
+    }, FADE_MS / 2);
   };
 
   useEffect(() => {
-    ensureGraph();
-    swapTrack(ambienceRef.current, ambienceSrc);
+    swap(ambienceAudioRef.current, ambienceRaf, ambienceSrc, AMBIENCE_GAIN);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ambienceSrc]);
 
   useEffect(() => {
-    ensureGraph();
-    swapTrack(musicRef.current, musicSrc);
+    swap(musicAudioRef.current, musicRaf, musicSrc, MUSIC_GAIN);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [musicSrc]);
 
-  // Ducking: ramp current track gains to ducked / base levels.
+  // Ducking — ramp to ducked / base level on dialogue play/end. Skip if the
+  // track has no source loaded or the master is muted.
   useEffect(() => {
-    const ctx = ctxRef.current;
-    if (!ctx) return;
-    const apply = (track: Track | null) => {
-      if (!track || !track.src) return;
-      const target = dialoguePlaying ? track.duckedGain : track.baseGain;
-      const now = ctx.currentTime;
-      track.gain.gain.cancelScheduledValues(now);
-      track.gain.gain.setValueAtTime(track.gain.gain.value, now);
-      track.gain.gain.linearRampToValueAtTime(target, now + DUCK_SECONDS);
+    const apply = (
+      audio: HTMLAudioElement | null,
+      raf: { current: number },
+      base: number,
+      ducked: number,
+    ) => {
+      if (!audio || !audio.src) return;
+      animateVolume(audio, dialoguePlaying ? ducked : base, DUCK_MS, raf);
     };
-    apply(ambienceRef.current);
-    apply(musicRef.current);
-  }, [dialoguePlaying]);
+    if (!muted) {
+      apply(
+        ambienceAudioRef.current,
+        ambienceRaf,
+        AMBIENCE_GAIN,
+        AMBIENCE_DUCKED,
+      );
+      apply(musicAudioRef.current, musicRaf, MUSIC_GAIN, MUSIC_DUCKED);
+    }
+  }, [dialoguePlaying, muted]);
 
-  // Mute: toggle the master gain. Instant, not ramped — mute should feel
-  // immediate.
+  // Mute — instant, not ramped. Just clamp volume to 0 / target.
   useEffect(() => {
-    const master = masterRef.current;
-    if (!master) return;
-    master.gain.value = muted ? 0 : 1;
+    const a = ambienceAudioRef.current;
+    const m = musicAudioRef.current;
+    if (a) a.muted = muted;
+    if (m) m.muted = muted;
   }, [muted]);
 
-  return null;
+  return (
+    <>
+      {/* Hidden audio elements — sit off-screen but inside the DOM so the
+          browser's media stack handles autoplay retries naturally. */}
+      <audio
+        ref={ambienceAudioRef}
+        loop
+        preload="auto"
+        style={{ display: "none" }}
+        aria-hidden="true"
+      />
+      <audio
+        ref={musicAudioRef}
+        loop
+        preload="auto"
+        style={{ display: "none" }}
+        aria-hidden="true"
+      />
+    </>
+  );
 }
+
+// Map base gain → ducked gain so swap()'s mid-transition target matches the
+// ducking ratio for whichever track is being swapped.
+const DUCK_RATIO: Record<number, number> = {
+  [AMBIENCE_GAIN]: AMBIENCE_DUCKED / AMBIENCE_GAIN,
+  [MUSIC_GAIN]: MUSIC_DUCKED / MUSIC_GAIN,
+};
