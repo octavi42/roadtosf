@@ -17,7 +17,13 @@ export const sceneOutlineSchema = z.object({
 
 export const arcSkeletonSchema = z.object({
   episodeIndex: z.number().int().min(0).max(50).default(0),
-  premise: z.string().min(10).max(280),
+  // Premise cap was 280 chars but Sonnet routinely produces ~300-400
+  // (a "1-2 sentence through-line" can easily run that long with
+  //  player-specific texture). The 280 cap forced fallback-arc.json
+  // to ship to players who otherwise had a perfect Sonnet response,
+  // which made the entire engine work feel "prewritten" because the
+  // fallback IS prewritten. 600 is generous for 1-2 sentences.
+  premise: z.string().min(10).max(600),
   scenes: z.array(sceneOutlineSchema).length(5),
   // Prompt asks for ~200 words (≈1000–1500 chars). The 700 cap was rejecting
   // legitimate Sonnet output by episode 1, forcing a 37s retry-then-fallback

@@ -96,12 +96,31 @@ export interface StreamJsonTextOptions extends CompleteJsonOptions {
   // generate-arc to incrementally parse out scene outlines as they finish.
   onText?: (delta: string, full: string) => void
   signal?: AbortSignal
+  /**
+   * Optional forced assistant prefix. Anthropic supports this via a
+   * trailing `assistant` message in the request — the model continues
+   * from that prefix rather than starting fresh. Used by scene-gen
+   * sub 1-3 to force JSON like `{"dialogue":[{"speaker":"narrator",
+   * "text":"You ` so the first dialogue line MUST start with a past-
+   * tense action ("You called her...", "You walked out..."). This is
+   * mechanical enforcement of the choice-as-action rule when prompt
+   * persuasion has hit its ceiling. The prefix is prepended to the
+   * returned `full` text so downstream parsers see the complete JSON.
+   */
+  assistantPrefix?: string
 }
 
 // Streams an Anthropic message and returns the full assembled text. Errors
 // in the stream propagate; the caller is responsible for fallback logic.
 export async function streamJsonText(opts: StreamJsonTextOptions): Promise<string> {
-  const { model, systemBlocks, userBlocks, maxTokens = 2400, temperature = 0.85, onText, signal } = opts
+  const { model, systemBlocks, userBlocks, maxTokens = 2400, temperature = 0.85, onText, signal, assistantPrefix } = opts
+
+  const messages: Anthropic.MessageParam[] = [
+    { role: 'user', content: toContentBlocks(userBlocks) },
+  ]
+  if (assistantPrefix && assistantPrefix.length > 0) {
+    messages.push({ role: 'assistant', content: assistantPrefix })
+  }
 
   const stream = client().messages.stream(
     {
@@ -109,14 +128,16 @@ export async function streamJsonText(opts: StreamJsonTextOptions): Promise<strin
       max_tokens: maxTokens,
       temperature,
       system: toContentBlocks(systemBlocks),
-      messages: [
-        { role: 'user', content: toContentBlocks(userBlocks) },
-      ],
+      messages,
     },
     signal ? { signal } : undefined,
   )
 
-  let full = ''
+  // The prefix is what we sent the model; the response continues from
+  // there. Downstream parsers expect to see the complete JSON, so we
+  // seed `full` with the prefix and emit it as the first delta.
+  let full = assistantPrefix ?? ''
+  if (assistantPrefix && onText) onText(assistantPrefix, full)
   stream.on('text', (delta: string) => {
     full += delta
     onText?.(delta, full)
