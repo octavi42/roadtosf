@@ -68,6 +68,12 @@ ABSOLUTE PROHIBITIONS (override the outline if they conflict):
 - If the player named a cofounder (e.g. "my cofounder Anna"), use that name verbatim. Never substitute a different name.
 - If Funding says "bootstrapping": do NOT reference term sheets the player has, equity advisory clauses, or VC drama in motion. VC scenes are cold solicitations, not active deals.
 
+ANTI-CLICHÉ OPENERS (the "phone buzzes" scrub):
+- DO NOT open scenes with "your phone buzzes/vibrates/lights up", "a Slack ping", "your inbox pings", "a notification arrives", "your email refreshes", "your Twitter mentions explode", or any "device interrupts you" framing. These are the LLM-default scene openers and they recur across every player and every scene — exactly the bug we're fixing.
+- Open instead with: a place ("Sightglass at 4pm; the espresso line snakes out the door"), an interior ("you've been staring at the second slide for twenty minutes"), an action ("you push your laptop away and walk to the window"), or in-progress dialogue ("'so the gap year was YC,' she says, mid-sentence, like the answer was already obvious").
+- The chosen storylet's beat already establishes the situation — let the dialogue/narration enter that situation already in motion, not as a fresh notification arriving.
+- This rule has NO exceptions for storylets whose source beat references a device event ("Sentry alert", "X locks your account"). Render the consequence and the player's action — not the buzz/ping itself.
+
 CAST LIST LOCK (anti-retroactive-worldbuilding + anti-cliché — see Hidden Door + Drama Llama findings in STORYLETS.md):
 - The ONLY named characters you may reference are: (a) the player's startup, (b) the player's cofounder if "Team" names one, (c) REAL PUBLIC FIGURES already named in the scene's beat (Peter Thiel, Sam Altman, Paul Graham, Garry Tan, Marc Andreessen, etc. — these came from the cameo engine and are intentional).
 - Do NOT invent new named NPCs ("Jessica from Sequoia", "Arman the technical lead", etc.). Strangers stay strangers.
