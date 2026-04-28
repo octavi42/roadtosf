@@ -133,10 +133,16 @@ function formatPriorChoiceCallout(
   const last = choices[choices.length - 1]!
   const hypeStr = `${last.hypeDelta >= 0 ? '+' : ''}${last.hypeDelta}`
   const integStr = `${last.integrityDelta >= 0 ? '+' : ''}${last.integrityDelta}`
-  return `## PRIOR CHOICE (acknowledge this — its effect must show in dialogue/body language)
-Player just chose: "${last.choiceLabel}"
+  return `## PRIOR CHOICE — THE PROTAGONIST'S LITERAL ACTION
+The player just chose: "${last.choiceLabel}"
 Effect: hype ${hypeStr}, integrity ${integStr}.
-The opening line(s) of THIS scene must visibly react to that choice (a callback, a tone shift, a side-effect in the world, an NPC reading it back). Do not write generic dialogue that would land for any branch.`
+
+Read the choice label as a verb-phrase the player just ENACTED. It's
+not a tone modifier — it's THE action the protagonist took. This scene
+shows what happens because of that action, not what would have happened
+anyway. The opening sentence should make it obvious which of the prior
+choices the player picked; a reader joining cold should be able to
+reverse-engineer the choice from the first line.`
 }
 
 export function buildScenePromptParts(input: BuildScenePromptInput) {
@@ -203,34 +209,65 @@ The choices are about what the player does in response to the event.`
 
   const subSceneBlock =
     input.subSceneIndex === 0
-      ? `## SUB-SCENE 0 of 4 (opens the encounter)
-This is the first beat of a 4-beat encounter with ${arche.name}.
-Establish the setting and the character's entrance. End on a choice that
-sets up the next exchange. The location you choose will anchor the next
-3 sub-scenes — pick a place the conversation can plausibly continue.`
-      : `## SUB-SCENE ${input.subSceneIndex} of 4 (continues a 4-beat encounter)
-You are writing beat ${input.subSceneIndex + 1} of 4 in the SAME scene with
-${arche.name}, at the SAME location established in sub-scene 0. Same
-character, same scene, same imagePrompt setting (unless the prior choice
-explicitly moved the player elsewhere — see below).
+      ? `## SUB-SCENE 0 of 4 (opens the situation)
+This is the OPENING beat of a 4-beat sequence. Render the storylet's
+anchor situation (see "Beat to render" below). Establish setting +
+character + tension. End on a choice that the player's NEXT scene will
+literally enact. Pick a location flexible enough that any of the
+choices' consequences (calling someone, walking out, agreeing, lying,
+etc.) can plausibly play out from here or just past here.`
+      : `## SUB-SCENE ${input.subSceneIndex} of 4 — RENDER THE PLAYER'S CHOICE AS ACTION
 
-The PRIOR CHOICE block above is the player's most recent action. Treat
-its label as a LITERAL in-fiction action and honor it:
-  - If the choice describes a physical action ("take her email and leave
-    the room", "walk out", "hand over the laptop"), the scene OPENS with
-    that action having JUST happened — they are out of the room, holding
-    the email, the laptop is gone — and the next beat plays from there.
-  - If the choice is verbal ("agree", "deflect", "lie", "counter-offer"),
-    the NPC's first line reacts to those exact words.
-  - Never restart the conversation, never repeat the prior beat, never
-    write dialogue that would land identically for a different choice.
-  - If the choice changed the location/state, the dialogue AND the
-    imagePrompt must reflect that — otherwise keep them anchored to the
-    sub-0 setting.
-Continue forward — escalate the encounter (tension / stakes / revelation).
+CRITICAL — read this carefully, this is the architectural rule:
+The PRIOR CHOICE above is NOT a tone modifier or a dialogue cue. It is
+LITERALLY THE PROTAGONIST'S ACTION that drives this scene. The
+storylet's anchor situation is ALREADY established (sub-scene 0 did
+that). This scene shows what happens BECAUSE the player chose what
+they chose.
+
+Read the choice's label as a verb-phrase the player just enacted:
+  - "Call her"             → scene opens with the player on the phone,
+                              hearing it ring or her voice answering.
+                              The setting shifts from indoor table to
+                              outside / a quiet corner. Render the call.
+  - "Submit the form"      → scene opens with the player clicking
+                              submit, the confirmation flashing,
+                              dread or relief. The application is GONE
+                              from the screen.
+  - "Walk out"             → the player is OUTSIDE, on the sidewalk,
+                              the door closing behind them. The
+                              previous character's voice fades.
+  - "Take the term sheet"  → the contract is signed; the VC offers
+                              their hand; what comes next?
+  - "Push back on..."      → the verbal counter lands; the recipient
+                              reacts in character; the conversation
+                              has shifted register.
+  - "Ask for the deck"     → the deck is now being shared; the
+                              player is reading it. New material.
+  - "Tell them you're solo" → the deflection lands; the recipient
+                              processes the rejection. Different beat.
+
+DO NOT reuse the storylet's anchor beat ("the cursor blinks", "the
+email sits open", "you're staring at the deck"). That was sub-scene 0.
+This scene is a NEW MOMENT, branched from the choice. The player has
+moved time and/or space forward.
+
+Setting: the image was generated for sub-scene 0's location. Narration
+can shift to a nearby beat (the cafe doorway, the office hallway,
+outside the bar) — pick something within walking distance of sub-0's
+setting so the image still feels right. Don't teleport across the city.
+
+Character: if the choice involves leaving someone, they may NOT
+return in this scene. If the choice is verbal, the same NPC continues
+the conversation. If the choice triggers a phone call, the new
+character is on the line — render their voice via dialogue speaker.
+
+Dialogue: the FIRST line should make it OBVIOUS which choice was made.
+A reader picking up at this scene cold should be able to reverse-engineer
+the player's choice from the opening sentence.
 ${
   input.subSceneIndex === 3
-    ? 'This is sub-scene 3 — the final beat. Close the encounter cleanly so the next archetype can enter; leave a hook, do NOT resolve the run.'
+    ? '\nThis is sub-scene 3 — the final beat. Close the encounter cleanly so the next archetype can enter; leave a hook, do NOT resolve the run.'
     : ''
 }`
 
@@ -245,8 +282,24 @@ ${kindBlock ? `${kindBlock}\n\n` : ''}${subSceneBlock}
 
 ## THIS SCENE
 Episode ${input.episodeIndex}, group ${input.groupIndex} sub ${input.subSceneIndex} (id=${input.sceneId})
-Beat to render: ${input.outline.beat}
-${input.outline.hingesOn ? `Should hinge on: ${input.outline.hingesOn}` : ''}
+${
+  input.subSceneIndex === 0
+    ? // Sub 0: render the storylet's anchor beat verbatim. This is the
+      // canonical situation the storylet template encodes.
+      `Beat to render: ${input.outline.beat}
+${input.outline.hingesOn ? `Should hinge on: ${input.outline.hingesOn}` : ''}`
+    : // Sub 1-3: do NOT re-anchor to the storylet's beat. The beat is
+      // shown as STORYLET CONTEXT (so the model knows the broader
+      // situation) but the actual scene is whatever follows from the
+      // PRIOR CHOICE. This is the architectural fix for "every sub-scene
+      // re-loops the same beat" — passing the storylet beat as "Beat to
+      // render" was pulling Haiku back to the anchor every time.
+      `Storylet context (already established by sub-scene 0): ${input.outline.beat}
+${input.outline.hingesOn ? `Storylet pivot point: ${input.outline.hingesOn}` : ''}
+
+Render the scene that follows from the player's PRIOR CHOICE above.
+Do NOT re-render the storylet context — that's already happened.`
+}
 
 Output the JSON object for this scene now.`
 
