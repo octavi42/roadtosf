@@ -26,6 +26,7 @@ import type {
   ShareMoment,
 } from "@/lib/types";
 import { streamArc } from "@/lib/streamArc";
+import fallbackArcJson from "@/lib/fallback/arc.json";
 import type {
   IntroData,
   MissingQuestion,
@@ -246,6 +247,14 @@ function makePartialArcSkeleton(
 
 function isPartialArcSkeleton(skeleton: ArcSkeleton): boolean {
   return skeleton.scenes.some((s) => s.beat === PARTIAL_BEAT_MARKER);
+}
+
+// Static fallback skeleton used when streamArc rejects after a partial was
+// already emitted. Without this, a 45s client timeout (or any other stream
+// failure mid-stream) would strand the run with __pending placeholders for
+// scenes 1-4, breaking the rest of the episode.
+function makeFallbackArcSkeleton(episodeIndex: number): ArcSkeleton {
+  return { ...(fallbackArcJson as ArcSkeleton), episodeIndex };
 }
 
 async function postWithTimeout<T>(
@@ -647,6 +656,7 @@ export default function HomePage() {
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), ARC_GEN_TIMEOUT_MS);
+    let partialEmitted = false;
     streamArc(buildArcRequestBody(0), {
       signal: controller.signal,
       onScene: (outline) => {
@@ -654,10 +664,17 @@ export default function HomePage() {
         // arrives — the rest of the arc finishes streaming in parallel.
         if (outline.index !== 0) return;
         arcSkeletonReady(makePartialArcSkeleton(0, outline));
+        partialEmitted = true;
       },
     })
       .then((data) => arcSkeletonReady(data.skeleton))
-      .catch((err) => console.error("generate-arc[0] failed", err))
+      .catch((err) => {
+        console.error("generate-arc[0] failed", err);
+        // If a partial was emitted before the stream errored (timeout,
+        // disconnect, etc.), replace it with the static fallback so the
+        // run doesn't get stuck with __pending placeholders for scenes 1-4.
+        if (partialEmitted) arcSkeletonReady(makeFallbackArcSkeleton(0));
+      })
       .finally(() => clearTimeout(timeoutId));
   }, [
     phase,
@@ -1000,15 +1017,22 @@ export default function HomePage() {
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), ARC_GEN_TIMEOUT_MS);
+    let partialEmitted = false;
     streamArc(buildArcRequestBody(nextEpisode), {
       signal: controller.signal,
       onScene: (outline) => {
         if (outline.index !== 0) return;
         arcSkeletonReady(makePartialArcSkeleton(nextEpisode, outline));
+        partialEmitted = true;
       },
     })
       .then((data) => arcSkeletonReady(data.skeleton))
-      .catch((err) => console.error(`generate-arc[${nextEpisode}] failed`, err))
+      .catch((err) => {
+        console.error(`generate-arc[${nextEpisode}] failed`, err);
+        if (partialEmitted) {
+          arcSkeletonReady(makeFallbackArcSkeleton(nextEpisode));
+        }
+      })
       .finally(() => clearTimeout(timeoutId));
   }, [phase, sceneIndex, arc?.arcSkeleton, buildArcRequestBody, arcSkeletonReady]);
 
