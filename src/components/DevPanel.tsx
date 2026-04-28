@@ -12,8 +12,6 @@ import { SCENES } from "@/lib/scenes";
 import { ARCHETYPES } from "@/lib/archetypes";
 import type { Scene as LLMScene } from "@/lib/types";
 
-const DEV_OVERRIDE_KEY = "rtsf_dev_phase";
-
 interface DevTarget {
   label: string;
   phase: Phase;
@@ -119,10 +117,6 @@ export default function DevPanel() {
 
   const goTo = async (target: DevTarget) => {
     if (target.available === false) return;
-    window.localStorage.setItem(
-      DEV_OVERRIDE_KEY,
-      JSON.stringify({ phase: target.phase, sceneIndex: target.sceneIndex }),
-    );
     devSetPhase(target.phase, target.sceneIndex);
     setTick((t) => t + 1);
 
@@ -148,7 +142,6 @@ export default function DevPanel() {
   };
 
   const wipeSession = () => {
-    window.localStorage.removeItem(DEV_OVERRIDE_KEY);
     window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
     // wipeAll, not reset, because this is the "fully fresh anon" button —
     // it nukes credits + session email too. reset preserves those.
@@ -217,16 +210,11 @@ export default function DevPanel() {
     // start of the car-ride Q&A). With the paywall removed from the scene
     // flow, this is the new "fast lane" for testing the rest of the run
     // without typing through the conversational onboarding every time.
-    window.localStorage.removeItem(DEV_OVERRIDE_KEY);
     window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
     reset();
 
     captureIntro(HARDCODED_INTRO);
 
-    window.localStorage.setItem(
-      DEV_OVERRIDE_KEY,
-      JSON.stringify({ phase: "scene", sceneIndex: 3 }),
-    );
     devSetPhase("scene", 3);
     setTick((t) => t + 1);
 
