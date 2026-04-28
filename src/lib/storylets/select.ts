@@ -38,23 +38,31 @@ function isInCooldown(
   return false
 }
 
-// Salience score = count of overlap between storylet tags and the run's
-// "context tags" (flavor tags + tone + cameo ids). Among multiple
-// eligible storylets the selector picks the one with the highest score
-// — runs at extremes get bespoke beats, mid-runs get generic ones.
+// Salience score has two components: tag-overlap with run-state tags
+// and *requires-specificity* (count of non-empty requires keys). The
+// specificity term is the Emily Short rule — among multiple eligible
+// storylets, prefer the one whose preconditions match the current state
+// most narrowly. Without it, a storylet like `solo_yc_recruit` (gated on
+// `team=solo`) ties with `cofounder_pitch_generic` (empty requires) and
+// loses on the hash tiebreak, defeating the whole point of the gate.
+//
+// Specificity weight is small (0.5/key) so it lifts ties but never
+// outranks a higher tag-overlap score.
 function saliencyScore(storylet: Storylet, state: SelectionState): number {
-  if (!storylet.tags || storylet.tags.length === 0) return 0
-  const contextTags = new Set<string>()
-  state.flavorTags.forEach((t) => contextTags.add(t.toLowerCase()))
-  if (state.tone) contextTags.add(state.tone.toLowerCase())
-  if (state.rolledCameos) {
-    state.rolledCameos.forEach((c) => contextTags.add(c.toLowerCase()))
-  }
   let score = 0
-  for (const tag of storylet.tags) {
-    if (contextTags.has(tag.toLowerCase())) score++
+  if (storylet.tags && storylet.tags.length > 0) {
+    const contextTags = new Set<string>()
+    state.flavorTags.forEach((t) => contextTags.add(t.toLowerCase()))
+    if (state.tone) contextTags.add(state.tone.toLowerCase())
+    if (state.rolledCameos) {
+      state.rolledCameos.forEach((c) => contextTags.add(c.toLowerCase()))
+    }
+    for (const tag of storylet.tags) {
+      if (contextTags.has(tag.toLowerCase())) score++
+    }
   }
-  return score
+  const specificity = Object.keys(storylet.requires).length
+  return score + specificity * 0.5
 }
 
 // Tiebreaker: stable per-state hash so re-selections within the same
