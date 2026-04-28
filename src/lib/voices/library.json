@@ -1,0 +1,177 @@
+{
+  "_meta": {
+    "source": "ElevenLabs /v1/shared-voices snapshot 2026-04",
+    "model": "eleven_flash_v2_5",
+    "note": "Voice IDs are public-shared and TTS-callable without /v1/voices/add. Re-snapshot if any voice 404s."
+  },
+  "voices": [
+    {
+      "voice_id": "0wg6fPA7PA9n5PKb8N2e",
+      "name": "Daniel",
+      "gender": "male",
+      "age": "middle",
+      "accent": "american",
+      "descriptives": ["deep", "calm", "confident", "smooth", "cinematic", "narrator"]
+    },
+    {
+      "voice_id": "gpJw2iHPjZwyTgFpIKpR",
+      "name": "Leoni Rutherford",
+      "gender": "male",
+      "age": "middle",
+      "accent": "american",
+      "descriptives": ["deep", "confident", "warm", "controlled"]
+    },
+    {
+      "voice_id": "iPVISCS3tpzBcZ6BbhWu",
+      "name": "Sovereign",
+      "gender": "male",
+      "age": "middle",
+      "accent": "american",
+      "descriptives": ["deep", "resonant", "bass", "dramatic", "dark"]
+    },
+    {
+      "voice_id": "ybjoxm7ASLDUFh2pC2eM",
+      "name": "Jasper Vayne",
+      "gender": "male",
+      "age": "middle",
+      "accent": "british",
+      "descriptives": ["deep", "resonant", "dramatic", "commanding"]
+    },
+    {
+      "voice_id": "6SMKBar4Q5wkVHdFlcQC",
+      "name": "Warwick",
+      "gender": "male",
+      "age": "middle",
+      "accent": "american",
+      "descriptives": ["deep", "professional", "conversational", "narrator"]
+    },
+    {
+      "voice_id": "5DB4wgykoKoCu98YaGe6",
+      "name": "Tyler Cash",
+      "gender": "male",
+      "age": "young",
+      "accent": "american",
+      "descriptives": ["expressive", "upbeat", "performative", "sitcom", "instructive"]
+    },
+    {
+      "voice_id": "wWWn96OtTHu1sn8SRGEr",
+      "name": "Hale",
+      "gender": "male",
+      "age": "young",
+      "accent": "american",
+      "descriptives": ["expressive", "deep", "emotive", "dynamic"]
+    },
+    {
+      "voice_id": "t0zbs0dMtCBfzjMlSnoF",
+      "name": "Richie",
+      "gender": "male",
+      "age": "young",
+      "accent": "american",
+      "descriptives": ["sarcastic", "charismatic", "upbeat", "energetic"]
+    },
+    {
+      "voice_id": "Zg15Et3nnFl0MqqzwK3w",
+      "name": "Hayden",
+      "gender": "male",
+      "age": "young",
+      "accent": "us-southern",
+      "descriptives": ["bold", "clear", "upbeat"]
+    },
+    {
+      "voice_id": "nqvoG2qlLhOhieQPdowv",
+      "name": "Caldwell",
+      "gender": "male",
+      "age": "young",
+      "accent": "american",
+      "descriptives": ["confident", "casual", "outbound"]
+    },
+    {
+      "voice_id": "1iNDh1muacMMMHXvS7Ym",
+      "name": "Skye",
+      "gender": "female",
+      "age": "young",
+      "accent": "american",
+      "descriptives": ["clear", "intelligent", "nerdy", "charming", "cute"]
+    },
+    {
+      "voice_id": "052jzHJceQiZr7ltnY0C",
+      "name": "Mia",
+      "gender": "female",
+      "age": "young",
+      "accent": "american",
+      "descriptives": ["expressive", "warm", "conversational", "lively", "crisp", "upbeat"]
+    },
+    {
+      "voice_id": "923WEeCmrgwe7BV8CGbA",
+      "name": "Ashley",
+      "gender": "female",
+      "age": "young",
+      "accent": "american",
+      "descriptives": ["vibrant", "youthful", "energetic", "casual", "miami"]
+    },
+    {
+      "voice_id": "h2UyvqlLHrQcn1Ds0ovM",
+      "name": "Seema",
+      "gender": "female",
+      "age": "young",
+      "accent": "american",
+      "descriptives": ["natural", "calm", "conversational"]
+    },
+    {
+      "voice_id": "HMsHSO9iPieho74ZXn8A",
+      "name": "Emma",
+      "gender": "female",
+      "age": "young",
+      "accent": "australian",
+      "descriptives": ["warm", "friendly", "soft", "calm"]
+    },
+    {
+      "voice_id": "YGWwh1G8pUwWmJyCCpma",
+      "name": "Blue",
+      "gender": "female",
+      "age": "old",
+      "accent": "canadian",
+      "descriptives": ["low", "calm", "authoritative", "confident", "gritty"]
+    },
+    {
+      "voice_id": "2qQJWjw5XdG80GreshqG",
+      "name": "Eleanor",
+      "gender": "female",
+      "age": "old",
+      "accent": "british",
+      "descriptives": ["refined", "seasoned", "calm", "gracious", "authoritative"]
+    },
+    {
+      "voice_id": "wGcFBfKz5yUQqhqr0mVy",
+      "name": "Maria Moody",
+      "gender": "female",
+      "age": "old",
+      "accent": "american",
+      "descriptives": ["calm", "warm", "patient", "grandmotherly", "storyteller"]
+    },
+    {
+      "voice_id": "5u41aNhyCU6hXOcjPPv0",
+      "name": "Carol",
+      "gender": "female",
+      "age": "old",
+      "accent": "american",
+      "descriptives": ["calm", "warm", "relatable", "smart", "real"]
+    },
+    {
+      "voice_id": "aAsWcN5jdLdiYG7Hq0YL",
+      "name": "Harriet",
+      "gender": "female",
+      "age": "old",
+      "accent": "british",
+      "descriptives": ["mature", "refined", "educated", "bossy"]
+    },
+    {
+      "voice_id": "YHcCpa6SBWnKDaCPZJQR",
+      "name": "Mora",
+      "gender": "female",
+      "age": "old",
+      "accent": "american",
+      "descriptives": ["raspy", "weathered", "gritty", "textured", "enigmatic"]
+    }
+  ]
+}
