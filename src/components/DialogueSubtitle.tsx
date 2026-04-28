@@ -59,6 +59,10 @@ export default function DialogueSubtitle({
   useEffect(() => {
     if (animPhase !== "in") return;
     if (audioDriving) return;
+    // While audio is still loading/buffering, hold all words hidden so
+    // we don't race ahead of the speech. Audio's onPlaying will flip
+    // audioStarted and let the audio-driven path take over.
+    if (audioPending && !audioStarted && !audioEnded) return;
     if (visibleCount >= words.length) {
       // All words shown via fixed cadence. If audio is still expected,
       // wait for the audio.ended path to trigger fade. Otherwise hold
@@ -78,6 +82,7 @@ export default function DialogueSubtitle({
     animPhase,
     audioDriving,
     audioPending,
+    audioStarted,
     audioEnded,
   ]);
 
