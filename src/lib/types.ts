@@ -1,5 +1,5 @@
 import type { RolledCameo, ToneId } from './cameos/types'
-import type { StoryletState } from './storylets/types'
+import type { StoryletKind, StoryletState } from './storylets/types'
 
 export type Archetype = 'vc' | 'cofounder' | 'reporter' | 'hater' | 'mentor'
 
@@ -47,6 +47,11 @@ export interface SceneOutline {
   beat: string
   // Sonnet sometimes emits explicit null. Readers must short-circuit on falsy.
   hingesOn?: string | null
+  /** Optional: when the storylet behind this scene is a "solo" or
+   *  "world-event" kind, the scene renders as narrator-led (no NPC of
+   *  this archetype actually speaks). Defaults to "encounter" when
+   *  missing — preserves old skeleton behavior. */
+  kind?: StoryletKind
 }
 
 // One episode = one /api/generate-arc call. Episodes are regenerated as the

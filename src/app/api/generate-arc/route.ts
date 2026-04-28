@@ -371,7 +371,19 @@ export async function POST(request: Request) {
             emittedCount++
             const parsed = sceneOutlineSchema.safeParse(result.value)
             if (parsed.success) {
-              send('scene', { outline: parsed.data })
+              // Engine is authoritative for archetype + kind. Override the
+              // LLM's emitted values with the chosen storylet's truth so a
+              // hallucinated archetype or a missing `kind` field can't
+              // leak downstream and cause the wrong rendering mode.
+              const chosen = chosenStorylets[parsed.data.index]
+              const enriched = chosen
+                ? {
+                    ...parsed.data,
+                    archetype: chosen.archetype,
+                    kind: chosen.kind ?? 'encounter',
+                  }
+                : parsed.data
+              send('scene', { outline: enriched })
             } else {
               // Don't fail the stream — the final whole-arc validation will
               // catch it and we'll fall back. Until then, keep streaming.
@@ -394,6 +406,15 @@ export async function POST(request: Request) {
         })
 
         const skeleton = parseFromRaw(raw, episodeIndex)
+        // Engine-authoritative pass: overwrite each scene's archetype +
+        // kind with the chosen storylet's truth. The LLM is good at
+        // beats and prose; we don't trust it with structural metadata.
+        skeleton.scenes = skeleton.scenes.map((s) => {
+          const chosen = chosenStorylets[s.index]
+          return chosen
+            ? { ...s, archetype: chosen.archetype, kind: chosen.kind ?? 'encounter' }
+            : s
+        })
         send('done', {
           skeleton,
           source: 'llm' as const,
