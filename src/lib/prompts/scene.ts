@@ -1,6 +1,7 @@
 import { ARCHETYPES } from '../archetypes'
 import type { ArcSkeleton, SceneOutline } from '../types'
 import { MAX_DIALOGUE_CHARS_PER_SCENE } from '../schemas/scene'
+import type { ToneSpec } from '../cameos/types'
 
 export interface PriorChoiceSummary {
   sceneId: number
@@ -31,6 +32,8 @@ export interface BuildScenePromptInput {
   flavorTags: string[]
   recentChoices: PriorChoiceSummary[] // only the last few; older context lives in storySoFar
   currentStats: { hype: number; integrity: number }
+  /** Per-run tone (rolled at run-start, stable across all scenes). */
+  tone?: ToneSpec
 }
 
 const SCENE_SYSTEM_RULES = `You are the per-scene engine for "Road to SF", a satirical comic-book founder game running in ENDLESS MODE. You produce ONE scene at a time, given the current episode's arc skeleton, a rolling story-so-far summary, and the player's recent choices.
@@ -174,7 +177,7 @@ ${
     : ''
 }`
 
-  const liveBlock = `## RECENT CHOICES (last few only)
+  const liveBlock = `${input.tone ? `${input.tone.oneLiner}\n\n` : ''}## RECENT CHOICES (last few only)
 ${formatRecentChoices(input.recentChoices)}
 
 Current stats — hype ${input.currentStats.hype}, integrity ${input.currentStats.integrity}.
