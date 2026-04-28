@@ -722,11 +722,15 @@ export default function HomePage() {
     const epi = skeleton.episodeIndex;
     if (epi !== 0) return; // regen path uses its own effect below
     if (firstSceneFiredRef.current === epi) return;
+    const globalLLMIndex = epi * EPISODE_LENGTH; // first scene of this episode
+    // Skip when the scene is already populated (rehydrated session).
+    // Without this, refresh re-fires generate-scene and dynamicSceneReady
+    // overwrites the dialogue mid-play.
+    const stored = arc?.scenes[globalLLMIndex];
+    if (stored && stored.dialogue.length > 0) return;
     const inCinematic = phase === "generating-arc";
     if (!inCinematic && creditsRemaining < 1) return;
     firstSceneFiredRef.current = epi;
-
-    const globalLLMIndex = epi * EPISODE_LENGTH; // first scene of this episode
 
     postWithTimeout<SceneGenResponse>(
       "/api/generate-scene",
