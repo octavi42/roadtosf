@@ -97,13 +97,20 @@ OUTPUT SHAPE:
       "index": 0..4,                              // index within this episode (matches chosen storylet order)
       "archetype": "vc"|"cofounder"|"reporter"|"hater"|"mentor",  // copy from chosen storylet
       "beat": string (≤220 chars, the rendered/personalized version of the chosen storylet's beat),
-      "hingesOn": string (optional, names the prior choice this scene exploits)
+      "hingesOn": string (optional, names the prior choice this scene exploits),
+      "kind": "encounter"|"solo"|"world-event"     // copy from chosen storylet's KIND note above
     }
   ],
   "storySoFar": string (REQUIRED for episodeIndex >= 1; 200 words max compressing
                         EVERYTHING that happened in prior episodes, in present-tense,
                         named-choice prose. Omit for episodeIndex 0.)
 }
+
+SOLO + WORLD-EVENT SCENE RENDERING (when KIND is not "encounter"):
+- The rendered "beat" must NOT describe an NPC of the assigned archetype walking in and speaking. Instead it describes a moment, an event, or an action — the archetype is a thematic anchor only (used for image flavor downstream).
+- For "solo" beats: focus on the player's interior experience or solo action. Example shape: "You sit on a bench in [place] at [time]. The [city detail]. You're [internal state]." No "X says…" anywhere in the beat.
+- For "world-event" beats: focus on what changed in the world. Example shape: "[Time]. [Event]. [Visible consequence]. [What this means for the player]." May reference an NPC indirectly ("a competitor's launch post hits #1") but no NPC speaks.
+- These beats CAN absolutely be the most cinematic moments in the episode. Resist the reflex to add a "and then someone called you" handoff.
 
 Constraints by episode:
 - episodeIndex = 0: "recentChoices" comes from the player's authored onboarding scenes. No priorStorySoFar.
@@ -146,10 +153,18 @@ function formatRecentChoices(choices: PriorChoiceSummary[]): string {
 
 function formatChosenStorylets(storylets: Storylet[]): string {
   return storylets
-    .map(
-      (s, i) =>
-        `Scene ${i} — archetype: ${s.archetype} — storylet "${s.id}"\n  Source beat (render this faithfully, with player-specific texture): ${s.beat}`,
-    )
+    .map((s, i) => {
+      const kind = s.kind ?? 'encounter'
+      const kindNote =
+        kind === 'solo'
+          ? '  KIND: solo — narrator + player only, NO NPC of this archetype speaks. Render as a moment of solitude/reflection/action with the archetype as thematic flavor for image only.'
+          : kind === 'world-event'
+            ? '  KIND: world-event — something HAPPENS in the world the player reacts to. Narrator-led; an NPC may be referenced but does not appear as a speaking character. Archetype is thematic flavor for image only.'
+            : '  KIND: encounter — the assigned archetype shows up and speaks. Standard scene.'
+      return `Scene ${i} — archetype: ${s.archetype} — storylet "${s.id}"
+${kindNote}
+  Source beat (render this faithfully, with player-specific texture): ${s.beat}`
+    })
     .join('\n')
 }
 
