@@ -5,6 +5,7 @@ import {
   type ParsedArcSkeleton,
 } from '@/lib/schemas/arc'
 import { buildArcPromptParts, type PriorChoiceSummary } from '@/lib/prompts/arc'
+import { selectFlavorPool } from '@/lib/silicon-mania/select'
 import fallbackArc from '@/lib/fallback/arc.json'
 
 type Body = {
@@ -155,6 +156,11 @@ export async function POST(request: Request) {
   const episodeIndex = asInt(body.episodeIndex, 0)
   const priorStorySoFar = asString(body.priorStorySoFar, '') || undefined
   const recentChoices = asPriorChoices(body.recentChoices ?? body.priorChoices)
+  const flavorTags = asStringArray(body.flavorTags)
+
+  // Pull real-world SF news for this week. selectFlavorPool swallows DB
+  // errors and returns [] — the arc-gen prompt then runs unmodified.
+  const siliconManiaItems = await selectFlavorPool(flavorTags, 4)
 
   const promptInput = {
     episodeIndex,
@@ -167,7 +173,7 @@ export async function POST(request: Request) {
     fundingModel: asString(body.fundingModel, '') || undefined,
     targetCustomer: asString(body.targetCustomer, '') || undefined,
     concern: asString(body.concern, '') || undefined,
-    flavorTags: asStringArray(body.flavorTags),
+    flavorTags,
     recentChoices,
     currentStats: {
       hype: asInt((body.currentStats as Record<string, unknown> | undefined)?.hype, 0),
@@ -178,6 +184,7 @@ export async function POST(request: Request) {
     },
     seed: asString(body.seed, '') || undefined,
     todayISO: todayISO(),
+    siliconManiaItems,
   }
 
   const { systemBlocks, userBlocks } = buildArcPromptParts(promptInput)
