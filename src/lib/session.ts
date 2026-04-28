@@ -24,6 +24,14 @@ export type Phase =
  * per group). Run ends when the player picks "End my run" or via reset.
  */
 export const AUTHORED_SCENE_COUNT = 8;
+/**
+ * First sceneIndex at which all QA-driven player facts (team, fundingModel,
+ * stage, targetCustomer, concern) are guaranteed captured. Arc-gen and
+ * scene-gen must not fire before this — Sonnet would otherwise see a
+ * half-populated facts block and invent contradictions (the Maya bleed).
+ * QA lives at sceneIndex 3, so 4 is the first scene safe for LLM kickoff.
+ */
+export const POST_QA_SCENE_INDEX = 4;
 /** Sub-scenes per archetype encounter; one image per group of this size. */
 export const SCENES_PER_GROUP = 4;
 /** Archetype outlines per arc skeleton (one per group within an episode). */
