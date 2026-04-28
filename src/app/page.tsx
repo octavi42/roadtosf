@@ -22,8 +22,10 @@ import type {
   ArcSkeleton,
   EndingKey,
   Scene as LLMScene,
+  SceneOutline,
   ShareMoment,
 } from "@/lib/types";
+import { streamArc } from "@/lib/streamArc";
 import type {
   IntroData,
   MissingQuestion,
@@ -196,11 +198,6 @@ function buildScene4ForExtraction(
 const ARC_GEN_TIMEOUT_MS = 45000;
 const SCENE_GEN_TIMEOUT_MS = 30000;
 
-interface ArcGenResponse {
-  skeleton: ArcSkeleton;
-  source: "llm" | "fallback";
-}
-
 interface SceneGenResponse {
   scene: LLMScene;
   source: "llm" | "fallback";
@@ -218,6 +215,37 @@ class PaywallRequiredError extends Error {
     super("paywall_required");
     this.name = "PaywallRequiredError";
   }
+}
+
+// Synthesizes a placeholder skeleton from a single arriving scene outline so
+// the `generating-arc` effect can fire group 0's leader scene-gen while the
+// rest of the arc is still streaming. The scene prompt filters out outlines
+// whose beat === "__pending" so the partial only leaks scene 0's beat into
+// that first call. Replaced by the full skeleton on the stream's `done`
+// event.
+const PARTIAL_BEAT_MARKER = "__pending";
+const PARTIAL_PREMISE = "Pending — outline streaming.";
+
+function makePartialArcSkeleton(
+  episodeIndex: number,
+  firstOutline: SceneOutline,
+): ArcSkeleton {
+  return {
+    episodeIndex,
+    premise: PARTIAL_PREMISE,
+    scenes: [
+      firstOutline,
+      ...Array.from({ length: 4 }, (_, i) => ({
+        index: i + 1,
+        archetype: "cofounder" as const,
+        beat: PARTIAL_BEAT_MARKER,
+      })),
+    ],
+  };
+}
+
+function isPartialArcSkeleton(skeleton: ArcSkeleton): boolean {
+  return skeleton.scenes.some((s) => s.beat === PARTIAL_BEAT_MARKER);
 }
 
 async function postWithTimeout<T>(
@@ -617,13 +645,20 @@ export default function HomePage() {
     if (!extractionResolved && !noPitchSubmitted) return;
     arcGenFiredRef.current.add(0);
 
-    postWithTimeout<ArcGenResponse>(
-      "/api/generate-arc",
-      buildArcRequestBody(0),
-      ARC_GEN_TIMEOUT_MS,
-    )
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), ARC_GEN_TIMEOUT_MS);
+    streamArc(buildArcRequestBody(0), {
+      signal: controller.signal,
+      onScene: (outline) => {
+        // Fire scene-gen for group 0's leader the moment scene[0] beat
+        // arrives — the rest of the arc finishes streaming in parallel.
+        if (outline.index !== 0) return;
+        arcSkeletonReady(makePartialArcSkeleton(0, outline));
+      },
+    })
       .then((data) => arcSkeletonReady(data.skeleton))
-      .catch((err) => console.error("generate-arc[0] failed", err));
+      .catch((err) => console.error("generate-arc[0] failed", err))
+      .finally(() => clearTimeout(timeoutId));
   }, [
     phase,
     sceneIndex,
@@ -852,6 +887,9 @@ export default function HomePage() {
     if (!arc) return;
     const skeleton = arc.arcSkeleton;
     if (!skeleton) return;
+    // Skip the streaming-partial skeleton — wait for the full one so we
+    // don't PATCH placeholder beats into the playthrough row.
+    if (isPartialArcSkeleton(skeleton)) return;
     if (arcPersistedRef.current === skeleton.episodeIndex) return;
     arcPersistedRef.current = skeleton.episodeIndex;
 
@@ -960,13 +998,18 @@ export default function HomePage() {
     if (arcGenFiredRef.current.has(nextEpisode)) return;
     arcGenFiredRef.current.add(nextEpisode);
 
-    postWithTimeout<ArcGenResponse>(
-      "/api/generate-arc",
-      buildArcRequestBody(nextEpisode),
-      ARC_GEN_TIMEOUT_MS,
-    )
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), ARC_GEN_TIMEOUT_MS);
+    streamArc(buildArcRequestBody(nextEpisode), {
+      signal: controller.signal,
+      onScene: (outline) => {
+        if (outline.index !== 0) return;
+        arcSkeletonReady(makePartialArcSkeleton(nextEpisode, outline));
+      },
+    })
       .then((data) => arcSkeletonReady(data.skeleton))
-      .catch((err) => console.error(`generate-arc[${nextEpisode}] failed`, err));
+      .catch((err) => console.error(`generate-arc[${nextEpisode}] failed`, err))
+      .finally(() => clearTimeout(timeoutId));
   }, [phase, sceneIndex, arc?.arcSkeleton, buildArcRequestBody, arcSkeletonReady]);
 
   // After regen: when the new skeleton lands AND we're still in 'scene' phase

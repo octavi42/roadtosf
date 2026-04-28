@@ -1,6 +1,9 @@
-import { NextResponse } from 'next/server'
-import { completeJson, arcModel, extractJsonObject } from '@/lib/anthropic'
-import { arcSkeletonSchema, type ParsedArcSkeleton } from '@/lib/schemas/arc'
+import { streamJsonText, arcModel, extractJsonObject } from '@/lib/anthropic'
+import {
+  arcSkeletonSchema,
+  sceneOutlineSchema,
+  type ParsedArcSkeleton,
+} from '@/lib/schemas/arc'
 import { buildArcPromptParts, type PriorChoiceSummary } from '@/lib/prompts/arc'
 import fallbackArc from '@/lib/fallback/arc.json'
 
@@ -57,7 +60,7 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-function parseFromRaw(raw: string): ParsedArcSkeleton {
+function parseFromRaw(raw: string, episodeIndex: number): ParsedArcSkeleton {
   let json: unknown
   try {
     json = extractJsonObject(raw)
@@ -74,7 +77,68 @@ function parseFromRaw(raw: string): ParsedArcSkeleton {
     console.warn('[generate-arc] payload was:', JSON.stringify(json).slice(0, 800))
     throw result.error
   }
-  return result.data
+  // Backfill episodeIndex from request if the model omitted it.
+  return { ...result.data, episodeIndex: result.data.episodeIndex ?? episodeIndex }
+}
+
+// Locates `"scenes" : [` in the streamed text and returns the index *after*
+// the opening bracket. Returns -1 if not yet present.
+function findScenesArrayStart(text: string): number {
+  const m = text.match(/"scenes"\s*:\s*\[/)
+  if (!m || m.index === undefined) return -1
+  return m.index + m[0].length
+}
+
+// Walks `s` from `start`, skipping commas/whitespace, and returns the next
+// complete `{...}` object as parsed JSON plus the index just past it.
+// Returns null if there is no complete object yet (still streaming) or if
+// the array is closing (next non-ws char is `]`).
+function nextCompleteObject(
+  s: string,
+  start: number,
+): { value: unknown; end: number } | null {
+  let i = start
+  while (i < s.length && (s[i] === ',' || /\s/.test(s[i]!))) i++
+  if (i >= s.length) return null
+  if (s[i] === ']') return null
+  if (s[i] !== '{') return null
+
+  let depth = 0
+  let inString = false
+  let escape = false
+  for (let j = i; j < s.length; j++) {
+    const c = s[j]
+    if (escape) {
+      escape = false
+      continue
+    }
+    if (inString) {
+      if (c === '\\') escape = true
+      else if (c === '"') inString = false
+      continue
+    }
+    if (c === '"') {
+      inString = true
+      continue
+    }
+    if (c === '{') depth++
+    else if (c === '}') {
+      depth--
+      if (depth === 0) {
+        const slice = s.slice(i, j + 1)
+        try {
+          return { value: JSON.parse(slice), end: j + 1 }
+        } catch {
+          return null
+        }
+      }
+    }
+  }
+  return null
+}
+
+function sseEvent(name: string, data: unknown): string {
+  return `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`
 }
 
 export async function POST(request: Request) {
@@ -82,7 +146,10 @@ export async function POST(request: Request) {
   try {
     body = (await request.json()) as Body
   } catch {
-    return NextResponse.json({ error: 'invalid json body' }, { status: 400 })
+    return new Response(JSON.stringify({ error: 'invalid json body' }), {
+      status: 400,
+      headers: { 'content-type': 'application/json' },
+    })
   }
 
   const episodeIndex = asInt(body.episodeIndex, 0)
@@ -115,20 +182,87 @@ export async function POST(request: Request) {
 
   const { systemBlocks, userBlocks } = buildArcPromptParts(promptInput)
 
-  try {
-    if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY missing')
-    const skeleton = await completeJson(
-      { model: arcModel(), systemBlocks, userBlocks, maxTokens: 1500, temperature: 0.85 },
-      parseFromRaw,
-    )
-    // The model may omit episodeIndex; backfill from request so the client can trust it.
-    return NextResponse.json({
-      skeleton: { ...skeleton, episodeIndex: skeleton.episodeIndex ?? episodeIndex },
-      source: 'llm' as const,
-    })
-  } catch (err) {
-    console.warn('generate-arc: LLM path failed, returning fallback', err)
-    const parsed = arcSkeletonSchema.parse({ ...fallbackArc, episodeIndex })
-    return NextResponse.json({ skeleton: parsed, source: 'fallback' as const })
-  }
+  const encoder = new TextEncoder()
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (name: string, data: unknown) => {
+        controller.enqueue(encoder.encode(sseEvent(name, data)))
+      }
+
+      const sendFallback = () => {
+        const parsed = arcSkeletonSchema.parse({ ...fallbackArc, episodeIndex })
+        // Replay fallback scenes as `scene` events so the client treats this
+        // path identically to a successful stream.
+        for (const outline of parsed.scenes) {
+          send('scene', { outline })
+        }
+        send('done', { skeleton: parsed, source: 'fallback' as const })
+      }
+
+      try {
+        if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY missing')
+
+        let scenesStart = -1
+        let nextSearchPos = 0
+        let emittedCount = 0
+
+        const tryEmitScenes = (full: string) => {
+          if (scenesStart === -1) {
+            scenesStart = findScenesArrayStart(full)
+            if (scenesStart === -1) return
+            nextSearchPos = scenesStart
+          }
+          while (emittedCount < 5) {
+            const result = nextCompleteObject(full, nextSearchPos)
+            if (!result) break
+            nextSearchPos = result.end
+            emittedCount++
+            const parsed = sceneOutlineSchema.safeParse(result.value)
+            if (parsed.success) {
+              send('scene', { outline: parsed.data })
+            } else {
+              // Don't fail the stream — the final whole-arc validation will
+              // catch it and we'll fall back. Until then, keep streaming.
+              console.warn(
+                '[generate-arc] streaming outline failed schema; skipping mid-stream',
+                parsed.error.issues,
+              )
+            }
+          }
+        }
+
+        const raw = await streamJsonText({
+          model: arcModel(),
+          systemBlocks,
+          userBlocks,
+          maxTokens: 1500,
+          temperature: 0.85,
+          onText: (_delta, full) => tryEmitScenes(full),
+          signal: request.signal,
+        })
+
+        const skeleton = parseFromRaw(raw, episodeIndex)
+        send('done', { skeleton, source: 'llm' as const })
+      } catch (err) {
+        console.warn('generate-arc: stream path failed, sending fallback', err)
+        try {
+          sendFallback()
+        } catch (fallbackErr) {
+          console.error('generate-arc: fallback send failed', fallbackErr)
+          send('error', { message: 'arc-gen failed and fallback unavailable' })
+        }
+      } finally {
+        controller.close()
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': 'no-cache, no-transform',
+      'x-accel-buffering': 'no',
+    },
+  })
 }
