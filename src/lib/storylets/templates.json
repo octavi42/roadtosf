@@ -5,6 +5,7 @@
     "tier": "early",
     "requires": {},
     "beat": "A junior partner at a no-name fund slides into your DMs after seeing your post; the 'meeting' is a 20-minute coffee at Blue Bottle and they keep checking their phone.",
+    "summary": "A junior associate at a no-name fund is cold-pitching you at a coffee shop.",
     "effects": { "vcEncounter": true },
     "tags": ["vc", "fundraising", "early"]
   },
@@ -14,6 +15,7 @@
     "tier": "mid",
     "requires": { "cameo": "peter-thiel" },
     "beat": "Peter Thiel slides a contrarian term sheet across the bar at Rosewood Sand Hill: no board seat, conditional on you saying something publicly heretical about your industry.",
+    "summary": "Peter Thiel is offering you a contrarian term sheet at the Rosewood Sand Hill bar.",
     "effects": { "vcEncounter": true, "metContrarianMoney": true },
     "tags": ["vc", "fundraising", "peter-thiel", "thiel", "contrarian"],
     "cooldownEpisodes": 6
@@ -24,6 +26,7 @@
     "tier": "mid",
     "requires": { "cameo": "marc-andreessen", "flavorTag": "ai" },
     "beat": "Marc Andreessen pulls you aside at an a16z dinner and quotes his own essay at you, then sketches a $20M Series A on a napkin if you reframe the company as 'AI-native' on the spot.",
+    "summary": "Marc Andreessen offered $20M for an AI-native rebrand at an a16z dinner.",
     "effects": { "vcEncounter": true, "metHypeMoney": true },
     "tags": ["vc", "fundraising", "marc-andreessen", "marc", "hype", "ai"],
     "cooldownEpisodes": 6
@@ -34,6 +37,7 @@
     "tier": "mid",
     "requires": { "flagSet": "vcEncounter", "integrityGte": 2 },
     "beat": "The associate who pursued you last week emails: the partnership passed. The kicker is the 'feedback' — copy-pasted from your own pitch deck. You can call them out or write a polite reply.",
+    "summary": "A VC who pursued you just sent a pass email with feedback copy-pasted from your own pitch deck.",
     "effects": { "wasGhostedByVC": true },
     "tags": ["vc", "rejection", "integrity"]
   },
@@ -43,6 +47,7 @@
     "tier": "early",
     "requires": { "funding": "bootstrapping" },
     "beat": "A VC you didn't ask for cold-emails you anyway, framing 'we love bootstrappers' until the call where they pitch you on raising. They mention three competitors who took their money.",
+    "summary": "A VC cold-emailed you under a 'we love bootstrappers' frame and is now pitching you on raising.",
     "effects": { "vcEncounter": true },
     "tags": ["vc", "bootstrapping", "cold-email"]
   },
@@ -52,6 +57,7 @@
     "tier": "early",
     "requires": {},
     "beat": "A founder you barely know corners you at a YC dinner and pitches themselves as your missing cofounder, complete with a slide deck about you they made on the BART ride over.",
+    "summary": "A founder you barely know is pitching themselves as your cofounder at a YC dinner.",
     "effects": { "cofounderEncounter": true },
     "tags": ["cofounder", "early", "stranger"]
   },
@@ -61,6 +67,7 @@
     "tier": "mid",
     "requires": { "team": "named", "flagNotSet": "firedCofounder" },
     "beat": "Your cofounder calls a 1:1 at the office on a Sunday. They've been talking to a recruiter. They want to know if you'd 'still be friends' if they took the offer.",
+    "summary": "Your cofounder is sitting across from you saying they've been talking to a recruiter.",
     "effects": { "cofounderTension": true },
     "tags": ["cofounder", "tension", "named-team"]
   },
@@ -70,6 +77,7 @@
     "tier": "late",
     "requires": { "team": "named", "integrityLte": -2 },
     "beat": "Your cofounder forwards you a Discord screenshot. It's you, six weeks ago, planning to dilute their equity. They want an answer before the 4pm board call.",
+    "summary": "Your cofounder has caught you planning to dilute their equity. They want an answer before the board call.",
     "effects": { "cofounderTension": true, "cofounderKnows": true },
     "tags": ["cofounder", "betrayal", "late"],
     "cooldownEpisodes": 8
@@ -81,6 +89,7 @@
     "tier": "early",
     "requires": { "team": "solo" },
     "beat": "7am, your kitchen, half a mug of cold brew. The email from an old YC batchmate has been open on your laptop for an hour — they want to be your cofounder. You re-read it three times looking for the catch. The room is very quiet.",
+    "summary": "An old YC batchmate emailed asking to cofound your startup. You're alone with the decision.",
     "effects": { "cofounderEncounter": true, "hadSoloMoment": true },
     "tags": ["solo", "cofounder", "yc", "morning"]
   },
@@ -90,6 +99,7 @@
     "tier": "early",
     "requires": {},
     "beat": "A staff writer at a mid-tier newsletter wants 'just 15 minutes for a backgrounder.' Their first question — 'so, no real moat, right?' — lands like a knife through butter.",
+    "summary": "A newsletter writer is doing a 'backgrounder' on you and just asked about your moat.",
     "effects": { "pressEncounter": true },
     "tags": ["reporter", "press", "early"]
   },
@@ -99,6 +109,7 @@
     "tier": "mid",
     "requires": { "integrityLte": -2 },
     "beat": "A reporter has receipts: three Slack screenshots from someone you fired, your old pitch deck claiming numbers you didn't have, and a quote from an investor you ghosted. Story drops Friday.",
+    "summary": "A reporter has damaging receipts on you. The story drops Friday.",
     "effects": { "pressEncounter": true, "facingPressCrisis": true },
     "tags": ["reporter", "hit-piece", "scandal"],
     "cooldownEpisodes": 4
@@ -109,6 +120,7 @@
     "tier": "mid",
     "requires": { "hypeGte": 3 },
     "beat": "A glossy magazine wants to put you on the cover. The interviewer is reverent. Their angle: 'the next Stripe.' You can lean in or correct the record.",
+    "summary": "A glossy magazine wants you on the cover, framed as 'the next Stripe.'",
     "effects": { "pressEncounter": true, "wasOnCover": true },
     "tags": ["reporter", "fluff", "hype"]
   },
@@ -118,6 +130,7 @@
     "tier": "mid",
     "requires": {},
     "beat": "A second-tier Twitter account quote-tweets your launch with three crying-laughing emojis. The thread is now 200 replies deep. Two of them are from people you respect.",
+    "summary": "A Twitter dunk on your launch is going viral; people you respect are quote-tweeting.",
     "effects": { "twitterDunked": true },
     "tags": ["hater", "twitter", "dunk"]
   },
@@ -127,6 +140,7 @@
     "tier": "mid",
     "requires": { "cameo": "sahil-lavingia", "funding": "bootstrapping" },
     "beat": "Sahil Lavingia sub-tweets you specifically: 'another bootstrapper who'll fold by Q4.' His thread already has 800 likes. Your DMs are a graveyard of 'you good?' messages.",
+    "summary": "Sahil Lavingia just sub-tweeted you with a 'bootstrapper who'll fold by Q4' jab.",
     "effects": { "twitterDunked": true },
     "tags": ["hater", "twitter", "sahil-lavingia", "sahil", "bootstrapping"],
     "cooldownEpisodes": 6
@@ -137,6 +151,7 @@
     "tier": "early",
     "requires": {},
     "beat": "A second-time founder offers to grab coffee. They spend twelve minutes telling you about their company, three minutes asking about yours, and end with 'happy to help, just ping me.'",
+    "summary": "A second-time founder is giving you lukewarm advice over coffee.",
     "effects": { "mentorEncounter": true },
     "tags": ["mentor", "early", "lukewarm"]
   },
@@ -146,6 +161,7 @@
     "tier": "mid",
     "requires": { "cameo": "paul-graham" },
     "beat": "Paul Graham emails you a four-line response. It's a link to one of his old essays and the words 'this one.' The essay is twelve years old and exactly about what you're doing wrong.",
+    "summary": "Paul Graham emailed you a link to one of his old essays — exactly about what you're doing wrong.",
     "effects": { "mentorEncounter": true, "wasEssayed": true },
     "tags": ["mentor", "paul-graham", "pg", "essays", "yc"],
     "cooldownEpisodes": 6
@@ -156,6 +172,7 @@
     "tier": "mid",
     "requires": { "cameo": "sam-altman", "hypeGte": 3 },
     "beat": "Sam Altman replies to your DM in 90 seconds. 'Interesting. Send me a deck.' That's it. Three words, three hours, and your inbox lights up with seventeen new investor cold-emails.",
+    "summary": "Sam Altman just DMed 'Interesting. Send me a deck.' in 90 seconds.",
     "effects": { "mentorEncounter": true, "altmanNoticed": true },
     "tags": ["mentor", "sam-altman", "altman", "blessing", "ai"],
     "cooldownEpisodes": 8
@@ -166,6 +183,7 @@
     "tier": "late",
     "requires": { "hypeGte": 2, "integrityLte": 0 },
     "beat": "A mentor you trust takes you to the back of Tartine and tells you, calmly, that you're becoming someone they wouldn't introduce to their friends. They mean it kindly. It still hits.",
+    "summary": "A mentor you trust just told you you're becoming someone they wouldn't introduce to their friends.",
     "effects": { "mentorEncounter": true, "wasCalledOut": true },
     "tags": ["mentor", "late", "gut-punch", "integrity"]
   },
@@ -176,6 +194,7 @@
     "tier": "mid",
     "requires": { "hypeLte": 0 },
     "beat": "3am. Dolores Park is empty except for raccoons and the city humming below. You're on the cracked bench by the J-line tracks, laptop open to a deck you haven't touched in two hours, asking yourself the question you've been postponing.",
+    "summary": "3am at Dolores Park, alone with a deck and a question you've been postponing.",
     "effects": { "hadSoloMoment": true },
     "tags": ["solo", "reflection", "mentor", "late-night"]
   },
@@ -186,6 +205,7 @@
     "tier": "mid",
     "requires": { "integrityLte": -1 },
     "beat": "Caltrain to Mountain View, 4:35pm, half-empty car. The hills past Burlingame roll by. Your phone hasn't pinged in 47 minutes and you realize you can't remember the last time it was that quiet.",
+    "summary": "On a half-empty Caltrain to Mountain View. Your phone has gone quiet.",
     "effects": { "hadSoloMoment": true },
     "tags": ["solo", "reflection", "hater", "transit"]
   },
@@ -196,6 +216,7 @@
     "tier": "early",
     "requires": {},
     "beat": "Sunday, 11am. You meant to write code. Instead you've refreshed Twitter for forty minutes — there's a thread about your space and you're 30 quote-tweets deep on someone you don't know.",
+    "summary": "Sunday morning, deep in a Twitter quote-tweet spiral about your space.",
     "effects": { "hadSoloMoment": true, "sundaySpiraled": true },
     "tags": ["solo", "twitter", "hater", "distraction"]
   },
@@ -206,6 +227,7 @@
     "tier": "mid",
     "requires": { "hypeGte": 1 },
     "beat": "4:13am. Sentry alert. The scaling bug from beta is back, hitting paying customers now. The office is empty. Your coffee went cold three hours ago. Your laptop is the only light on the floor.",
+    "summary": "4am alone at the office. Production scaling bug is hitting paying customers right now.",
     "effects": { "hadSoloMoment": true, "productionFire": true },
     "tags": ["solo", "bug", "cofounder", "late-night"]
   },
@@ -216,6 +238,7 @@
     "tier": "mid",
     "requires": { "hypeGte": 1 },
     "beat": "Tuesday morning. Product Hunt #1 is a startup that does what you do — but with an AI agent layer you weren't planning. Their landing page reads like someone with $4M in the bank wrote it.",
+    "summary": "A competing startup just launched on Product Hunt #1 with what looks like $4M in funding.",
     "effects": { "worldChanged": true, "competitorLaunched": true },
     "tags": ["world-event", "hater", "launch", "competitor"]
   },
@@ -226,6 +249,7 @@
     "tier": "mid",
     "requires": { "hypeGte": 2 },
     "beat": "X locks your account at 2:14pm. The notice is one paragraph and three appeal links. Yesterday's 12k-impression mentions tab is a 404. The DMs you needed for tomorrow's call are gone.",
+    "summary": "X just locked your account. Mentions, DMs — gone.",
     "effects": { "worldChanged": true, "xAccountLocked": true },
     "tags": ["world-event", "reporter", "platform", "incident"]
   },
@@ -236,6 +260,7 @@
     "tier": "mid",
     "requires": { "hypeGte": 3 },
     "beat": "You wake to 14,318 unread notifications. The one-line tweet from 11pm — the one ending in 'unhinged take' — is at 2.3M impressions. Three reporters and two recruiters have DMed 'are you free?'",
+    "summary": "Last night's tweet went viral. 14k notifications, 2.3M impressions, reporters in your DMs.",
     "effects": { "worldChanged": true, "wentViral": true },
     "tags": ["world-event", "reporter", "viral", "hype"]
   },
@@ -246,6 +271,7 @@
     "tier": "early",
     "requires": { "flavorTag": "yc" },
     "beat": "9:14pm Friday. The W26 application closes at 11:59. You haven't submitted. You opened the form last week and saved a draft that says 'we're building…' and trailed off.",
+    "summary": "The YC W26 application closes in under three hours. Your draft is unfinished.",
     "effects": { "worldChanged": true, "ycDeadlineFaced": true },
     "tags": ["world-event", "mentor", "yc", "deadline"]
   }

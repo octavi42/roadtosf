@@ -52,6 +52,12 @@ export interface SceneOutline {
    *  this archetype actually speaks). Defaults to "encounter" when
    *  missing — preserves old skeleton behavior. */
   kind?: StoryletKind
+  /** Short scenario summary (~140 chars max) — the SKELETON for sub
+   *  1-3 of this group. Sub 0 uses the verbose `beat`; sub 1-3 use
+   *  this summary as the only anchor so they generate on-the-fly per
+   *  choice but stay within the same conversation. Set server-side
+   *  by /api/generate-arc from the chosen storylet's `summary` field. */
+  summary?: string | null
 }
 
 // One episode = one /api/generate-arc call. Episodes are regenerated as the

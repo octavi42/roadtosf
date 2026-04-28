@@ -348,7 +348,7 @@ export async function POST(request: Request) {
         parsed.scenes = parsed.scenes.map((s) => {
           const chosen = chosenStorylets[s.index]
           return chosen
-            ? { ...s, archetype: chosen.archetype, kind: chosen.kind ?? 'encounter' }
+            ? { ...s, archetype: chosen.archetype, kind: chosen.kind ?? 'encounter', summary: chosen.summary }
             : s
         })
         // Replay fallback scenes as `scene` events so the client treats this
@@ -395,6 +395,7 @@ export async function POST(request: Request) {
                     ...parsed.data,
                     archetype: chosen.archetype,
                     kind: chosen.kind ?? 'encounter',
+                    summary: chosen.summary,
                   }
                 : parsed.data
               send('scene', { outline: enriched })
@@ -426,7 +427,7 @@ export async function POST(request: Request) {
         skeleton.scenes = skeleton.scenes.map((s) => {
           const chosen = chosenStorylets[s.index]
           return chosen
-            ? { ...s, archetype: chosen.archetype, kind: chosen.kind ?? 'encounter' }
+            ? { ...s, archetype: chosen.archetype, kind: chosen.kind ?? 'encounter', summary: chosen.summary }
             : s
         })
         send('done', {
