@@ -6,7 +6,7 @@ import type { Archetype } from "./types";
 
 let cached: ElevenLabsClient | null = null;
 
-function client(): ElevenLabsClient {
+export function elevenLabsClient(): ElevenLabsClient {
   if (cached) return cached;
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) {
@@ -15,6 +15,8 @@ function client(): ElevenLabsClient {
   cached = new ElevenLabsClient({ apiKey });
   return cached;
 }
+
+const client = elevenLabsClient;
 
 export async function getSignedUrlForArchetype(
   archetype: Archetype,
