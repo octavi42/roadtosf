@@ -248,5 +248,95 @@
     "beat": "9:14pm Friday. The W26 application closes at 11:59. You haven't submitted. You opened the form last week and saved a draft that says 'we're building…' and trailed off.",
     "effects": { "worldChanged": true, "ycDeadlineFaced": true },
     "tags": ["world-event", "mentor", "yc", "deadline"]
+  },
+  {
+    "id": "solo_ocean_beach_walk",
+    "archetype": "mentor",
+    "kind": "solo",
+    "tier": "mid",
+    "requires": { "hypeLte": 1 },
+    "beat": "7am, Ocean Beach, fog so thick the Pacific is a sound not a view. You walk it end to end. Somewhere around the second mile the decision you've been postponing for three weeks makes itself.",
+    "effects": { "hadSoloMoment": true },
+    "tags": ["solo", "ocean-beach", "fog", "decision", "mentor"]
+  },
+  {
+    "id": "solo_doctor_appointment",
+    "archetype": "mentor",
+    "kind": "solo",
+    "tier": "late",
+    "requires": { "firedCountGte": 8 },
+    "beat": "First doctor's visit since college. Bloodwork is fine. The doctor asks, very gently, when you last took a day off. You can't answer the question. The fluorescent light is too bright.",
+    "effects": { "hadSoloMoment": true, "wasCalledOut": true },
+    "tags": ["solo", "burnout", "health", "late", "mentor"]
+  },
+  {
+    "id": "solo_first_paying_customer_2am",
+    "archetype": "cofounder",
+    "kind": "solo",
+    "tier": "early",
+    "requires": { "hypeGte": 1 },
+    "beat": "Sunday 2:14am. Stripe dashboard pings. First paying customer — $9, from someone in Berlin. You screenshot it twice. You don't sleep again for the rest of the night.",
+    "effects": { "hadSoloMoment": true, "firstCustomerLanded": true },
+    "tags": ["solo", "stripe", "milestone", "cofounder"]
+  },
+  {
+    "id": "solo_runway_spreadsheet",
+    "archetype": "vc",
+    "kind": "solo",
+    "tier": "mid",
+    "requires": { "hypeLte": 0 },
+    "beat": "11:47pm Tuesday. The runway spreadsheet on your second monitor. Burn rate, MRR, three scenarios. You re-do the math four times trying to get a different answer. The answer is the same answer.",
+    "effects": { "hadSoloMoment": true, "facingRunway": true },
+    "tags": ["solo", "runway", "burn", "vc", "late-night"]
+  },
+  {
+    "id": "solo_walk_back_from_pitch",
+    "archetype": "vc",
+    "kind": "solo",
+    "tier": "mid",
+    "requires": { "flagSet": "vcEncounter" },
+    "beat": "The walk from Sand Hill back to the Caltrain. Fifteen minutes through eucalyptus. You replay the meeting in your head and notice three answers you should have given. Your reflection in the train window doesn't look like you remember.",
+    "effects": { "hadSoloMoment": true },
+    "tags": ["solo", "sand-hill", "caltrain", "post-pitch", "vc"]
+  },
+  {
+    "id": "world_openai_ships_your_feature",
+    "archetype": "hater",
+    "kind": "world-event",
+    "tier": "mid",
+    "requires": { "flavorTag": "ai" },
+    "beat": "2:34pm Tuesday. OpenAI's keynote ends. They just shipped 80% of what you do, free, in their dev tools. Your team Slack is silent for nine minutes. The first message is from the most junior engineer: 'so… do we ship anyway?'",
+    "effects": { "worldChanged": true, "platformRiskRealized": true },
+    "tags": ["world-event", "openai", "competitor", "ai", "hater"]
+  },
+  {
+    "id": "world_friend_company_acquires",
+    "archetype": "hater",
+    "kind": "world-event",
+    "tier": "mid",
+    "requires": { "hypeLte": 1 },
+    "beat": "Tuesday morning. A friend's company — started six months after yours, in an adjacent space — just announced an $80M acquisition. Their tweet is at 12k likes. Your phone buzzes with three texts asking if you've seen it.",
+    "effects": { "worldChanged": true },
+    "tags": ["world-event", "acquisition", "friend", "envy", "hater"]
+  },
+  {
+    "id": "world_yc_w26_announcement",
+    "archetype": "mentor",
+    "kind": "world-event",
+    "tier": "early",
+    "requires": { "flavorTag": "yc" },
+    "beat": "Wednesday 10am. YC announces the W26 batch. You scan the company list. Two of them are doing exactly what you proposed in your application six months ago. Their listed founders are people you've never heard of.",
+    "effects": { "worldChanged": true, "ycEnvyTriggered": true },
+    "tags": ["world-event", "yc", "envy", "mentor"]
+  },
+  {
+    "id": "world_payment_processor_freeze",
+    "archetype": "vc",
+    "kind": "world-event",
+    "tier": "mid",
+    "requires": { "hypeGte": 2 },
+    "beat": "Stripe email at 4:11pm: 'we're holding your transactions for review.' No phone number. The dashboard shows $47k frozen. Customer support reply ETA: 2-3 business days. Payroll runs Friday.",
+    "effects": { "worldChanged": true, "facingPaymentCrisis": true },
+    "tags": ["world-event", "stripe", "freeze", "vc", "crisis"]
   }
 ]

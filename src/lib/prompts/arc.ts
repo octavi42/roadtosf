@@ -3,7 +3,7 @@ import { filterLore } from '../lore'
 import type { Archetype } from '../types'
 import type { SMItem } from '../silicon-mania/types'
 import type { RolledCameo, ToneSpec } from '../cameos/types'
-import type { Storylet } from '../storylets/types'
+import type { ChosenStorylet } from '../storylets/types'
 
 export const EPISODE_LENGTH = 5
 
@@ -54,7 +54,7 @@ export interface BuildArcPromptInput {
   // The 5 storylets the engine has already chosen for this episode.
   // The LLM does NOT pick scenes — it renders these chosen beats with
   // player-specific texture. See STORYLETS.md for rationale.
-  chosenStorylets: Storylet[]
+  chosenStorylets: ChosenStorylet[]
 }
 
 const SYSTEM_RULES = `You are the arc-skeleton engine for "Road to SF", a satirical comic-book founder game running in ENDLESS MODE. The story is delivered as 5-scene episodes; you produce one episode at a time.
@@ -106,6 +106,12 @@ OUTPUT SHAPE:
                         named-choice prose. Omit for episodeIndex 0.)
 }
 
+GROUNDING ANECDOTES (when a storylet's "GROUNDING" block is present):
+- These are paraphrased composites of real founder beats — texture, not template. Lift a SPECIFIC detail (a place, a number, a hesitation, a time of day) into the rendered beat, but never lift the whole shape and never quote a sentence verbatim.
+- The grounding texture goes around the storylet's source beat, not in place of it. The source beat is what HAPPENS; the grounding is what makes it feel real.
+- If the grounding text mentions a real person by name (e.g. "Paul Graham retweeted them"), do NOT carry that name into the rendered beat unless the storylet's source beat or the rolled cameos block ALREADY name them — names enter via cameos, not via grounding.
+- If no GROUNDING block is present for a scene, render the source beat as-is with the player's startup texture; that's a normal case, not a problem.
+
 SOLO + WORLD-EVENT SCENE RENDERING (when KIND is not "encounter"):
 - The rendered "beat" must NOT describe an NPC of the assigned archetype walking in and speaking. Instead it describes a moment, an event, or an action — the archetype is a thematic anchor only (used for image flavor downstream).
 - For "solo" beats: focus on the player's interior experience or solo action. Example shape: "You sit on a bench in [place] at [time]. The [city detail]. You're [internal state]." No "X says…" anywhere in the beat.
@@ -151,7 +157,7 @@ function formatRecentChoices(choices: PriorChoiceSummary[]): string {
     .join('\n')
 }
 
-function formatChosenStorylets(storylets: Storylet[]): string {
+function formatChosenStorylets(storylets: ChosenStorylet[]): string {
   return storylets
     .map((s, i) => {
       const kind = s.kind ?? 'encounter'
@@ -161,9 +167,15 @@ function formatChosenStorylets(storylets: Storylet[]): string {
           : kind === 'world-event'
             ? '  KIND: world-event — something HAPPENS in the world the player reacts to. Narrator-led; an NPC may be referenced but does not appear as a speaking character. Archetype is thematic flavor for image only.'
             : '  KIND: encounter — the assigned archetype shows up and speaks. Standard scene.'
+      const groundingBlock =
+        s.groundingAnecdotes && s.groundingAnecdotes.length > 0
+          ? `\n  GROUNDING (real founder beats — paraphrase further, lift a specific texture not the whole shape):\n${s.groundingAnecdotes
+              .map((a) => `    - ${a.paraphrased}`)
+              .join('\n')}`
+          : ''
       return `Scene ${i} — archetype: ${s.archetype} — storylet "${s.id}"
 ${kindNote}
-  Source beat (render this faithfully, with player-specific texture): ${s.beat}`
+  Source beat (render this faithfully, with player-specific texture): ${s.beat}${groundingBlock}`
     })
     .join('\n')
 }

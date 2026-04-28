@@ -1,0 +1,322 @@
+[
+  {
+    "id": "anec_walked_contrarian_term_sheet",
+    "paraphrased": "A founder pitching a contrarian energy startup got a term sheet that demanded they publicly trash a competitor's marquee customer. They walked. Three weeks later they raised half from a different fund — and the original VC retweeted their launch like nothing happened.",
+    "matchesStoryletIds": ["vc_term_sheet_thiel", "vc_walk_away"],
+    "matchesArchetypes": ["vc"],
+    "tags": ["term_sheet", "walk_away", "contrarian", "sand_hill"],
+    "vibe": "vindicated"
+  },
+  {
+    "id": "anec_blue_bottle_phone_check",
+    "paraphrased": "A junior associate at a no-name fund cold-DMed a SaaS founder, took the meeting at Blue Bottle, and checked their phone seventeen times in twenty minutes. The 'casual chat' turned out to be a partner audition the founder hadn't been told about.",
+    "matchesStoryletIds": ["vc_cold_pitch_generic"],
+    "matchesArchetypes": ["vc"],
+    "tags": ["cold_pitch", "blue_bottle", "associate", "fundraising"],
+    "vibe": "transactional"
+  },
+  {
+    "id": "anec_napkin_a16z_dinner",
+    "paraphrased": "At an a16z dinner, a partner sketched a $20M Series A on a Caviar receipt, on one condition: the founder reframe the entire company as 'AI-native' on the spot. The founder said yes by dessert and rewrote the deck on BART that night.",
+    "matchesStoryletIds": ["vc_term_sheet_marc"],
+    "matchesArchetypes": ["vc"],
+    "tags": ["term_sheet", "a16z", "ai", "rewrite"],
+    "vibe": "absurdist"
+  },
+  {
+    "id": "anec_ghosted_with_own_deck",
+    "paraphrased": "An associate pursued a founder for six weeks, took five meetings, asked for a data room. Then the partnership passed. The 'feedback' email reused four phrases from the founder's own pitch deck, in the same order.",
+    "matchesStoryletIds": ["vc_walk_away"],
+    "matchesArchetypes": ["vc"],
+    "tags": ["rejection", "ghost", "associate", "integrity"],
+    "vibe": "humbling"
+  },
+  {
+    "id": "anec_bootstrap_cold_email",
+    "paraphrased": "A profitable bootstrapper got a cold email from a Tier-1 fund opening with 'we love bootstrappers — we'd love to talk.' The follow-up call mentioned three competitors who took their money. None of them were profitable.",
+    "matchesStoryletIds": ["vc_bootstrap_pitch"],
+    "matchesArchetypes": ["vc"],
+    "tags": ["bootstrapping", "cold_email", "fundraising"],
+    "vibe": "transactional"
+  },
+  {
+    "id": "anec_sand_hill_lowball",
+    "paraphrased": "A solo founder pitched at Rosewood, asked for $2M at a $12M cap. The partner offered $20M for 51% — 'because we'd want to be the operator here.' The founder said no, drove home in silence, and got a Calendly the next morning from a fund half the size at the original terms.",
+    "matchesStoryletIds": ["vc_walk_away", "vc_term_sheet_thiel"],
+    "matchesArchetypes": ["vc"],
+    "tags": ["term_sheet", "rosewood", "walk_away", "sand_hill"],
+    "vibe": "vindicated"
+  },
+  {
+    "id": "anec_fake_competitor_call",
+    "paraphrased": "A founder got a call from a number they didn't recognize. The voice was friendly: 'Just a chat — I'm at a fund nearby.' By minute four it was clear the caller worked at the closest competitor and wanted to know how the funding was going.",
+    "matchesStoryletIds": ["vc_cold_pitch_generic"],
+    "matchesArchetypes": ["vc", "hater"],
+    "tags": ["cold_call", "intel", "competitor"],
+    "vibe": "ominous"
+  },
+  {
+    "id": "anec_yc_dinner_cofounder_pitch",
+    "paraphrased": "At a YC alumni dinner in SoMa, a founder got cornered by a stranger with a six-slide deck about THEM, made on the BART ride over. The stranger had spreadsheeted the founder's GitHub commits to argue why they needed a technical cofounder by Q2.",
+    "matchesStoryletIds": ["cofounder_pitch_generic"],
+    "matchesArchetypes": ["cofounder"],
+    "tags": ["cofounder", "yc", "stranger", "dinner"],
+    "vibe": "absurdist"
+  },
+  {
+    "id": "anec_sunday_recruiter_call",
+    "paraphrased": "A founder's cofounder asked for a Sunday 1:1 at the office. Halfway through, the question came: 'would you still be friends if I took the offer?' The founder hadn't even known there was an offer.",
+    "matchesStoryletIds": ["cofounder_walkout_named"],
+    "matchesArchetypes": ["cofounder"],
+    "tags": ["cofounder", "tension", "named_team", "recruiter"],
+    "vibe": "humbling"
+  },
+  {
+    "id": "anec_discord_dilution_screenshot",
+    "paraphrased": "A cofounder forwarded a Discord screenshot — six weeks old, the other founder strategizing how to dilute their stake before the next round. The reply was three words: 'we should talk.' The board call was at 4pm.",
+    "matchesStoryletIds": ["cofounder_betrayal"],
+    "matchesArchetypes": ["cofounder"],
+    "tags": ["cofounder", "betrayal", "dilution"],
+    "vibe": "tragic"
+  },
+  {
+    "id": "anec_solo_yc_recruit_email",
+    "paraphrased": "A solo founder kept an old YC batchmate's recruit email open for an hour, three sips of cold brew between re-reads. The kitchen was very quiet. They drafted four reply versions and sent none.",
+    "matchesStoryletIds": ["solo_yc_recruit"],
+    "matchesArchetypes": ["cofounder"],
+    "tags": ["solo", "cofounder", "yc", "morning"],
+    "vibe": "humbling"
+  },
+  {
+    "id": "anec_split_at_tartine",
+    "paraphrased": "A two-cofounder team broke up at Tartine on a Saturday morning. The conversation lasted forty minutes. The croissants got cold. They paid separately for the first time in two years.",
+    "matchesStoryletIds": ["cofounder_walkout_named"],
+    "matchesArchetypes": ["cofounder"],
+    "tags": ["cofounder", "tartine", "tension"],
+    "vibe": "tragic"
+  },
+  {
+    "id": "anec_no_moat_first_question",
+    "paraphrased": "A staff writer at a mid-tier newsletter asked for '15 minutes for a backgrounder.' The first question — 'so, no real moat, right?' — landed before the founder had finished their intro. The piece never ran.",
+    "matchesStoryletIds": ["reporter_generic_curiosity"],
+    "matchesArchetypes": ["reporter"],
+    "tags": ["reporter", "press", "no_moat"],
+    "vibe": "humbling"
+  },
+  {
+    "id": "anec_hit_piece_three_screenshots",
+    "paraphrased": "A reporter had three Slack screenshots from someone the founder had fired, an old pitch deck claiming numbers that never existed, and a quote from an investor who'd been ghosted twelve months prior. Story drops Friday. The legal email arrived Thursday.",
+    "matchesStoryletIds": ["reporter_hit_piece"],
+    "matchesArchetypes": ["reporter"],
+    "tags": ["reporter", "scandal", "hit_piece", "legal"],
+    "vibe": "ominous"
+  },
+  {
+    "id": "anec_glossy_cover_next_stripe",
+    "paraphrased": "A glossy magazine wanted a cover story angled around 'the next Stripe.' The founder's MRR was $80K. They sat for the photo, did the interview, and spent the next three weeks dodging the friends who texted to congratulate them.",
+    "matchesStoryletIds": ["reporter_fluff"],
+    "matchesArchetypes": ["reporter"],
+    "tags": ["reporter", "fluff", "hype", "cover"],
+    "vibe": "absurdist"
+  },
+  {
+    "id": "anec_quote_tweet_dunk_two_friends",
+    "paraphrased": "A second-tier X account quote-tweeted a launch with three crying-laughing emojis. The thread hit 200 replies overnight. Two of them were from people the founder respected, both saying nothing — just liking the QT.",
+    "matchesStoryletIds": ["hater_generic_dunk"],
+    "matchesArchetypes": ["hater"],
+    "tags": ["twitter", "dunk", "respect"],
+    "vibe": "humbling"
+  },
+  {
+    "id": "anec_subtweet_fold_q4",
+    "paraphrased": "A well-known indie hacker sub-tweeted a bootstrapper specifically: 'another one who'll fold by Q4.' Eight hundred likes by lunchtime. The DMs were a graveyard of 'you good?' messages from people who hadn't checked in once during the good months.",
+    "matchesStoryletIds": ["hater_sahil_indie"],
+    "matchesArchetypes": ["hater"],
+    "tags": ["twitter", "subtweet", "bootstrapping", "indie"],
+    "vibe": "humbling"
+  },
+  {
+    "id": "anec_anon_hn_top_comment",
+    "paraphrased": "A founder's Show HN got slammed by the top comment, 400 upvotes deep, calling the team 'AI-wrappers larping as platform.' The account was three days old. The writing style was suspiciously close to a former colleague's.",
+    "matchesStoryletIds": ["hater_generic_dunk"],
+    "matchesArchetypes": ["hater"],
+    "tags": ["hn", "anonymous", "dunk", "wrapper"],
+    "vibe": "ominous"
+  },
+  {
+    "id": "anec_pg_essay_link_reply",
+    "paraphrased": "Paul Graham replied to an investor-update email with a single link to one of his essays from 2014 and the words 'this one.' The essay was about how the founder's exact strategy had killed three companies he'd watched die.",
+    "matchesStoryletIds": ["mentor_pg_essay"],
+    "matchesArchetypes": ["mentor"],
+    "tags": ["paul_graham", "pg", "essays", "yc"],
+    "vibe": "humbling"
+  },
+  {
+    "id": "anec_altman_three_words",
+    "paraphrased": "A founder DMed Sam Altman a one-liner about their AI startup. The reply came in 90 seconds: 'Interesting. Send me a deck.' Three hours later their inbox had seventeen new investor cold-emails. The deck wasn't even sent yet.",
+    "matchesStoryletIds": ["mentor_altman_blessing"],
+    "matchesArchetypes": ["mentor"],
+    "tags": ["sam_altman", "altman", "ai", "blessing"],
+    "vibe": "absurdist"
+  },
+  {
+    "id": "anec_mentor_lukewarm_coffee",
+    "paraphrased": "A second-time founder offered to grab coffee. They spent twelve minutes talking about their own company, three minutes asking about the founder's, and ended with 'happy to help, just ping me.' The founder pinged twice. No reply.",
+    "matchesStoryletIds": ["mentor_generic_advice"],
+    "matchesArchetypes": ["mentor"],
+    "tags": ["mentor", "lukewarm", "coffee"],
+    "vibe": "humbling"
+  },
+  {
+    "id": "anec_mentor_back_of_tartine",
+    "paraphrased": "A trusted mentor took a founder to the back of Tartine and said, very calmly, that the founder was becoming someone they wouldn't introduce to their friends. They paid for the founder's coffee. They meant it kindly. It still didn't stop hurting six months later.",
+    "matchesStoryletIds": ["mentor_gut_punch"],
+    "matchesArchetypes": ["mentor"],
+    "tags": ["mentor", "tartine", "gut_punch", "integrity"],
+    "vibe": "tragic"
+  },
+  {
+    "id": "anec_garry_tan_office_hours_two_minutes",
+    "paraphrased": "A founder got two minutes with Garry Tan at office hours. Garry asked one question — 'who's the customer who'd be furious if you shut down?' — and the founder couldn't answer. They were silent for four seconds. Garry waited.",
+    "matchesStoryletIds": ["mentor_generic_advice", "mentor_pg_essay"],
+    "matchesArchetypes": ["mentor"],
+    "tags": ["yc", "garry_tan", "office_hours", "customer"],
+    "vibe": "humbling"
+  },
+  {
+    "id": "anec_dolores_park_3am_deck",
+    "paraphrased": "3am, a cracked bench in Dolores Park, the city humming below. Laptop open to a deck the founder hadn't touched in two hours. A raccoon on the J-line tracks. The honest version of slide one had been deleted four times.",
+    "matchesStoryletIds": ["solo_dolores_park_3am"],
+    "matchesArchetypes": ["mentor"],
+    "tags": ["solo", "dolores_park", "late_night", "reflection"],
+    "vibe": "humbling"
+  },
+  {
+    "id": "anec_caltrain_silence",
+    "paraphrased": "A founder on the 4:35pm Caltrain to Mountain View, half-empty car, hills past Burlingame rolling by. The phone hadn't pinged in 47 minutes and they realized they couldn't remember the last time it had been that quiet. They didn't open it for the rest of the ride.",
+    "matchesStoryletIds": ["solo_caltrain_breakdown"],
+    "matchesArchetypes": ["hater"],
+    "tags": ["solo", "caltrain", "transit", "reflection"],
+    "vibe": "humbling"
+  },
+  {
+    "id": "anec_sunday_twitter_spiral_quotes",
+    "paraphrased": "Sunday, 11am. The founder meant to ship a feature. Instead, forty minutes deep into a quote-tweet spiral about a thread they didn't even disagree with. The first commit of the day was at 4pm. The PR was abandoned by Tuesday.",
+    "matchesStoryletIds": ["solo_sunday_twitter_spiral"],
+    "matchesArchetypes": ["hater"],
+    "tags": ["solo", "twitter", "distraction", "sunday"],
+    "vibe": "humbling"
+  },
+  {
+    "id": "anec_4am_sentry_alert",
+    "paraphrased": "4:13am. Sentry alert. The scaling bug from beta — the one that had been 'fixed two weeks ago' — was hitting paying customers now. The office was empty. The coffee had gone cold three hours back. The fix landed at 6:47am, two minutes before standup.",
+    "matchesStoryletIds": ["solo_4am_production_bug"],
+    "matchesArchetypes": ["cofounder"],
+    "tags": ["solo", "production", "bug", "late_night"],
+    "vibe": "tragic"
+  },
+  {
+    "id": "anec_solo_walk_ocean_beach",
+    "paraphrased": "A founder walked Ocean Beach end to end at 7am after a sleepless night, fog so thick the Pacific was a sound, not a view. The decision they'd been postponing for three weeks made itself somewhere around the second mile. They didn't write it down — they just knew.",
+    "matchesStoryletIds": ["solo_dolores_park_3am"],
+    "matchesArchetypes": ["mentor"],
+    "tags": ["solo", "ocean_beach", "fog", "decision"],
+    "vibe": "humbling"
+  },
+  {
+    "id": "anec_competitor_ph_number_one",
+    "paraphrased": "Tuesday morning, Product Hunt #1 was a startup doing what the founder did — but with an agent layer they hadn't planned. The landing page read like someone with $4M and a good copywriter wrote it. The founder's own commit history that day stopped at 11:42am.",
+    "matchesStoryletIds": ["world_competitor_launches"],
+    "matchesArchetypes": ["hater"],
+    "tags": ["world_event", "launch", "competitor", "ph"],
+    "vibe": "ominous"
+  },
+  {
+    "id": "anec_x_account_locked_appeal",
+    "paraphrased": "X locked the founder's account at 2:14pm on a Tuesday. The notice was one paragraph and three appeal links. Yesterday's 12k-impression mentions tab 404'd. The DMs they needed for tomorrow's call were gone. The appeal took eleven days.",
+    "matchesStoryletIds": ["world_x_account_locked"],
+    "matchesArchetypes": ["reporter"],
+    "tags": ["world_event", "platform", "ban", "x"],
+    "vibe": "ominous"
+  },
+  {
+    "id": "anec_viral_unhinged_take",
+    "paraphrased": "A founder woke to 14,318 unread notifications. The one-line tweet from 11pm — the one ending in 'unhinged take' — was at 2.3M impressions. Three reporters and two recruiters had DMed 'are you free?' The one DM that mattered hadn't replied.",
+    "matchesStoryletIds": ["world_viral_tweet_aftermath"],
+    "matchesArchetypes": ["reporter"],
+    "tags": ["world_event", "viral", "twitter", "hype"],
+    "vibe": "absurdist"
+  },
+  {
+    "id": "anec_yc_deadline_unsubmitted_draft",
+    "paraphrased": "9:14pm Friday. The W26 application closed at 11:59. The founder had opened the form a week earlier and saved a draft that read 'we're building…' and trailed off. They submitted at 11:43pm with a 'who else is on your team?' field that said 'just me' for the first time on paper.",
+    "matchesStoryletIds": ["world_yc_deadline_panic"],
+    "matchesArchetypes": ["mentor"],
+    "tags": ["world_event", "yc", "deadline", "solo"],
+    "vibe": "humbling"
+  },
+  {
+    "id": "anec_sec_subpoena_monday",
+    "paraphrased": "A founder said '$10M ARR' at a panel at a16z's office. Their actual MRR was $80K. The clip went viral on Friday. The SEC inquiry email arrived Monday morning, cc'ing the company's lawyer, who had not yet been hired.",
+    "matchesStoryletIds": ["reporter_hit_piece"],
+    "matchesArchetypes": ["reporter"],
+    "tags": ["scandal", "sec", "fundraising", "hype"],
+    "vibe": "ominous"
+  },
+  {
+    "id": "anec_demo_day_freeze",
+    "paraphrased": "Demo day. Forty seconds in, the founder's clicker died and the slide stuck on a chart with the wrong axis label. They froze for what felt like a minute (it was four seconds), then made a joke about the chart being 'a leading indicator.' Two investors emailed afterward. Both passed.",
+    "matchesStoryletIds": ["reporter_generic_curiosity", "vc_cold_pitch_generic"],
+    "matchesArchetypes": ["reporter", "vc"],
+    "tags": ["demo_day", "yc", "freeze", "presentation"],
+    "vibe": "tragic"
+  },
+  {
+    "id": "anec_old_friend_recruiter_dm",
+    "paraphrased": "A founder got a LinkedIn DM from a friend they hadn't seen in five years. The opener was 'long time! how's the company?' The next paragraph was a recruiter pitch for a Series B AI lab. The friend was the recruiter.",
+    "matchesStoryletIds": ["cofounder_walkout_named"],
+    "matchesArchetypes": ["cofounder", "hater"],
+    "tags": ["recruiter", "linkedin", "betrayal"],
+    "vibe": "humbling"
+  },
+  {
+    "id": "anec_oai_pivot_three_weeks",
+    "paraphrased": "Three weeks before launch, OpenAI shipped a feature that did 80% of what the startup did, for free, in their dev tools. The team Slack channel went silent for nine minutes. The first message was from the most junior engineer: 'so… do we ship anyway?'",
+    "matchesStoryletIds": ["world_competitor_launches"],
+    "matchesArchetypes": ["hater"],
+    "tags": ["world_event", "openai", "competitor", "pivot"],
+    "vibe": "tragic"
+  },
+  {
+    "id": "anec_first_paying_customer_sunday",
+    "paraphrased": "A founder shipped on a Friday and got their first paying customer Sunday at 2:14am — a $9 subscription from someone in Berlin. They screenshotted the Stripe dashboard, sent it to their cofounder, and didn't sleep for the rest of the night.",
+    "matchesStoryletIds": ["solo_4am_production_bug", "solo_dolores_park_3am"],
+    "matchesArchetypes": ["cofounder", "mentor"],
+    "tags": ["solo", "first_customer", "stripe", "milestone"],
+    "vibe": "triumphant"
+  },
+  {
+    "id": "anec_layoff_friday_5pm",
+    "paraphrased": "Friday 5pm. The runway math no longer worked. The founder had three names on a Notion page since Wednesday. The first conversation took eleven minutes; the second, seven. The third person knew before the meeting started.",
+    "matchesStoryletIds": ["cofounder_walkout_named", "mentor_gut_punch"],
+    "matchesArchetypes": ["cofounder", "mentor"],
+    "tags": ["layoff", "runway", "tough", "named_team"],
+    "vibe": "tragic"
+  },
+  {
+    "id": "anec_pg_office_hours_pivot",
+    "paraphrased": "A YC team got told by Paul Graham, in office hours, that the demo they'd just walked through was 'the thing you build before the thing.' He said it gently. They pivoted that night. The pivot worked. The original idea would not have.",
+    "matchesStoryletIds": ["mentor_pg_essay"],
+    "matchesArchetypes": ["mentor"],
+    "tags": ["pg", "yc", "office_hours", "pivot"],
+    "vibe": "vindicated"
+  },
+  {
+    "id": "anec_chest_tightness_Q3",
+    "paraphrased": "By Q3, the founder couldn't tell anymore if the chest tightness was anxiety or caffeine. They booked a doctor for the first time since college. The bloodwork was fine. The doctor asked, very gently, when they'd last taken a day off.",
+    "matchesStoryletIds": ["solo_dolores_park_3am", "mentor_gut_punch"],
+    "matchesArchetypes": ["mentor"],
+    "tags": ["solo", "burnout", "health", "reflection"],
+    "vibe": "humbling"
+  }
+]

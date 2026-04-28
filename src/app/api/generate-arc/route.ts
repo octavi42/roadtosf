@@ -302,8 +302,11 @@ export async function POST(request: Request) {
     // identical state pick different storylets when scores tie.
     seed: asString(body.seed, '') || undefined,
   }
-  const { storylets: chosenStorylets, finalState: nextStoryletState } =
-    selectEpisodeStorylets(selectionState)
+  const {
+    storylets: chosenStorylets,
+    finalState: nextStoryletState,
+    episodeShape,
+  } = selectEpisodeStorylets(selectionState)
 
   const promptInput = {
     episodeIndex,
@@ -362,6 +365,7 @@ export async function POST(request: Request) {
           siliconManiaPoolSize: poolSize,
           storyletState: nextStoryletState,
           chosenStoryletIds: chosenStorylets.map((s) => s.id),
+          episodeShape,
         })
       }
 
@@ -435,6 +439,7 @@ export async function POST(request: Request) {
           siliconManiaPoolSize: poolSize,
           storyletState: nextStoryletState,
           chosenStoryletIds: chosenStorylets.map((s) => s.id),
+          episodeShape,
         })
       } catch (err) {
         console.warn('generate-arc: stream path failed, sending fallback', err)
