@@ -15,8 +15,13 @@
 //   - Tier gating: episode 0 only eligible for early-tier storylets;
 //     episode 3+ unlocks late-tier (e.g. mentor_gut_punch).
 
-import { selectEpisodeStorylets } from '../src/lib/storylets/select'
+import {
+  selectEpisodeStorylets,
+  selectNextStorylet,
+} from '../src/lib/storylets/select'
 import type { SelectionState } from '../src/lib/storylets/types'
+import templatesData from '../src/lib/storylets/templates.json'
+import type { Storylet } from '../src/lib/storylets/types'
 
 interface Fixture {
   name: string
@@ -305,6 +310,113 @@ for (const fx of fixtures) {
     )
   }
 }
+
+// ───────────────────────────────────────────────────────────────────
+// Choice-responsive selection (selectNextStorylet)
+// ───────────────────────────────────────────────────────────────────
+// Verifies that two playthroughs starting from the SAME state but
+// taking different first-group choice trajectories pick DIFFERENT
+// storylets for group 1+. This is the whole point of the mid-episode
+// re-selection feature.
+console.log(`\n${BOLD}── Choice-divergence smoke ──${RESET}`)
+
+const TEMPLATES_LOOKUP = new Map(
+  (templatesData as unknown as Storylet[]).map((s) => [s.id, s]),
+)
+
+// No cameo match — cameo-gated storylets like mentor_pg_essay would
+// dominate the salience score regardless of stat differences, masking
+// the choice-responsiveness we're testing for.
+const startState: SelectionState = baseState({
+  episodeIndex: 1, // mid-tier unlocked so divergence has more options
+  team: 'named',
+  funding: 'raising',
+  flavorTags: ['ai', 'fundraising'],
+  seed: 'fixture-A',
+})
+
+// Run A: bullish trajectory (hype +3, integrity +1 after first 2 groups).
+// Run B: cynical trajectory (hype +1, integrity -3 after first 2 groups).
+// Both have the same first 2 groups picked (vc + cofounder), so the 3rd
+// pick has to come from reporter / hater / mentor — archetypes where
+// stat-divergence actually matters (reporter_fluff vs reporter_hit_piece,
+// mentor_gut_punch, etc.).
+const earlyPickIds = ['vc_cold_pitch_generic', 'cofounder_walkout_named']
+const earlyPicks = earlyPickIds.map((id) => TEMPLATES_LOOKUP.get(id)!)
+
+const stateA: SelectionState = {
+  ...startState,
+  hype: 3,
+  integrity: 1,
+  storyletState: {
+    fired: earlyPickIds.map((id) => ({ id, firedAtEpisode: 1 })),
+    flags: { vcEncounter: true, cofounderTension: true },
+  },
+}
+const stateB: SelectionState = {
+  ...startState,
+  hype: 1,
+  integrity: -3,
+  storyletState: {
+    fired: earlyPickIds.map((id) => ({ id, firedAtEpisode: 1 })),
+    flags: { vcEncounter: true, cofounderTension: true },
+  },
+}
+
+const alreadyPicked = earlyPicks.map((s) => ({ id: s.id, archetype: s.archetype }))
+const nextA = selectNextStorylet(stateA, { alreadyPicked })
+const nextB = selectNextStorylet(stateB, { alreadyPicked })
+
+console.log(`  Run A (hype+3, int+1) picks: ${nextA.storylet?.id ?? '(none)'}`)
+console.log(`  Run B (hype+1, int-3) picks: ${nextB.storylet?.id ?? '(none)'}`)
+
+expect(
+  'choice trajectory diverges (different next storylet)',
+  nextA.storylet?.id !== nextB.storylet?.id,
+  `both picked: ${nextA.storylet?.id}`,
+)
+expect(
+  'high-integrity trajectory does not pick scandal storylet',
+  nextA.storylet?.id !== 'reporter_hit_piece',
+  `picked: ${nextA.storylet?.id}`,
+)
+expect(
+  'low-integrity trajectory becomes eligible for reporter_hit_piece',
+  // either picks it, or another integrity-gated storylet
+  nextB.storylet?.id === 'reporter_hit_piece' ||
+    (nextB.storylet?.requires?.integrityLte !== undefined),
+  `picked: ${nextB.storylet?.id}`,
+)
+
+// ───────────────────────────────────────────────────────────────────
+// Seed-aware tiebreak smoke
+// ───────────────────────────────────────────────────────────────────
+// Two playthroughs with IDENTICAL state but different seeds should
+// pick different storylets when scores tie. This is the bug observed
+// in the 2026-04-28 play data: same input → same 5 storylets across
+// runs.
+console.log(`\n${BOLD}── Seed-aware tiebreak smoke ──${RESET}`)
+
+const seedA = baseState({
+  episodeIndex: 0,
+  team: 'named',
+  funding: 'raising',
+  flavorTags: [],
+  seed: 'player-alice',
+})
+const seedB = { ...seedA, seed: 'player-bob' }
+
+const pickA = selectEpisodeStorylets(seedA).storylets.map((s) => s.id)
+const pickB = selectEpisodeStorylets(seedB).storylets.map((s) => s.id)
+
+console.log(`  Seed A picks: ${pickA.join(', ')}`)
+console.log(`  Seed B picks: ${pickB.join(', ')}`)
+
+expect(
+  'different seeds produce at least one different storylet',
+  pickA.join(',') !== pickB.join(','),
+  `both picked: ${pickA.join(',')}`,
+)
 
 console.log()
 if (failures === 0) {

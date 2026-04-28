@@ -97,4 +97,8 @@ export interface SelectionState {
   rolledCameos?: string[]
   tone?: string
   flavorTags: string[]
+  /** Per-playthrough seed (the playthroughId). Used to make salience
+   *  tiebreaks per-player instead of globally deterministic. Without
+   *  this, two players with identical state pick the same storylet. */
+  seed?: string
 }

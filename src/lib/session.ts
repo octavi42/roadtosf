@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { ArcSkeleton, EndingKey, Scene, StoryArc } from "./types";
+import type { ArcSkeleton, EndingKey, Scene, SceneOutline, StoryArc } from "./types";
 import type { RolledCameo, ToneId } from "./cameos/types";
 import type { StoryletState } from "./storylets/types";
 
@@ -158,6 +158,19 @@ interface SessionState {
   arcSkeletonReady: (
     skeleton: ArcSkeleton,
     fate?: { storyletState?: StoryletState },
+  ) => void;
+  /**
+   * Replace one scene outline + storylet state in the current arc
+   * skeleton. Used by the choice-responsive re-selection flow: when
+   * the player completes a group's last sub-scene, /api/storylet/next
+   * picks the next storylet given updated stats/flags, and this
+   * action surgically updates only the upcoming group's outline
+   * (not the others). Preserves the rest of the skeleton.
+   */
+  replaceOutline: (
+    groupIndex: number,
+    outline: SceneOutline,
+    storyletState: StoryletState,
   ) => void;
   /**
    * Sets the per-run "fate" — rolled cameos + tone — once after intro
@@ -388,6 +401,29 @@ export const useSessionStore = create<SessionState>()(
               arcSkeleton: skeleton,
               storySoFar: nextStorySoFar,
               storyletState: nextStoryletState,
+            },
+          };
+        }),
+
+      replaceOutline: (groupIndex, outline, storyletState) =>
+        set((state) => {
+          // No arc / no skeleton means there's nothing to replace —
+          // ignore. (This shouldn't happen in practice; the route is
+          // gated on arc state in the caller.)
+          if (!state.arc?.arcSkeleton) return state;
+          const scenes = [...state.arc.arcSkeleton.scenes];
+          // Find by .index (preferred) and fall back to array position.
+          // Outlines are emitted with `index: 0..4`; preserving that
+          // index in the replacement keeps downstream readers happy.
+          const targetPos = scenes.findIndex((s) => s.index === groupIndex);
+          const pos = targetPos >= 0 ? targetPos : groupIndex;
+          if (pos < 0 || pos >= scenes.length) return state;
+          scenes[pos] = { ...outline, index: groupIndex };
+          return {
+            arc: {
+              ...state.arc,
+              arcSkeleton: { ...state.arc.arcSkeleton, scenes },
+              storyletState,
             },
           };
         }),

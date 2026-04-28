@@ -369,6 +369,7 @@ export default function HomePage() {
     })),
   );
   const setRunFate = useSessionStore((s) => s.setRunFate);
+  const replaceOutline = useSessionStore((s) => s.replaceOutline);
   // Read sessionEmail directly off the store so any code path that flips
   // it (LoginModal success, /history logout) re-renders this component
   // and re-runs the balance refetch effect without depending on Next.js's
@@ -864,6 +865,116 @@ export default function HomePage() {
     }
   }, [phase, arc, exitGeneratingArc]);
 
+  // CHOICE-RESPONSIVE STORYLET RE-SELECTION
+  //
+  // After each group's last sub-scene's choice, fire /api/storylet/next
+  // to re-pick the upcoming group's storylet given the player's
+  // accumulated stats + flags. The re-pick is a pure server-side
+  // selector call (no LLM, no credits) that returns a new SceneOutline,
+  // which we splice into the arc skeleton via replaceOutline. The
+  // existing scene-gen batch effect (below) then renders the new beat
+  // when the player arrives at the upcoming group.
+  //
+  // Trigger: player has reached sub 3 of group N-1 (groupIdx = N >= 1
+  // and current sceneIndex >= sub3 of N-1). Sub 3 means all 4 choices
+  // in group N-1 have been made (or at minimum the player is reading
+  // sub 3's dialogue with one choice left — close enough to base the
+  // pick on, and gives ~10-15s of buffer for scene-gen on group N).
+  // Group 0 is NOT re-picked — arc-gen already chose it at episode
+  // start with the correct initial state.
+  const outlineRefreshedRef = useRef<Set<string>>(new Set());
+  // Reset on new playthrough so a fresh run can re-pick its own outlines.
+  useEffect(() => {
+    outlineRefreshedRef.current = new Set();
+  }, [playthroughId]);
+  useEffect(() => {
+    if (phase !== "scene") return;
+    if (sceneIndex < AUTHORED_SCENE_COUNT) return;
+    const skeleton = arc?.arcSkeleton;
+    if (!skeleton) return;
+    const epi = skeleton.episodeIndex;
+    const firedThisEpisode = (arc?.storyletState?.fired ?? []).filter(
+      (f) => f.firedAtEpisode === epi,
+    );
+    for (let groupIdx = 1; groupIdx < skeleton.scenes.length; groupIdx++) {
+      const key = `${epi}-${groupIdx}`;
+      if (outlineRefreshedRef.current.has(key)) continue;
+      // Trigger: player reached sub 3 of group N-1.
+      const sub3OfPriorGroup =
+        AUTHORED_SCENE_COUNT +
+        epi * EPISODE_LENGTH +
+        (groupIdx - 1) * SCENES_PER_GROUP +
+        3;
+      if (sceneIndex < sub3OfPriorGroup) continue;
+      // Lock first so concurrent renders don't double-fire.
+      outlineRefreshedRef.current.add(key);
+      // Already-picked = the storylets that fired in groups 0..groupIdx-1.
+      // The fired array (filtered to this episode) is in pick order, so
+      // the first `groupIdx` entries correspond to scenes 0..groupIdx-1.
+      const alreadyPickedIds = firedThisEpisode
+        .slice(0, groupIdx)
+        .map((f) => f.id);
+
+      fetch("/api/storylet/next", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          episodeIndex: epi,
+          currentStats: { hype, integrity },
+          team: intro.team,
+          fundingModel: intro.fundingModel,
+          flavorTags: arc?.flavorTags ?? intro.flavorTags,
+          rolledCameos: arc?.rolledCameos,
+          tone: arc?.tone,
+          seed: playthroughId ?? `local-${Date.now()}`,
+          storyletState: arc?.storyletState ?? { fired: [], flags: {} },
+          alreadyPickedIds,
+        }),
+      })
+        .then((r) => {
+          if (!r.ok) throw new Error(`storylet/next ${r.status}`);
+          return r.json() as Promise<{
+            outline: { archetype: string; beat: string; kind?: string };
+            storyletId: string;
+            storyletState: typeof arc.storyletState;
+          }>;
+        })
+        .then((data) => {
+          replaceOutline(
+            groupIdx,
+            {
+              index: groupIdx,
+              archetype: data.outline.archetype as SceneOutline["archetype"],
+              beat: data.outline.beat,
+              kind: data.outline.kind as SceneOutline["kind"],
+            },
+            data.storyletState ?? { fired: [], flags: {} },
+          );
+        })
+        .catch((err) => {
+          // Fail-soft: leave the pre-picked outline in place. Worst
+          // case the next group plays the original arc-gen storylet
+          // (current behavior pre-this-PR).
+          outlineRefreshedRef.current.delete(key);
+          console.warn(
+            `storylet/next[ep=${epi} group=${groupIdx}] failed`,
+            err,
+          );
+        });
+    }
+  }, [
+    phase,
+    sceneIndex,
+    arc,
+    hype,
+    integrity,
+    intro.team,
+    intro.fundingModel,
+    intro.flavorTags,
+    playthroughId,
+    replaceOutline,
+  ]);
+
   // Group-batch scene-text generation. Each archetype group fires as a
   // single burst of 4 parallel calls when its trigger condition is met:
   //   - Group 0 batch fires the moment player enters the LLM tail (sub 0 may
@@ -942,13 +1053,22 @@ export default function HomePage() {
         // Group 0 batch: triggered the moment we're in the LLM tail.
         triggered = true;
       } else {
-        // Group N (N>=1): triggered at the midpoint (sub 1) of group N-1.
-        const priorGroupSub1Index =
+        // Group N (N>=1): wait until the player has reached sub 3 of
+        // group N-1. The re-pick effect (above) targets the same
+        // boundary; by the time the player has cleared sub 2's choice
+        // the re-picked outline has settled into the skeleton, and
+        // scene-gen now fires against the choice-responsive beat —
+        // not the stale arc-gen pre-pick. Tradeoff: ~15s of buffer
+        // for scene-gen+image-gen instead of the prior ~45s. Scene-
+        // gen fits comfortably; image-gen may lag into the group's
+        // first sub-scene (placeholder shows for a beat), which is
+        // an acceptable cost for actual choice-responsiveness.
+        const priorGroupSub3Index =
           AUTHORED_SCENE_COUNT +
           epi * EPISODE_LENGTH +
           (groupIdx - 1) * SCENES_PER_GROUP +
-          1;
-        triggered = sceneIndex >= priorGroupSub1Index;
+          3;
+        triggered = sceneIndex >= priorGroupSub3Index;
       }
       if (!triggered) continue;
 
