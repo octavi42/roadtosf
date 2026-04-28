@@ -1,7 +1,10 @@
 import templatesData from './templates.json'
 import { evaluateRequires } from './predicate'
+import { pickAnecdotesForStorylet } from '../anecdotes/select'
 import type { Archetype } from '../types'
 import type {
+  ChosenStorylet,
+  EpisodeShape,
   FiredStorylet,
   SelectionState,
   Storylet,
@@ -14,14 +17,30 @@ const SCENES_PER_EPISODE = 5
 const DEFAULT_COOLDOWN = 2
 
 // Tier gates: which tiers are eligible at a given episode index. Early
-// runs are dominated by 'early' storylets; later episodes unlock the
-// 'mid' and 'late' bag, so the *menu* grows as the player plays. This
-// is the "tiered unlock gates" piece of the endless-mode design.
+// runs lean on 'early' storylets; later episodes unlock the 'mid' and
+// 'late' bag, so the *menu* grows as the player plays. We softened the
+// hard gates here (mid: was ep>=1, late: was ep>=3) because every
+// episode-0 looked the same — only early storylets eligible meant the
+// same 5 beats kept winning the salience tiebreak. Mid is now eligible
+// from ep 0 but pays a soft salience penalty (see saliencyScore); late
+// opens at ep 2 instead of ep 3 so the rare beats actually get to fire
+// in the typical 5-6 episode run.
 function tierEligibleAtEpisode(tier: StoryletTier, episodeIndex: number): boolean {
   if (tier === 'early') return true
-  if (tier === 'mid') return episodeIndex >= 1
-  if (tier === 'late') return episodeIndex >= 3
+  if (tier === 'mid') return true
+  if (tier === 'late') return episodeIndex >= 2
   return false
+}
+
+// Soft tier penalty: mid/late storylets are eligible earlier than their
+// natural unlock but pay a salience penalty when below it, so early
+// game still *feels* early without being structurally locked. The
+// penalty is large enough to outweigh a single tag overlap but small
+// enough that a mid storylet matching 2+ flavor tags can still win.
+function tierPenalty(tier: StoryletTier, episodeIndex: number): number {
+  if (tier === 'mid' && episodeIndex < 1) return 0.75
+  if (tier === 'late' && episodeIndex < 2) return 1.5
+  return 0
 }
 
 function isInCooldown(
@@ -63,7 +82,12 @@ function saliencyScore(storylet: Storylet, state: SelectionState): number {
     }
   }
   const specificity = Object.keys(storylet.requires).length
-  return score + specificity * 0.5
+  return (
+    score
+    + specificity * 0.5
+    - tierPenalty(storylet.tier, state.episodeIndex)
+    + shapeBonus(storylet, state.episodeShape)
+  )
 }
 
 // Tiebreaker hash. Stable per (storylet id, seed) so two players with
@@ -83,6 +107,37 @@ function stableHash(s: string, seed?: string): number {
   return h >>> 0
 }
 
+// Per-episode shape roll. Hash mixes "shape:" + episodeIndex + seed
+// so the same player gets the same shape on a /history replay but two
+// players see different shapes for the same episodeIndex. Episode 0
+// is always default — anchoring the player's first impression.
+function rollEpisodeShape(
+  episodeIndex: number,
+  seed: string | undefined,
+): EpisodeShape {
+  if (episodeIndex === 0) return 'default'
+  const r = stableHash(`shape:${episodeIndex}`, seed) % 100
+  if (r < 75) return 'default'
+  if (r < 85) return 'pressure'
+  if (r < 95) return 'solo-night'
+  return 'cameo-gauntlet'
+}
+
+// Shape-driven salience bonus. Layered on top of the base score in
+// pickOneStorylet so the existing tag-overlap + specificity logic
+// stays intact; shape just tilts the table.
+function shapeBonus(storylet: Storylet, shape: EpisodeShape | undefined): number {
+  if (!shape || shape === 'default') return 0
+  if (shape === 'solo-night') {
+    const kind = storylet.kind ?? 'encounter'
+    return kind === 'solo' || kind === 'world-event' ? 1.5 : 0
+  }
+  if (shape === 'cameo-gauntlet') {
+    return storylet.requires.cameo !== undefined ? 1.5 : 0
+  }
+  return 0 // 'pressure' shape biases archetype-diversity, not salience
+}
+
 function applyEffects(
   state: SelectionState,
   effects: Record<string, boolean> | undefined,
@@ -98,11 +153,37 @@ function applyEffects(
 }
 
 export interface SelectionResult {
-  storylets: Storylet[]
+  storylets: ChosenStorylet[]
   /** Final state after all 5 storylets' effects are applied. The route
    *  passes this back so the client can persist updated flags + fired
    *  list as part of the new arc skeleton. */
   finalState: StoryletState
+  /** Shape rolled for this episode. Surfaced so the route can log it
+   *  and the client can show debug telemetry. Not load-bearing. */
+  episodeShape: EpisodeShape
+}
+
+// Walks the chosen storylets in order, attaching grounding anecdotes
+// to each. Per-episode anecdote dedupe — once an anecdote is attached
+// to scene N, it's excluded from N+1..4 so the same composite never
+// grounds two scenes in the same episode. Pulled out of the picker
+// loop so the choice-responsive single-storylet path can call it
+// independently with a different alreadyUsed set.
+function attachAnecdotes(
+  storylets: Storylet[],
+  seed: string | undefined,
+  alreadyUsed: Set<string>,
+): ChosenStorylet[] {
+  return storylets.map((s) => {
+    const anecdotes = pickAnecdotesForStorylet({
+      storylet: s,
+      alreadyUsed,
+      seed,
+      count: 2,
+    })
+    anecdotes.forEach((a) => alreadyUsed.add(a.id))
+    return { ...s, groundingAnecdotes: anecdotes }
+  })
 }
 
 // Inner-loop pick. Used by both selectEpisodeStorylets (called 5 times
@@ -122,9 +203,17 @@ function pickOneStorylet(
   })
   // First pass: storylets whose archetype hasn't fired yet this
   // episode. Falls back to baseEligible if that pool is empty so
-  // we never break the 5-scene schema.
-  const fresh = baseEligible.filter((s) => !usedArchetypes.has(s.archetype))
-  const eligible = fresh.length > 0 ? fresh : baseEligible
+  // we never break the 5-scene schema. The "pressure" shape skips
+  // this filter entirely so the same archetype can fire multiple
+  // times — that's the whole point of pressure shape (every scene
+  // is a fresh shockwave from one direction).
+  const eligible =
+    state.episodeShape === 'pressure'
+      ? baseEligible
+      : (() => {
+          const fresh = baseEligible.filter((s) => !usedArchetypes.has(s.archetype))
+          return fresh.length > 0 ? fresh : baseEligible
+        })()
 
   let chosen: Storylet | undefined
   if (eligible.length > 0) {
@@ -174,7 +263,13 @@ export function selectEpisodeStorylets(
   initialState: SelectionState,
 ): SelectionResult {
   const picked: Storylet[] = []
-  let state = initialState
+  // Roll the shape if the caller didn't supply one. Threading it
+  // through state means every internal helper (saliencyScore,
+  // pickOneStorylet) sees it without extra parameters.
+  const episodeShape: EpisodeShape =
+    initialState.episodeShape
+    ?? rollEpisodeShape(initialState.episodeIndex, initialState.seed)
+  let state: SelectionState = { ...initialState, episodeShape }
   const pickedIds = new Set<string>()
   // Archetype-diversity bookkeeping. Without this, the selector
   // happily fires two cofounder beats in one episode (e.g.
@@ -201,12 +296,15 @@ export function selectEpisodeStorylets(
     })),
   ]
 
+  const enriched = attachAnecdotes(picked, initialState.seed, new Set<string>())
+
   return {
-    storylets: picked,
+    storylets: enriched,
     finalState: {
       fired: newFired,
       flags: state.storyletState.flags,
     },
+    episodeShape,
   }
 }
 
@@ -217,7 +315,7 @@ export interface NextStoryletInput {
 }
 
 export interface NextStoryletResult {
-  storylet: Storylet | null
+  storylet: ChosenStorylet | null
   /** Updated storylet state after applying the chosen storylet's
    *  effects + appending it to the fired list. The client persists
    *  this on the arc and passes it back into the next call. */
@@ -243,8 +341,13 @@ export function selectNextStorylet(
   if (!chosen) {
     return { storylet: null, finalState: state.storyletState }
   }
+  // No alreadyUsed bookkeeping here — choice-responsive picks fire
+  // mid-episode and we don't track which anecdotes the arc-gen path
+  // already burned. A small overlap risk is acceptable; the cost of
+  // plumbing it through every group boundary outweighs the payoff.
+  const [enriched] = attachAnecdotes([chosen], state.seed, new Set<string>())
   return {
-    storylet: chosen,
+    storylet: enriched!,
     finalState: {
       fired: [
         ...nextState.storyletState.fired,

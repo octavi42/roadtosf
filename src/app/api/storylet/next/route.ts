@@ -172,6 +172,11 @@ export async function POST(request: Request) {
       kind: result.storylet.kind ?? 'encounter',
     },
     storyletId: result.storylet.id,
+    // Anecdotes attached at selection time. Surfaced here so the
+    // scene-gen layer (Haiku dialogue rendering) can splice them in
+    // the same way arc-gen does. Empty array when the corpus had no
+    // matches — callers can pass it through unconditionally.
+    groundingAnecdotes: result.storylet.groundingAnecdotes,
     storyletState: result.finalState,
   })
 }

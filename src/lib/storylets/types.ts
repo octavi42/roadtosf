@@ -1,4 +1,5 @@
 import type { Archetype } from '../types'
+import type { Anecdote } from '../anecdotes/types'
 
 // One authored card in the storylet bag. The engine picks which storylets
 // fire each episode; the LLM only renders the chosen beats. See
@@ -72,6 +73,19 @@ export interface Storylet {
   cooldownEpisodes?: number
 }
 
+// A storylet with selection-time enrichment attached. The selector
+// returns these (not raw Storylets) so downstream prompt builders
+// can render the storylet's beat alongside any real-founder anecdotes
+// the curation corpus matched. Anecdotes ground the LLM's rendering
+// in real-world texture instead of letting it default to generic
+// startup tropes. See src/lib/anecdotes/.
+export interface ChosenStorylet extends Storylet {
+  /** Real-founder paraphrased composites attached at selection time.
+   *  Empty array (not undefined) when the corpus had no matches —
+   *  callers can rely on `.length` checks without guarding. */
+  groundingAnecdotes: Anecdote[]
+}
+
 export interface FiredStorylet {
   id: string
   firedAtEpisode: number
@@ -81,6 +95,22 @@ export interface StoryletState {
   fired: FiredStorylet[]
   flags: Record<string, boolean>
 }
+
+// Episode-shape variants. Rolled once at episode start from the
+// playthrough seed + episodeIndex so two players with identical state
+// can still see different episode flavors. Each shape biases the
+// picker:
+//   - "default": classic — 5 distinct archetypes, balanced kinds.
+//   - "pressure": drops the archetype-diversity rule so the same
+//     archetype can fire 2-3 times. The "cofounder breakup episode"
+//     where every scene is a fresh shockwave from one direction.
+//   - "solo-night": salience bonus for kind=solo|world-event so the
+//     episode skews toward interior moments instead of NPC encounters.
+//   - "cameo-gauntlet": salience bonus for storylets that require a
+//     cameo, so when the player is rolled good cameos those scenes
+//     fire more.
+// Episode 0 is always "default" — first impressions stay readable.
+export type EpisodeShape = 'default' | 'pressure' | 'solo-night' | 'cameo-gauntlet'
 
 // Snapshot of the run state the selector reads from. Built server-side
 // from the request body (see /api/generate-arc/route.ts).
@@ -101,4 +131,9 @@ export interface SelectionState {
    *  tiebreaks per-player instead of globally deterministic. Without
    *  this, two players with identical state pick the same storylet. */
   seed?: string
+  /** Episode shape selected by the engine. Set by selectEpisodeStorylets
+   *  before iterating; consumed by pickOneStorylet to bias salience and
+   *  archetype-diversity. Optional on the input — selectEpisodeStorylets
+   *  rolls it if absent so callers don't need to compute shapes. */
+  episodeShape?: EpisodeShape
 }
