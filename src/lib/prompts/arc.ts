@@ -1,6 +1,7 @@
 import { ARCHETYPES } from '../archetypes'
 import { filterLore } from '../lore'
 import type { Archetype } from '../types'
+import type { SMItem } from '../silicon-mania/types'
 
 export const EPISODE_LENGTH = 5
 
@@ -33,6 +34,10 @@ export interface BuildArcPromptInput {
   currentStats: { hype: number; integrity: number }
   seed?: string
   todayISO: string
+  // Real-world SF tech-news items selected for this playthrough from the
+  // Silicon Mania Weekly digest. When non-empty, they are spliced into the
+  // prompt as fate so the arc can name real people verbatim.
+  siliconManiaItems?: SMItem[]
 }
 
 const SYSTEM_RULES = `You are the arc-skeleton engine for "Road to SF", a satirical comic-book founder game running in ENDLESS MODE. The story is delivered as 5-scene episodes; you produce one episode at a time.
@@ -76,6 +81,22 @@ OUTPUT SHAPE:
 Constraints by episode:
 - episodeIndex = 0: "recentChoices" comes from the player's authored onboarding scenes. No priorStorySoFar.
 - episodeIndex >= 1: "recentChoices" is just the last 5 (most recent episode's). Use "priorStorySoFar" for everything older. Your "storySoFar" output must extend the prior summary with the last episode's events.`
+
+function formatSiliconManiaItems(items: SMItem[]): string {
+  // Compact, ~400-token-bounded rendering. Each item: headline, summary,
+  // and any named entities the model should drop in verbatim.
+  return items
+    .map((it) => {
+      const named: string[] = []
+      if (it.people.length) named.push(`people: ${it.people.join(', ')}`)
+      if (it.companies.length) named.push(`companies: ${it.companies.join(', ')}`)
+      if (it.vcs.length) named.push(`vcs: ${it.vcs.join(', ')}`)
+      const namedLine = named.length ? `\n  ${named.join(' | ')}` : ''
+      const cat = it.category ? ` [${it.category}]` : ''
+      return `- ${it.headline}${cat}\n  ${it.summary}${namedLine}`
+    })
+    .join('\n')
+}
 
 function formatRecentChoices(choices: PriorChoiceSummary[]): string {
   if (choices.length === 0) return '(none)'
@@ -147,7 +168,17 @@ Target customer: ${input.targetCustomer || '(unstated; keep generic — don\'t i
 Current concern: ${input.concern || '(unstated)'}
 
 Current stats — hype ${input.currentStats.hype}, integrity ${input.currentStats.integrity}.
-
+${
+  input.siliconManiaItems && input.siliconManiaItems.length > 0
+    ? `
+## REAL SF TECH NEWS — THIS WEEK
+Real SF tech news from this week — weave 2–3 of these in as fate (the player did not choose them; they appear because they are happening right now in the city). Use real names verbatim — this overrides the "never name real people" rule for these specific items only.
+<items>
+${formatSiliconManiaItems(input.siliconManiaItems)}
+</items>
+`
+    : ''
+}
 ## EPISODE
 episodeIndex: ${input.episodeIndex}
 
