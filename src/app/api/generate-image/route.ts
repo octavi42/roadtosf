@@ -42,7 +42,15 @@ const CONTENT_TYPE: Record<ImageFormat, string> = {
 // Why: persisting data URLs in sessionStorage blew the 5MB quota and forced
 // regeneration on every refresh. With a stable URL we can skip the strip
 // entirely and rehydrate keeps the original asset.
+//
+// Local-dev fallback: if BLOB_READ_WRITE_TOKEN isn't set, return an inline
+// data URL. Persistence-on-refresh stops working (the same problem the
+// blob upload was added to fix) but the immediate render works, which is
+// what local dev needs. Production sets the token and gets stable URLs.
 async function uploadToBlob(b64: string, format: ImageFormat): Promise<string> {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    return `data:${CONTENT_TYPE[format]};base64,${b64}`
+  }
   const bytes = Buffer.from(b64, 'base64')
   const filename = `scenes/${crypto.randomUUID()}.${format}`
   const blob = await put(filename, bytes, {
