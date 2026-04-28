@@ -550,6 +550,9 @@ export default function HomePage() {
   const imageGenFiredRef = useRef<Set<number>>(new Set()); // llm indices whose image gen was requested
   const arcPersistedRef = useRef<number>(-1); // last episodeIndex whose skeleton was PATCHed
   const extractFiredForRef = useRef<string | null>(null); // last startupDescription extracted for
+  // Tracks which episode's first scene-gen has been fired. Episode 0 only;
+  // regen path uses its own dedup via sceneGenFiredRef.
+  const firstSceneFiredRef = useRef<number | null>(null);
   // Flips true once extraction has settled (success or failure). Arc-gen is
   // gated on this so Sonnet never receives a half-populated player facts block
   // — the cause of the "Maya in The Uninvited Cofounder" bleed.
@@ -560,6 +563,7 @@ export default function HomePage() {
     imageGenFiredRef.current = new Set();
     arcPersistedRef.current = -1;
     extractFiredForRef.current = null;
+    firstSceneFiredRef.current = null;
     // If the intro arrived with missingQuestions already populated (dev skip,
     // or a hydrated session), treat extraction as resolved — otherwise arc-gen
     // would stall waiting for an extract-facts call that won't be re-issued.
@@ -686,18 +690,25 @@ export default function HomePage() {
     arcSkeletonReady,
   ]);
 
-  // generating-arc phase: when the *current* skeleton is ready, fire the
-  // first LLM scene of that episode and exit into 'scene' phase.
-  const firstSceneFiredRef = useRef<number | null>(null);
+  // Episode 0's first scene-gen: fires as soon as the partial/full arc
+  // skeleton lands, regardless of phase. This way the scene-gen latency
+  // (~5–7s) hides behind the remaining authored scenes 6–8 instead of
+  // queuing up at the cinematic boundary.
+  // Defer when the player has 0 credits AND we're not yet at the
+  // cinematic — otherwise the 402-driven paywall would interrupt free
+  // authored play. With 0 credits we wait until phase enters
+  // 'generating-arc' so paywall pops at the same moment as before.
+  // Cinematic exit is handled by the separate effect below; the
+  // exitGeneratingArc() calls in .then/.catch are safe no-ops when the
+  // player isn't in that phase yet.
   useEffect(() => {
-    if (phase !== "generating-arc") {
-      firstSceneFiredRef.current = null;
-      return;
-    }
     const skeleton = arc?.arcSkeleton;
     if (!skeleton) return;
     const epi = skeleton.episodeIndex;
+    if (epi !== 0) return; // regen path uses its own effect below
     if (firstSceneFiredRef.current === epi) return;
+    const inCinematic = phase === "generating-arc";
+    if (!inCinematic && creditsRemaining < 1) return;
     firstSceneFiredRef.current = epi;
 
     const globalLLMIndex = epi * EPISODE_LENGTH; // first scene of this episode
@@ -736,6 +747,8 @@ export default function HomePage() {
         if (typeof data.creditsRemaining === "number") {
           setCreditsRemaining(data.creditsRemaining);
         }
+        // No-op when not yet in 'generating-arc' phase. The cinematic-exit
+        // effect picks it up when the player reaches the cinematic.
         exitGeneratingArc();
       })
       .catch((err) => {
@@ -750,6 +763,8 @@ export default function HomePage() {
           return;
         }
         console.error("generate-scene[first] failed", err);
+        // Allow a retry when phase enters the cinematic (or any rerender).
+        firstSceneFiredRef.current = null;
         exitGeneratingArc();
       });
   }, [
@@ -766,6 +781,23 @@ export default function HomePage() {
     creditsExhausted,
     creditsRemaining,
   ]);
+
+  // Cinematic exit: when the player reaches the 'generating-arc' loader,
+  // bail out the moment the first LLM scene of the current episode is
+  // already populated. With the early-fire effect above, scene-gen often
+  // completes during the authored tail — by the time the player crosses
+  // into the cinematic, dialogue is already there and the loader can skip
+  // straight to the LLM tail.
+  useEffect(() => {
+    if (phase !== "generating-arc") return;
+    const skeleton = arc?.arcSkeleton;
+    if (!skeleton) return;
+    const firstIdx = skeleton.episodeIndex * EPISODE_LENGTH;
+    const stored = arc?.scenes[firstIdx];
+    if (stored && stored.dialogue.length > 0) {
+      exitGeneratingArc();
+    }
+  }, [phase, arc, exitGeneratingArc]);
 
   // Group-batch scene-text generation. Each archetype group fires as a
   // single burst of 4 parallel calls when its trigger condition is met:
