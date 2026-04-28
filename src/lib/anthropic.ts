@@ -52,15 +52,19 @@ export async function completeJson<T>(
 ): Promise<T> {
   const { model, systemBlocks, userBlocks, maxTokens = 2400, temperature = 0.85 } = opts
 
-  const attempt = async (): Promise<T> => {
+  const attempt = async (extraHint?: string): Promise<T> => {
+    const messages: Anthropic.MessageParam[] = [
+      { role: 'user', content: toContentBlocks(userBlocks) },
+    ]
+    if (extraHint) {
+      messages.push({ role: 'user', content: extraHint })
+    }
     const response = await client().messages.create({
       model,
       max_tokens: maxTokens,
       temperature,
       system: toContentBlocks(systemBlocks),
-      messages: [
-        { role: 'user', content: toContentBlocks(userBlocks) },
-      ],
+      messages,
     })
     const block = response.content.find((b) => b.type === 'text')
     if (!block || block.type !== 'text') {
@@ -73,7 +77,17 @@ export async function completeJson<T>(
     return await attempt()
   } catch (err) {
     console.warn('completeJson first attempt failed, retrying once', err)
-    return attempt()
+    // Tell the model exactly what failed. Haiku tends to make the same
+    // mistake on a blind retry; a targeted hint cuts the failure rate.
+    // The most common parse failure is unescaped double quotes inside
+    // dialogue "text" values — we surface that explicitly.
+    const isParseErr =
+      err instanceof SyntaxError ||
+      (err instanceof Error && /JSON|parse/i.test(err.message))
+    const hint = isParseErr
+      ? `Your previous response failed JSON parsing with: ${err instanceof Error ? err.message : String(err)}. The most common cause is an unescaped double-quote (") inside a string value. Re-emit the JSON object. Inside any "text" field, use ONLY single quotes (') for in-text speech. Never use " inside a string value. Re-output the SAME scene content with that fixed.`
+      : undefined
+    return attempt(hint)
   }
 }
 
@@ -131,5 +145,90 @@ export function extractJsonObject(raw: string): unknown {
   json = json.replace(/:(\s*)\+(\d)/g, ':$1$2')
   // Trailing commas before } or ]
   json = json.replace(/,(\s*[}\]])/g, '$1')
-  return JSON.parse(json)
+  try {
+    return JSON.parse(json)
+  } catch (err) {
+    // Defense-in-depth: dialogue "text" fields sometimes contain
+    // unescaped " (Haiku narrating a character's quoted speech). The
+    // prompt forbids it, but when the rule is broken we try to repair
+    // before failing. Walks string boundaries; when a "text" string
+    // would close before a , or }, escapes the offending interior ".
+    // Rethrows the original error if repair didn't change anything.
+    const repaired = repairUnescapedQuotesInStringFields(json)
+    if (repaired !== json) {
+      try {
+        return JSON.parse(repaired)
+      } catch {
+        // fallthrough — original error is more informative
+      }
+    }
+    throw err
+  }
+}
+
+// Scans the JSON looking for `"key": "..."` patterns. When it finds a
+// string value whose closing " isn't followed by , } or ] (i.e. the
+// LLM emitted an unescaped " inside the value), it escapes the
+// problematic interior quotes and continues. Best-effort recovery —
+// only meaningful when the prompt rule "no internal double quotes"
+// has been violated.
+function repairUnescapedQuotesInStringFields(json: string): string {
+  const out: string[] = []
+  let i = 0
+  let inString = false
+  let escape = false
+  let stringStart = -1
+  while (i < json.length) {
+    const c = json[i]!
+    if (!inString) {
+      out.push(c)
+      if (c === '"') {
+        inString = true
+        stringStart = out.length - 1
+      }
+      i++
+      continue
+    }
+    // inside a string
+    if (escape) {
+      out.push(c)
+      escape = false
+      i++
+      continue
+    }
+    if (c === '\\') {
+      out.push(c)
+      escape = true
+      i++
+      continue
+    }
+    if (c === '"') {
+      // Peek ahead: is this a real terminator (followed by ws then , } : ])
+      // or a stray internal quote?
+      let j = i + 1
+      while (j < json.length && /\s/.test(json[j]!)) j++
+      const next = json[j]
+      if (
+        next === undefined ||
+        next === ',' ||
+        next === '}' ||
+        next === ']' ||
+        next === ':'
+      ) {
+        // Real terminator. Close the string.
+        out.push(c)
+        inString = false
+        i++
+      } else {
+        // Stray quote inside a string — escape it.
+        out.push('\\')
+        out.push(c)
+        i++
+      }
+      continue
+    }
+    out.push(c)
+    i++
+  }
+  return out.join('')
 }
