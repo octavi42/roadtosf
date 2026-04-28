@@ -88,11 +88,19 @@ const ENDING_COPY: Record<
   },
 };
 
+// Each unified dialogue line carries a pre-resolved voiceId. We resolve at
+// unify-time because formatArchetypeSpeaker (below) collapses LLM speakers
+// into display strings ("Stranger · Co-founder & CTO"), which makes
+// after-the-fact archetype lookup brittle.
+interface UnifiedDialogueLine extends AuthoredDialogueLine {
+  voiceId?: string | null;
+}
+
 interface UnifiedScene {
   id: number;
   title: string;
   background?: string;
-  dialogue: AuthoredDialogueLine[];
+  dialogue: UnifiedDialogueLine[];
   choices?: AuthoredChoice[];
   textInput?: SceneData["textInput"];
   questions?: SceneData["questions"];
@@ -123,6 +131,7 @@ function adaptLLMScene(scene: LLMScene): UnifiedScene {
     dialogue: scene.dialogue.map((d) => ({
       speaker: formatArchetypeSpeaker(d.speaker),
       text: d.text,
+      voiceId: voiceIdForSpeaker(d.speaker),
     })),
     choices: scene.choices.map((c) => ({
       id: c.id,
@@ -144,7 +153,10 @@ function authoredAsUnified(scene: SceneData): UnifiedScene {
     id: scene.id,
     title: scene.title,
     background: scene.background,
-    dialogue: scene.dialogue,
+    dialogue: scene.dialogue.map((d) => ({
+      ...d,
+      voiceId: voiceIdForSpeaker(d.speaker),
+    })),
     choices: scene.choices,
     textInput: scene.textInput,
     questions: scene.questions,
@@ -1543,7 +1555,7 @@ export default function HomePage() {
                 text={currentLine.text}
                 wordInterval={110}
                 onComplete={handleLineComplete}
-                voiceId={voiceIdForSpeaker(currentLine.speaker)}
+                voiceId={currentLine.voiceId ?? voiceIdForSpeaker(currentLine.speaker)}
               />
             )}
           </div>
