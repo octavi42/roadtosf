@@ -133,16 +133,14 @@ function formatPriorChoiceCallout(
   const last = choices[choices.length - 1]!
   const hypeStr = `${last.hypeDelta >= 0 ? '+' : ''}${last.hypeDelta}`
   const integStr = `${last.integrityDelta >= 0 ? '+' : ''}${last.integrityDelta}`
-  return `## PRIOR CHOICE — THE PROTAGONIST'S LITERAL ACTION
-The player just chose: "${last.choiceLabel}"
+  return `## PRIOR CHOICE — THE PLAYER ALREADY DID THIS
+The player chose: "${last.choiceLabel}"
 Effect: hype ${hypeStr}, integrity ${integStr}.
 
-Read the choice label as a verb-phrase the player just ENACTED. It's
-not a tone modifier — it's THE action the protagonist took. This scene
-shows what happens because of that action, not what would have happened
-anyway. The opening sentence should make it obvious which of the prior
-choices the player picked; a reader joining cold should be able to
-reverse-engineer the choice from the first line.`
+PAST TENSE. The action has happened. The player is mid-doing-it or
+just did it. Do NOT render them deciding whether to do it, driving
+toward doing it, opening the laptop to do it, or thinking about it.
+Render the doing.`
 }
 
 export function buildScenePromptParts(input: BuildScenePromptInput) {
@@ -191,21 +189,25 @@ Current concern: ${input.concern || '(unstated)'}`
   // the player has made their choice in the prior sub. recentChoices
   // therefore ALWAYS contains the immediately-prior pick, and the dialogue
   // must honor it as a literal in-fiction action — not gloss past it.
-  // Storylet kind drives the rendering mode. Solo/world-event scenes
-  // render with narrator + player only — no NPC of this archetype
-  // speaks. The arc-skeleton schema carries kind through; encounter is
-  // the default when missing (preserves old skeleton behavior).
+  // Storylet kind drives the rendering mode for SUB-SCENE 0 only.
+  // Sub-scenes 1-3 are choice-driven: if the player picked "call her,"
+  // there's a second character on the phone — the kind:solo "no NPC
+  // speaks" rule would otherwise block that and force Haiku to render
+  // the player avoiding the call. The kind constraint is a sub-0
+  // setup constraint, not an episode-wide rule.
   const kind = input.outline.kind ?? 'encounter'
   const kindBlock =
-    kind === 'solo'
-      ? `## SCENE KIND: SOLO (no NPC speaks)
+    input.subSceneIndex === 0
+      ? kind === 'solo'
+        ? `## SCENE KIND: SOLO (no NPC speaks)
 This scene has NO NPC of any archetype as a speaking character. Dialogue uses ONLY "narrator" and "player" speakers. The "${arche.name}" archetype on this outline is a THEMATIC ANCHOR for tone/image — not a character that walks in.
 Render the scene as: narrator describes the moment + place + time, player has 1–2 internal-monologue lines, the choices are about what the player does next (alone). No second character.`
-      : kind === 'world-event'
-        ? `## SCENE KIND: WORLD-EVENT (an event, not an encounter)
+        : kind === 'world-event'
+          ? `## SCENE KIND: WORLD-EVENT (an event, not an encounter)
 Something changed in the world; the player reacts. Dialogue is mostly "narrator" describing the event and its visible consequence, optionally one "player" line. The "${arche.name}" archetype is a THEMATIC ANCHOR for tone/image — an NPC of that archetype may be REFERENCED in narration ("a Thiel-coded VC's tweet went viral", "a competitor's blog post drops") but DOES NOT appear as a speaking character.
 The choices are about what the player does in response to the event.`
-        : ''
+          : ''
+      : ''
 
   const subSceneBlock =
     input.subSceneIndex === 0
@@ -216,58 +218,33 @@ character + tension. End on a choice that the player's NEXT scene will
 literally enact. Pick a location flexible enough that any of the
 choices' consequences (calling someone, walking out, agreeing, lying,
 etc.) can plausibly play out from here or just past here.`
-      : `## SUB-SCENE ${input.subSceneIndex} of 4 — RENDER THE PLAYER'S CHOICE AS ACTION
+      : `## SUB-SCENE ${input.subSceneIndex} of 4
 
-CRITICAL — read this carefully, this is the architectural rule:
-The PRIOR CHOICE above is NOT a tone modifier or a dialogue cue. It is
-LITERALLY THE PROTAGONIST'S ACTION that drives this scene. The
-storylet's anchor situation is ALREADY established (sub-scene 0 did
-that). This scene shows what happens BECAUSE the player chose what
-they chose.
+THE PLAYER ALREADY DID THE THING. Read the PRIOR CHOICE above. Treat its label as past-tense action, not intention. Render this scene as what is happening WHILE OR JUST AFTER the player does it.
 
-Read the choice's label as a verb-phrase the player just enacted:
-  - "Call her"             → scene opens with the player on the phone,
-                              hearing it ring or her voice answering.
-                              The setting shifts from indoor table to
-                              outside / a quiet corner. Render the call.
-  - "Submit the form"      → scene opens with the player clicking
-                              submit, the confirmation flashing,
-                              dread or relief. The application is GONE
-                              from the screen.
-  - "Walk out"             → the player is OUTSIDE, on the sidewalk,
-                              the door closing behind them. The
-                              previous character's voice fades.
-  - "Take the term sheet"  → the contract is signed; the VC offers
-                              their hand; what comes next?
-  - "Push back on..."      → the verbal counter lands; the recipient
-                              reacts in character; the conversation
-                              has shifted register.
-  - "Ask for the deck"     → the deck is now being shared; the
-                              player is reading it. New material.
-  - "Tell them you're solo" → the deflection lands; the recipient
-                              processes the rejection. Different beat.
+Hard rule: do NOT show the player avoiding, delaying, postponing, second-guessing, or overthinking the choice. They already did it. Render the consequence in motion.
 
-DO NOT reuse the storylet's anchor beat ("the cursor blinks", "the
-email sits open", "you're staring at the deck"). That was sub-scene 0.
-This scene is a NEW MOMENT, branched from the choice. The player has
-moved time and/or space forward.
+Examples — what the FIRST narrator/player line must look like:
+- Choice "Call her right now" → "[narrator] Three rings. Then her voice." or "[narrator] Phone to your ear. The dial tone clicks once. 'Hey?' she says."
+- Choice "Submit the form" → "[narrator] You click submit. The screen flashes 'Application received'." or "[narrator] Send. The page reloads. It's gone."
+- Choice "Walk out" → "[narrator] The door closes behind you. The street is louder than you remembered."
+- Choice "Sleep on it" → "[narrator] You close the laptop. The kitchen is dark now. Tomorrow."
+- Choice "Take the term sheet" → "[narrator] You sign. He slides the contract across the bar. 'Welcome.'"
+- Choice "Push back on the war chest logic" → "[vc] 'Twenty million is the table stakes—' [player] 'No it isn't.' [vc] '...go on.'"
+- Choice "Tell them you're solo by choice" → "[player] 'I'm flying solo. By choice.' [cofounder] silence. then a flat 'Okay.'"
 
-Setting: the image was generated for sub-scene 0's location. Narration
-can shift to a nearby beat (the cafe doorway, the office hallway,
-outside the bar) — pick something within walking distance of sub-0's
-setting so the image still feels right. Don't teleport across the city.
+If the choice triggered an external action (call, walkout, signing, submitting), there is now a NEW CHARACTER or NEW SETTING in the scene. INCLUDE THEM. The choice's "kind" overrides the storylet's kind for THIS sub-scene.
 
-Character: if the choice involves leaving someone, they may NOT
-return in this scene. If the choice is verbal, the same NPC continues
-the conversation. If the choice triggers a phone call, the new
-character is on the line — render their voice via dialogue speaker.
+Forbidden openings for this scene:
+- "You're driving / you're walking / you're sitting somewhere thinking about [thing]"
+- "The email is still open / the cursor still blinks / the deck still sits"
+- "You haven't [verb] yet"
+- Any framing where the player is in transit or contemplating instead of acting
 
-Dialogue: the FIRST line should make it OBVIOUS which choice was made.
-A reader picking up at this scene cold should be able to reverse-engineer
-the player's choice from the opening sentence.
+If the storylet was solo/internal but the player picked an outward-action choice, BREAK the solo frame. Bring the second character on screen via voice or dialogue. Render the ACTION, not the introspection.
 ${
   input.subSceneIndex === 3
-    ? '\nThis is sub-scene 3 — the final beat. Close the encounter cleanly so the next archetype can enter; leave a hook, do NOT resolve the run.'
+    ? '\nThis is sub-scene 3 — the final beat. Close cleanly so the next archetype can enter; leave a hook, do NOT resolve the run.'
     : ''
 }`
 
