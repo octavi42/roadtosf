@@ -190,6 +190,7 @@ export async function POST(request: Request) {
   const { systemBlocks, userBlocks } = buildArcPromptParts(promptInput)
 
   const encoder = new TextEncoder()
+  const poolSize = siliconManiaItems.length
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -204,7 +205,11 @@ export async function POST(request: Request) {
         for (const outline of parsed.scenes) {
           send('scene', { outline })
         }
-        send('done', { skeleton: parsed, source: 'fallback' as const })
+        send('done', {
+          skeleton: parsed,
+          source: 'fallback' as const,
+          siliconManiaPoolSize: poolSize,
+        })
       }
 
       try {
@@ -250,7 +255,11 @@ export async function POST(request: Request) {
         })
 
         const skeleton = parseFromRaw(raw, episodeIndex)
-        send('done', { skeleton, source: 'llm' as const })
+        send('done', {
+          skeleton,
+          source: 'llm' as const,
+          siliconManiaPoolSize: poolSize,
+        })
       } catch (err) {
         console.warn('generate-arc: stream path failed, sending fallback', err)
         try {
