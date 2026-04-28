@@ -68,9 +68,10 @@ ABSOLUTE PROHIBITIONS (override the outline if they conflict):
 - If the player named a cofounder (e.g. "my cofounder Anna"), use that name verbatim. Never substitute a different name.
 - If Funding says "bootstrapping": do NOT reference term sheets the player has, equity advisory clauses, or VC drama in motion. VC scenes are cold solicitations, not active deals.
 
-CAST LIST LOCK (anti-retroactive-worldbuilding — see Hidden Door findings in STORYLETS.md):
-- The ONLY named characters you may reference are: (a) the player's startup, (b) the player's cofounder if "Team" names one, (c) any real person already named in the scene's beat (these came from the storylet engine and are intentional).
+CAST LIST LOCK (anti-retroactive-worldbuilding + anti-cliché — see Hidden Door + Drama Llama findings in STORYLETS.md):
+- The ONLY named characters you may reference are: (a) the player's startup, (b) the player's cofounder if "Team" names one, (c) REAL PUBLIC FIGURES already named in the scene's beat (Peter Thiel, Sam Altman, Paul Graham, Garry Tan, Marc Andreessen, etc. — these came from the cameo engine and are intentional).
 - Do NOT invent new named NPCs ("Jessica from Sequoia", "Arman the technical lead", etc.). Strangers stay strangers.
+- ANTI-CLICHÉ NAME SCRUB: If the input beat contains a generic first name that is NOT a real public figure (e.g. "Victor", "Sandra", "Chad", "Sarah", "Mike", "Marcus" — typical LLM defaults), TREAT IT AS A PLACEHOLDER ONLY. In your rendered scene, refer to that NPC by their archetype role ("the partner", "the reporter", "the mentor") — never by the placeholder name. The same default names recurring across players is exactly the bug we're scrubbing.
 - The speaker for THIS scene is the assigned archetype — do not introduce a second named character into the dialogue.
 
 OUTPUT SHAPE:

@@ -82,6 +82,12 @@ ABSOLUTE PROHIBITIONS (override anything else if they conflict):
 - If the player's Team says "solo" / "no cofounder": render a chosen cofounder storylet as written (the storylet engine has already gated for solo-vs-named appropriateness — your job is faithful rendering, not re-gating).
 - If the player named a cofounder (e.g. "my cofounder Anna"), use that name verbatim where it fits the storylet.
 
+NPC NAMING — STRICT (anti-cliché, applies to ALL beats):
+- DO NOT invent first names for NPCs in beats. No "Victor the VC", no "Sandra the mentor", no "Chad the reporter". These are training-data defaults that recur across every player and break uniqueness.
+- Use archetype role labels instead: "the partner", "the junior associate at the no-name fund", "the staff writer at the newsletter", "the second-time founder over coffee", "a YC batchmate", "the recruiter".
+- The ONLY first names allowed in beats are those ALREADY present in the chosen storylet's source beat — those came from the cameo engine (real public figures: Thiel, Altman, Paul Graham, Garry Tan, etc.) and are deliberate.
+- If the chosen storylet's source beat has no name, your rendered beat must have no name either. The texture (player startup, persona, place) goes in around the role, not on a fabricated identity.
+
 OUTPUT SHAPE:
 {
   "episodeIndex": <integer matching the input>,
