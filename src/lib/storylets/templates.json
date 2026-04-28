@@ -243,7 +243,7 @@
     "archetype": "mentor",
     "kind": "world-event",
     "tier": "early",
-    "requires": {},
+    "requires": { "flavorTag": "yc" },
     "beat": "9:14pm Friday. The W26 application closes at 11:59. You haven't submitted. You opened the form last week and saved a draft that says 'we're building…' and trailed off.",
     "effects": { "worldChanged": true, "ycDeadlineFaced": true },
     "tags": ["world-event", "mentor", "yc", "deadline"]
