@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { completeJson, MODELS, extractJsonObject } from '@/lib/anthropic'
+import { streamJsonText, MODELS, extractJsonObject } from '@/lib/anthropic'
 import {
   coerceRawSceneJson,
   sceneSchema,
@@ -113,6 +113,119 @@ function parseFromRaw(raw: string, assignedArchetype: Archetype): ParsedScene {
     throw result.error
   }
   return sanitizeScene(result.data)
+}
+
+// ── Incremental JSON extractors for streaming scene generation ───────
+//
+// As Haiku streams the JSON top-to-bottom, these helpers detect when
+// specific fields have been fully emitted so we can surface them to
+// the client immediately. The keys we care about are emitted in this
+// order: imagePrompt → dialogue[] (one object at a time) → choices[].
+// Once a field fires, we never re-emit it for the same scene.
+
+// Returns the position immediately AFTER `"<key>" : "..."`'s closing
+// quote, OR -1 if the value is still streaming. Handles escaped chars.
+function findStringFieldEnd(text: string, key: string): number {
+  const re = new RegExp(`"${key}"\\s*:\\s*"`)
+  const m = re.exec(text)
+  if (!m || m.index === undefined) return -1
+  let i = m.index + m[0].length
+  let escape = false
+  while (i < text.length) {
+    const c = text[i]!
+    if (escape) {
+      escape = false
+      i++
+      continue
+    }
+    if (c === '\\') {
+      escape = true
+      i++
+      continue
+    }
+    if (c === '"') return i + 1 // points just past the closing quote
+    i++
+  }
+  return -1
+}
+
+// Extracts the string value of a field whose end we've already located.
+// `endPos` is the position from findStringFieldEnd.
+function readStringFieldValue(text: string, key: string, endPos: number): string | null {
+  const re = new RegExp(`"${key}"\\s*:\\s*"`)
+  const m = re.exec(text)
+  if (!m || m.index === undefined) return null
+  const valueStart = m.index + m[0].length
+  // endPos points just past the closing quote, so value runs to endPos-1.
+  const raw = text.slice(valueStart, endPos - 1)
+  // Unescape JSON string escapes that matter for plain text. Conservative:
+  // \" → ", \\ → \, \n → newline. Drop anything weirder.
+  return raw
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, '\\')
+    .replace(/\\n/g, '\n')
+    .replace(/\\t/g, '\t')
+}
+
+// Locates the start of `"dialogue": [` and returns the position just
+// after the opening bracket. Returns -1 if not yet present.
+function findDialogueArrayStart(text: string): number {
+  const m = text.match(/"dialogue"\s*:\s*\[/)
+  if (!m || m.index === undefined) return -1
+  return m.index + m[0].length
+}
+
+// Walks from `start` through the dialogue array, returning the next
+// complete `{...}` object (parsed) plus the index just past it. Used
+// to extract `{ "speaker": "...", "text": "..." }` entries one at a
+// time as Haiku streams them. Returns null while streaming or when
+// the array closes.
+function nextDialogueLine(
+  s: string,
+  start: number,
+): { value: { speaker?: string; text?: string }; end: number } | null {
+  let i = start
+  while (i < s.length && (s[i] === ',' || /\s/.test(s[i]!))) i++
+  if (i >= s.length) return null
+  if (s[i] === ']') return null
+  if (s[i] !== '{') return null
+
+  let depth = 0
+  let inString = false
+  let escape = false
+  for (let j = i; j < s.length; j++) {
+    const c = s[j]
+    if (escape) {
+      escape = false
+      continue
+    }
+    if (inString) {
+      if (c === '\\') escape = true
+      else if (c === '"') inString = false
+      continue
+    }
+    if (c === '"') {
+      inString = true
+      continue
+    }
+    if (c === '{') depth++
+    else if (c === '}') {
+      depth--
+      if (depth === 0) {
+        const slice = s.slice(i, j + 1)
+        try {
+          return { value: JSON.parse(slice), end: j + 1 }
+        } catch {
+          return null
+        }
+      }
+    }
+  }
+  return null
+}
+
+function sseEvent(name: string, data: unknown): string {
+  return `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`
 }
 
 export async function POST(request: Request) {
@@ -239,30 +352,129 @@ export async function POST(request: Request) {
 
   const { systemBlocks, userBlocks } = buildScenePromptParts(promptInput)
 
-  try {
-    if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY missing')
-    const scene = await completeJson(
-      { model: MODELS.scene, systemBlocks, userBlocks, maxTokens: 1000, temperature: 0.9 },
-      (raw) => parseFromRaw(raw, outline.archetype),
-    )
-    return NextResponse.json({
-      scene,
-      source: 'llm' as const,
-      creditsRemaining,
-    })
-  } catch (err) {
-    console.warn(`generate-scene index=${llmIndex}: LLM path failed, returning fallback`, err)
-    // For fallback, modulo-cycle through the static bank if we've gone past 5
-    const fbList = fallbackScenes as unknown[]
-    const fb = fbList[llmIndex % fbList.length]
-    if (!fb) return NextResponse.json({ error: 'no fallback scene' }, { status: 500 })
-    const parsed = sanitizeScene(sceneSchema.parse(fb))
-    // Patch the id to match the requested global llmIndex so the renderer
-    // doesn't show duplicate scene numbers across cycled fallbacks.
-    return NextResponse.json({
-      scene: { ...parsed, id: sceneId },
-      source: 'fallback' as const,
-      creditsRemaining,
-    })
-  }
+  // Streaming SSE response. Events emitted (in order, as Haiku streams):
+  //   imagePrompt → fired once when the imagePrompt field completes
+  //                 (so the client can start image-gen immediately)
+  //   dialogueLine → fired once per dialogue entry as each completes
+  //                  (so the client can start TTS for that line and
+  //                   render the speaker + text without waiting for
+  //                   the rest of the scene)
+  //   done → fired once at the end with the full validated Scene
+  //   error → fired if the LLM call fails fatally; client falls back
+  //
+  // Total perceived latency to first audio: ~1-1.5s (vs ~5-7s before).
+  // The full scene completion still takes ~5-7s, but by then the
+  // player is already listening to the first lines.
+  const encoder = new TextEncoder()
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (name: string, data: unknown) => {
+        controller.enqueue(encoder.encode(sseEvent(name, data)))
+      }
+
+      const sendFallback = () => {
+        const fbList = fallbackScenes as unknown[]
+        const fb = fbList[llmIndex % fbList.length]
+        if (!fb) {
+          send('error', { message: 'no fallback scene available' })
+          return
+        }
+        try {
+          const parsed = sanitizeScene(sceneSchema.parse(fb))
+          send('done', {
+            scene: { ...parsed, id: sceneId },
+            source: 'fallback' as const,
+            creditsRemaining,
+          })
+        } catch (e) {
+          send('error', { message: `fallback parse failed: ${String(e)}` })
+        }
+      }
+
+      try {
+        if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY missing')
+
+        // Incremental-emit bookkeeping. Each field's "fired" flag prevents
+        // duplicate events as the buffer grows.
+        let imagePromptFired = false
+        let dialogueArrayStart = -1
+        let nextDialogueSearchPos = 0
+        let dialogueLinesFired = 0
+
+        const tryEmitProgress = (full: string) => {
+          // imagePrompt — fires once when its closing quote arrives.
+          if (!imagePromptFired) {
+            const ipEnd = findStringFieldEnd(full, 'imagePrompt')
+            if (ipEnd !== -1) {
+              const ip = readStringFieldValue(full, 'imagePrompt', ipEnd)
+              if (ip !== null && ip.length > 0) {
+                imagePromptFired = true
+                send('imagePrompt', { imagePrompt: ip })
+              }
+            }
+          }
+          // dialogue[] — fires once per completed entry.
+          if (dialogueArrayStart === -1) {
+            dialogueArrayStart = findDialogueArrayStart(full)
+            if (dialogueArrayStart !== -1) nextDialogueSearchPos = dialogueArrayStart
+          }
+          if (dialogueArrayStart !== -1) {
+            // Emit at most a generous cap so a runaway response doesn't
+            // pump unbounded events. Real scenes are 2-4 lines.
+            while (dialogueLinesFired < 8) {
+              const line = nextDialogueLine(full, nextDialogueSearchPos)
+              if (!line) break
+              nextDialogueSearchPos = line.end
+              dialogueLinesFired++
+              const speaker =
+                typeof line.value.speaker === 'string' ? line.value.speaker : 'narrator'
+              const text = typeof line.value.text === 'string' ? line.value.text : ''
+              if (text.length > 0) {
+                send('dialogueLine', { index: dialogueLinesFired - 1, speaker, text })
+              }
+            }
+          }
+        }
+
+        const raw = await streamJsonText({
+          model: MODELS.scene,
+          systemBlocks,
+          userBlocks,
+          maxTokens: 1000,
+          temperature: 0.9,
+          onText: (_delta, full) => tryEmitProgress(full),
+          signal: request.signal,
+        })
+
+        const scene = parseFromRaw(raw, outline.archetype)
+        send('done', {
+          scene,
+          source: 'llm' as const,
+          creditsRemaining,
+        })
+      } catch (err) {
+        console.warn(
+          `generate-scene index=${llmIndex}: LLM path failed, returning fallback`,
+          err,
+        )
+        try {
+          sendFallback()
+        } catch (fallbackErr) {
+          console.error('generate-scene: fallback send failed', fallbackErr)
+          send('error', { message: 'scene-gen failed and fallback unavailable' })
+        }
+      } finally {
+        controller.close()
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': 'no-cache, no-transform',
+      'x-accel-buffering': 'no',
+    },
+  })
 }

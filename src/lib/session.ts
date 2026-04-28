@@ -1,6 +1,13 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { ArcSkeleton, EndingKey, Scene, SceneOutline, StoryArc } from "./types";
+import type {
+  ArcSkeleton,
+  DialogueLine,
+  EndingKey,
+  Scene,
+  SceneOutline,
+  StoryArc,
+} from "./types";
 import type { RolledCameo, ToneId } from "./cameos/types";
 import type { StoryletState } from "./storylets/types";
 
@@ -180,6 +187,23 @@ interface SessionState {
   setRunFate: (payload: { rolledCameos: RolledCameo[]; tone: ToneId }) => void;
   dynamicSceneReady: (llmIndex: number, scene: Scene) => void;
   sceneImageReady: (llmIndex: number, imageUrl: string) => void;
+  /**
+   * Streaming scene-gen — set the imagePrompt as soon as it streams in
+   * (before dialogue / choices arrive) so /api/generate-image can
+   * fire ~5s earlier than waiting for the full scene response. Creates
+   * a stub scene at llmIndex if none exists. No-op if a scene with
+   * dialogue already exists at llmIndex (can't downgrade).
+   */
+  setSceneImagePrompt: (llmIndex: number, imagePrompt: string) => void;
+  /**
+   * Streaming scene-gen — append one dialogue line to the scene at
+   * llmIndex as the line arrives over SSE. Creates a stub scene if
+   * none exists. The DialogueSubtitle + useDialogueAudio hooks pick
+   * up the new line automatically and start TTS / playback —
+   * cutting perceived latency from ~5-7s (full scene wait) to ~1-1.5s
+   * (first line streamed in).
+   */
+  appendDialogueLine: (llmIndex: number, line: DialogueLine) => void;
   setEpilogue: (epilogue: string) => void;
   enterGeneratingArc: () => void;
   exitGeneratingArc: () => void;
@@ -449,6 +473,52 @@ export const useSessionStore = create<SessionState>()(
           scenes[llmIndex] = prior?.imageUrl
             ? { ...scene, imageUrl: prior.imageUrl }
             : scene;
+          return { arc: { ...state.arc, scenes } };
+        }),
+
+      setSceneImagePrompt: (llmIndex, imagePrompt) =>
+        set((state) => {
+          if (!state.arc) return state;
+          const scenes = [...state.arc.scenes];
+          while (scenes.length <= llmIndex) {
+            scenes.push({
+              id: 0,
+              title: "",
+              archetype: "cofounder",
+              imagePrompt: "",
+              dialogue: [],
+              choices: [],
+              timeoutSeconds: 15,
+              timeoutChoiceId: "a",
+            });
+          }
+          const prior = scenes[llmIndex]!;
+          // Don't downgrade — once a real scene with imagePrompt exists,
+          // skip. Streams sometimes deliver imagePrompt twice in racy
+          // re-renders; this keeps the first stable.
+          if (prior.imagePrompt && prior.imagePrompt.length > 0) return state;
+          scenes[llmIndex] = { ...prior, imagePrompt };
+          return { arc: { ...state.arc, scenes } };
+        }),
+
+      appendDialogueLine: (llmIndex, line) =>
+        set((state) => {
+          if (!state.arc) return state;
+          const scenes = [...state.arc.scenes];
+          while (scenes.length <= llmIndex) {
+            scenes.push({
+              id: 0,
+              title: "",
+              archetype: "cofounder",
+              imagePrompt: "",
+              dialogue: [],
+              choices: [],
+              timeoutSeconds: 15,
+              timeoutChoiceId: "a",
+            });
+          }
+          const prior = scenes[llmIndex]!;
+          scenes[llmIndex] = { ...prior, dialogue: [...prior.dialogue, line] };
           return { arc: { ...state.arc, scenes } };
         }),
 
