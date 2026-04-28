@@ -639,11 +639,12 @@ export default function HomePage() {
     factsExtracted,
   ]);
 
-  // Episode 0 generation: fire from the second-to-last authored scene onward
-  // (same overlap idea as episode regen). Sonnet/Haiku runs while the player
-  // finishes the last authored beats. One fewer authored choice is in
-  // recentChoices until the player reaches the final authored scene — usually
-  // minor vs the latency win.
+  // Episode 0 generation: fire as soon as the player has cleared the QA
+  // scene (sceneIndex 3 — see session.ts authored layout). At that point
+  // every player-facts field Sonnet needs (team, fundingModel, stage,
+  // targetCustomer, concern) is captured, so arc-gen can run while the
+  // player walks through scenes 4–7. ~12s arc-gen now overlaps with ~30s
+  // of authored scene play instead of just the last two beats.
   // Gated on extraction having resolved — otherwise Sonnet receives an
   // undefined team and falls back to inventing a cofounder (the Maya bleed).
   // Safety bypass: if the player jumped straight here via the dev panel and
@@ -651,7 +652,8 @@ export default function HomePage() {
   // arc-gen anyway so the run isn't soft-locked.
   useEffect(() => {
     if (phase !== "scene") return;
-    if (sceneIndex < AUTHORED_SCENE_COUNT - 2) return;
+    // QA lives at sceneIndex 3; fire the moment the player advances past it.
+    if (sceneIndex < 4) return;
     if (arc?.arcSkeleton?.episodeIndex === 0) return;
     if (arcGenFiredRef.current.has(0)) return;
     const noPitchSubmitted = !intro.startupDescription?.trim();
