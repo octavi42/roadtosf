@@ -337,6 +337,17 @@ export async function POST(request: Request) {
 
       const sendFallback = () => {
         const parsed = arcSkeletonSchema.parse({ ...fallbackArc, episodeIndex })
+        // Engine-authoritative override (parity with the LLM-success
+        // path below). Without this, the fallback emits the static
+        // arc.json archetypes regardless of which storylets the engine
+        // chose — breaking the "engine owns structural metadata"
+        // invariant exactly when the LLM is sad and we need it most.
+        parsed.scenes = parsed.scenes.map((s) => {
+          const chosen = chosenStorylets[s.index]
+          return chosen
+            ? { ...s, archetype: chosen.archetype, kind: chosen.kind ?? 'encounter' }
+            : s
+        })
         // Replay fallback scenes as `scene` events so the client treats this
         // path identically to a successful stream.
         for (const outline of parsed.scenes) {
