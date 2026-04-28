@@ -1,4 +1,5 @@
 import type { ArcSkeleton, SceneOutline } from './types'
+import type { StoryletState } from './storylets/types'
 
 export interface StreamArcOptions {
   signal?: AbortSignal
@@ -8,6 +9,12 @@ export interface StreamArcOptions {
 export interface StreamArcResult {
   skeleton: ArcSkeleton
   source: 'llm' | 'fallback'
+  /** Updated storylet state from the server's selector — pass back into
+   *  the next /api/generate-arc call so cooldowns + flag gates work. */
+  storyletState?: StoryletState
+  /** Order-matched ids of the storylets the engine picked for this
+   *  episode. Used for debugging + the future consequence-injection PR. */
+  chosenStoryletIds?: string[]
 }
 
 /**
@@ -61,8 +68,20 @@ export async function streamArc(
       const outline = (payload as { outline?: SceneOutline })?.outline
       if (outline) opts.onScene?.(outline)
     } else if (event === 'done') {
-      const p = payload as { skeleton?: ArcSkeleton; source?: 'llm' | 'fallback' }
-      if (p.skeleton) result = { skeleton: p.skeleton, source: p.source ?? 'llm' }
+      const p = payload as {
+        skeleton?: ArcSkeleton
+        source?: 'llm' | 'fallback'
+        storyletState?: StoryletState
+        chosenStoryletIds?: string[]
+      }
+      if (p.skeleton) {
+        result = {
+          skeleton: p.skeleton,
+          source: p.source ?? 'llm',
+          storyletState: p.storyletState,
+          chosenStoryletIds: p.chosenStoryletIds,
+        }
+      }
     } else if (event === 'error') {
       const msg = (payload as { message?: string })?.message ?? 'arc-gen stream error'
       streamError = msg

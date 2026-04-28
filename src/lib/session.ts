@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { ArcSkeleton, EndingKey, Scene, StoryArc } from "./types";
 import type { RolledCameo, ToneId } from "./cameos/types";
+import type { StoryletState } from "./storylets/types";
 
 // Phase no longer includes "paywall" — the paywall is now an overlay
 // (paywallOpen: boolean) that floats on top of whatever phase the player
@@ -154,7 +155,10 @@ interface SessionState {
   }) => void;
   paywallSatisfied: (creditsGranted?: number) => void;
   arcReady: (arc: StoryArc) => void;
-  arcSkeletonReady: (skeleton: ArcSkeleton) => void;
+  arcSkeletonReady: (
+    skeleton: ArcSkeleton,
+    fate?: { storyletState?: StoryletState },
+  ) => void;
   /**
    * Sets the per-run "fate" — rolled cameos + tone — once after intro
    * extraction settles. Idempotent: subsequent calls during the same run
@@ -344,11 +348,17 @@ export const useSessionStore = create<SessionState>()(
           };
         }),
 
-      arcSkeletonReady: (skeleton) =>
+      arcSkeletonReady: (skeleton, fate) =>
         set((state) => {
           // Episode 0+: replace current skeleton; episodes 1+ also update the
           // rolling storySoFar that the next scene calls will reference.
           const nextStorySoFar = skeleton.storySoFar ?? state.arc?.storySoFar;
+          // Storylet engine state: the server returns the updated state
+          // alongside the skeleton (cooldowns + flags carried forward).
+          // Falls back to the prior arc's state when the SSE done event
+          // didn't include it (legacy fallback path).
+          const nextStoryletState =
+            fate?.storyletState ?? state.arc?.storyletState;
           // New episode → reset the per-episode share-moment cap.
           if (!state.arc) {
             return {
@@ -367,6 +377,7 @@ export const useSessionStore = create<SessionState>()(
                   leakedToPress: false,
                   playedSafeDemoDay: false,
                 },
+                storyletState: nextStoryletState,
               },
             };
           }
@@ -376,6 +387,7 @@ export const useSessionStore = create<SessionState>()(
               ...state.arc,
               arcSkeleton: skeleton,
               storySoFar: nextStorySoFar,
+              storyletState: nextStoryletState,
             },
           };
         }),

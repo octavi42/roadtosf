@@ -559,6 +559,10 @@ export default function HomePage() {
         seed: playthroughId ?? `local-${Date.now()}`,
         rolledCameos: arc?.rolledCameos,
         tone: arc?.tone,
+        // Storylet engine state — server reads this to apply cooldowns
+        // + cross-episode flag gates. Empty default lets episode 0
+        // start clean.
+        storyletState: arc?.storyletState ?? { fired: [], flags: {} },
       };
     },
     [arc, intro, history, hype, integrity, playthroughId],
@@ -723,7 +727,9 @@ export default function HomePage() {
         partialEmitted = true;
       },
     })
-      .then((data) => arcSkeletonReady(data.skeleton))
+      .then((data) =>
+        arcSkeletonReady(data.skeleton, { storyletState: data.storyletState }),
+      )
       .catch((err) => {
         console.error("generate-arc[0] failed", err);
         // If a partial was emitted before the stream errored (timeout,
@@ -1118,7 +1124,9 @@ export default function HomePage() {
         partialEmitted = true;
       },
     })
-      .then((data) => arcSkeletonReady(data.skeleton))
+      .then((data) =>
+        arcSkeletonReady(data.skeleton, { storyletState: data.storyletState }),
+      )
       .catch((err) => {
         console.error(`generate-arc[${nextEpisode}] failed`, err);
         if (partialEmitted) {

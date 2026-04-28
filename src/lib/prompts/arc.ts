@@ -3,10 +3,15 @@ import { filterLore } from '../lore'
 import type { Archetype } from '../types'
 import type { SMItem } from '../silicon-mania/types'
 import type { RolledCameo, ToneSpec } from '../cameos/types'
+import type { Storylet } from '../storylets/types'
 
 export const EPISODE_LENGTH = 5
 
-const ARC_ARCHETYPES: Archetype[] = ['cofounder', 'reporter', 'vc', 'hater', 'mentor']
+// Lore bundle still cycles through the full archetype roster so the
+// prompt's flavor cache stays warm regardless of which storylets the
+// engine picked. The archetype ORDER for the actual scenes is now
+// driven by chosenStorylets — see SYSTEM_RULES below.
+const ALL_ARCHETYPES: Archetype[] = ['cofounder', 'reporter', 'vc', 'hater', 'mentor']
 
 export interface PriorChoiceSummary {
   sceneId: number
@@ -46,38 +51,46 @@ export interface BuildArcPromptInput {
   // Per-run tone, one of five categorical flavors. Spliced as a one-liner
   // into the system block to color voice without changing structure.
   tone?: ToneSpec
+  // The 5 storylets the engine has already chosen for this episode.
+  // The LLM does NOT pick scenes — it renders these chosen beats with
+  // player-specific texture. See STORYLETS.md for rationale.
+  chosenStorylets: Storylet[]
 }
 
 const SYSTEM_RULES = `You are the arc-skeleton engine for "Road to SF", a satirical comic-book founder game running in ENDLESS MODE. The story is delivered as 5-scene episodes; you produce one episode at a time.
 
+ARCHITECTURE — THIS HAS CHANGED:
+- The 5 scenes for this episode have ALREADY been selected by a deterministic storylet engine. They are supplied to you under "## CHOSEN STORYLETS" below.
+- Your job is to RENDER each chosen storylet's beat as a player-specific scene beat — NOT to invent new scenes, NOT to reorder, NOT to swap archetypes.
+- For each scene you produce: keep the storylet's archetype EXACTLY. Take the storylet's beat as the canonical action and rewrite it (≤220 chars) with player-specific texture (startup name, persona, target customer). You may sharpen language; you may NOT change what fundamentally happens.
+- You DO write the episode's "premise" (the through-line that ties the 5 chosen storylets together) and "storySoFar" (running compressed memory).
+
 HARD RULES:
 - Output a single JSON object only. No prose before or after, no markdown fences. Start your response with "{" and end with "}".
 - Numbers must be valid JSON: write 1 not +1, write 2 not +2.
-- Real people are NEVER named — archetype them ("a Thiel-coded VC", "a YC partner with the blog", "a Sam-coded accelerator partner").
-- Each scene has ONE archetype as the speaker. Use the assigned archetype list verbatim — do not reorder or substitute.
+- Real people are NEVER named in beats UNLESS the storylet's source beat already names them. When a chosen storylet names a real person (e.g. Peter Thiel, Sam Altman), keep the name verbatim — that's the storylet engine's intent.
+- Each scene has ONE archetype as the speaker — copy from the chosen storylet exactly.
 - Tone: comic, biting, cinematic. Each beat lands like a graphic novel panel.
 - The story does NOT end at the close of an episode — the player chooses when to end the run. Land each episode on a hook, not a resolution.
-- Each "beat" string MUST be ≤ 400 characters. One sentence preferred. Do not pad with detail.
+- Each "beat" string MUST be ≤ 220 characters. One sentence preferred.
 
 ABSOLUTE PROHIBITIONS (override anything else if they conflict):
+- Do NOT swap a chosen storylet for a different beat. The selector chose these specifically for this player's state.
+- Do NOT add a 6th scene. Exactly 5.
+- Do NOT change a storylet's archetype.
 - The cofounder archetype roster uses the label "Stranger" — not a canon first name. Never give that speaker a fixed first name unless the player's "Team" facts name someone (use that verbatim).
-- If the player's Team says "solo" / "no cofounder" / similar:
-  • Do NOT introduce a cofounder character that already exists in the player's life.
-  • The "cofounder" archetype scene must reframe — e.g. an old friend pitching to join, a YC-batch acquaintance trying to attach themselves, the ghost of a cofounder the player ALMOST had. Treat the player as alone.
-- If the player's Funding says "bootstrapping" / "no raise" / similar:
-  • Do NOT invent term sheets the player accepted, VC partnership offers under negotiation, or implied fundraising history.
-  • VC scenes can still happen but as cold pitches the player is being SOLICITED for, not deals already in motion.
-- If the player named a cofounder (e.g. "my cofounder Anna"), use that name verbatim. Never substitute a different name.
+- If the player's Team says "solo" / "no cofounder": render a chosen cofounder storylet as written (the storylet engine has already gated for solo-vs-named appropriateness — your job is faithful rendering, not re-gating).
+- If the player named a cofounder (e.g. "my cofounder Anna"), use that name verbatim where it fits the storylet.
 
 OUTPUT SHAPE:
 {
   "episodeIndex": <integer matching the input>,
-  "premise": string (1-2 sentences, the through-line of THIS episode),
-  "scenes": [                                     // exactly 5 entries
+  "premise": string (1-2 sentences, the through-line of THIS episode tying the 5 chosen storylets),
+  "scenes": [                                     // exactly 5 entries, one per chosen storylet, in order
     {
-      "index": 0..4,                              // index within this episode
-      "archetype": "vc"|"cofounder"|"reporter"|"hater"|"mentor",
-      "beat": string (≤220 chars, one sentence describing what happens),
+      "index": 0..4,                              // index within this episode (matches chosen storylet order)
+      "archetype": "vc"|"cofounder"|"reporter"|"hater"|"mentor",  // copy from chosen storylet
+      "beat": string (≤220 chars, the rendered/personalized version of the chosen storylet's beat),
       "hingesOn": string (optional, names the prior choice this scene exploits)
     }
   ],
@@ -125,10 +138,19 @@ function formatRecentChoices(choices: PriorChoiceSummary[]): string {
     .join('\n')
 }
 
+function formatChosenStorylets(storylets: Storylet[]): string {
+  return storylets
+    .map(
+      (s, i) =>
+        `Scene ${i} — archetype: ${s.archetype} — storylet "${s.id}"\n  Source beat (render this faithfully, with player-specific texture): ${s.beat}`,
+    )
+    .join('\n')
+}
+
 function formatLoreBundle(input: BuildArcPromptInput): string {
   const lines: string[] = []
   lines.push('## CHARACTER ROSTER')
-  ARC_ARCHETYPES.forEach((a) => {
+  ALL_ARCHETYPES.forEach((a) => {
     const def = ARCHETYPES[a]
     lines.push(`- ${a}: ${def.name}, ${def.title}. ${def.personality}`)
   })
@@ -137,7 +159,7 @@ function formatLoreBundle(input: BuildArcPromptInput): string {
   const seenPlaces = new Set<string>()
   const seenJokes = new Set<string>()
   const seenZ = new Set<string>()
-  ARC_ARCHETYPES.forEach((a) => {
+  ALL_ARCHETYPES.forEach((a) => {
     const lore = filterLore({
       flavorTags: input.flavorTags,
       sceneArchetype: a,
@@ -164,7 +186,6 @@ function formatLoreBundle(input: BuildArcPromptInput): string {
     })
   })
 
-  lines.push(`\nAssigned archetype-per-scene order: ${ARC_ARCHETYPES.join(', ')}`)
   return lines.join('\n')
 }
 
@@ -209,6 +230,9 @@ ${formatRolledCameos(input.rolledCameos)}
 ## EPISODE
 episodeIndex: ${input.episodeIndex}
 
+## CHOSEN STORYLETS (already selected by the engine — render these, do not reorder or replace)
+${formatChosenStorylets(input.chosenStorylets)}
+
 ## PRIOR STORY-SO-FAR (compressed, omit if episode 0)
 ${input.priorStorySoFar ?? '(this is the opening episode)'}
 
@@ -218,8 +242,8 @@ ${formatRecentChoices(input.recentChoices)}
 ## TASK
 ${
   isOpening
-    ? 'Produce the OPENING episode (5 scenes). Land on a hook so the next episode has somewhere to go — do NOT resolve the arc.'
-    : `Produce episode ${input.episodeIndex} (5 more scenes). Continue from the prior storySoFar; pay off at least one beat from the most recent episode. End on a hook. Update storySoFar to cover everything before this episode.`
+    ? 'Render the OPENING episode (5 scenes) from the chosen storylets above. Each scene\'s archetype matches the chosen storylet exactly; each beat is the chosen source beat re-told with this player\'s startup name and persona woven in. Write a premise that ties the 5 chosen storylets together. Land on a hook — do NOT resolve the arc.'
+    : `Render episode ${input.episodeIndex} (5 scenes) from the chosen storylets above. Each scene's archetype matches the chosen storylet exactly; each beat is the chosen source beat re-told with player-specific texture. Pay off at least one beat from the most recent episode in your premise/storySoFar. End on a hook. Update storySoFar to cover everything before this episode.`
 }
 
 Output the JSON object now.`

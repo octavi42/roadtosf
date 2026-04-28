@@ -1,0 +1,171 @@
+[
+  {
+    "id": "vc_cold_pitch_generic",
+    "archetype": "vc",
+    "tier": "early",
+    "requires": {},
+    "beat": "A junior partner at a no-name fund slides into your DMs after seeing your post; the 'meeting' is a 20-minute coffee at Blue Bottle and they keep checking their phone.",
+    "effects": { "vcEncounter": true },
+    "tags": ["vc", "fundraising", "early"]
+  },
+  {
+    "id": "vc_term_sheet_thiel",
+    "archetype": "vc",
+    "tier": "mid",
+    "requires": { "cameo": "peter-thiel" },
+    "beat": "Peter Thiel slides a contrarian term sheet across the bar at Rosewood Sand Hill: no board seat, conditional on you saying something publicly heretical about your industry.",
+    "effects": { "vcEncounter": true, "metContrarianMoney": true },
+    "tags": ["vc", "fundraising", "thiel", "contrarian"],
+    "cooldownEpisodes": 6
+  },
+  {
+    "id": "vc_term_sheet_marc",
+    "archetype": "vc",
+    "tier": "mid",
+    "requires": { "cameo": "marc-andreessen", "flavorTag": "ai" },
+    "beat": "Marc Andreessen pulls you aside at an a16z dinner and quotes his own essay at you, then sketches a $20M Series A on a napkin if you reframe the company as 'AI-native' on the spot.",
+    "effects": { "vcEncounter": true, "metHypeMoney": true },
+    "tags": ["vc", "fundraising", "marc", "hype", "ai"],
+    "cooldownEpisodes": 6
+  },
+  {
+    "id": "vc_walk_away",
+    "archetype": "vc",
+    "tier": "mid",
+    "requires": { "flagSet": "vcEncounter", "integrityGte": 2 },
+    "beat": "The associate who pursued you last week emails: the partnership passed. The kicker is the 'feedback' — copy-pasted from your own pitch deck. You can call them out or write a polite reply.",
+    "effects": { "wasGhostedByVC": true },
+    "tags": ["vc", "rejection", "integrity"]
+  },
+  {
+    "id": "vc_bootstrap_pitch",
+    "archetype": "vc",
+    "tier": "early",
+    "requires": { "funding": "bootstrapping" },
+    "beat": "A VC you didn't ask for cold-emails you anyway, framing 'we love bootstrappers' until the call where they pitch you on raising. They mention three competitors who took their money.",
+    "effects": { "vcEncounter": true },
+    "tags": ["vc", "bootstrapping", "cold-email"]
+  },
+  {
+    "id": "cofounder_pitch_generic",
+    "archetype": "cofounder",
+    "tier": "early",
+    "requires": {},
+    "beat": "A founder you barely know corners you at a YC dinner and pitches themselves as your missing cofounder, complete with a slide deck about you they made on the BART ride over.",
+    "effects": { "cofounderEncounter": true },
+    "tags": ["cofounder", "early", "stranger"]
+  },
+  {
+    "id": "cofounder_walkout_named",
+    "archetype": "cofounder",
+    "tier": "mid",
+    "requires": { "team": "named", "flagNotSet": "firedCofounder" },
+    "beat": "Your cofounder calls a 1:1 at the office on a Sunday. They've been talking to a recruiter. They want to know if you'd 'still be friends' if they took the offer.",
+    "effects": { "cofounderTension": true },
+    "tags": ["cofounder", "tension", "named-team"]
+  },
+  {
+    "id": "cofounder_betrayal",
+    "archetype": "cofounder",
+    "tier": "late",
+    "requires": { "team": "named", "integrityLte": -2 },
+    "beat": "Your cofounder forwards you a Discord screenshot. It's you, six weeks ago, planning to dilute their equity. They want an answer before the 4pm board call.",
+    "effects": { "cofounderTension": true, "cofounderKnows": true },
+    "tags": ["cofounder", "betrayal", "late"],
+    "cooldownEpisodes": 8
+  },
+  {
+    "id": "solo_yc_recruit",
+    "archetype": "cofounder",
+    "tier": "early",
+    "requires": { "team": "solo" },
+    "beat": "An old YC batchmate emails: their startup folded, they have eight months of runway left as severance, and they want to 'help out' for equity. They're 60% ready, 40% drowning.",
+    "effects": { "cofounderEncounter": true },
+    "tags": ["cofounder", "solo", "yc"]
+  },
+  {
+    "id": "reporter_generic_curiosity",
+    "archetype": "reporter",
+    "tier": "early",
+    "requires": {},
+    "beat": "A staff writer at a mid-tier newsletter wants 'just 15 minutes for a backgrounder.' Their first question — 'so, no real moat, right?' — lands like a knife through butter.",
+    "effects": { "pressEncounter": true },
+    "tags": ["reporter", "press", "early"]
+  },
+  {
+    "id": "reporter_hit_piece",
+    "archetype": "reporter",
+    "tier": "mid",
+    "requires": { "integrityLte": -2 },
+    "beat": "A reporter has receipts: three Slack screenshots from someone you fired, your old pitch deck claiming numbers you didn't have, and a quote from an investor you ghosted. Story drops Friday.",
+    "effects": { "pressEncounter": true, "facingPressCrisis": true },
+    "tags": ["reporter", "hit-piece", "scandal"],
+    "cooldownEpisodes": 4
+  },
+  {
+    "id": "reporter_fluff",
+    "archetype": "reporter",
+    "tier": "mid",
+    "requires": { "hypeGte": 3 },
+    "beat": "A glossy magazine wants to put you on the cover. The interviewer is reverent. Their angle: 'the next Stripe.' You can lean in or correct the record.",
+    "effects": { "pressEncounter": true, "wasOnCover": true },
+    "tags": ["reporter", "fluff", "hype"]
+  },
+  {
+    "id": "hater_generic_dunk",
+    "archetype": "hater",
+    "tier": "mid",
+    "requires": {},
+    "beat": "A second-tier Twitter account quote-tweets your launch with three crying-laughing emojis. The thread is now 200 replies deep. Two of them are from people you respect.",
+    "effects": { "twitterDunked": true },
+    "tags": ["hater", "twitter", "dunk"]
+  },
+  {
+    "id": "hater_sahil_indie",
+    "archetype": "hater",
+    "tier": "mid",
+    "requires": { "cameo": "sahil-lavingia", "funding": "bootstrapping" },
+    "beat": "Sahil Lavingia sub-tweets you specifically: 'another bootstrapper who'll fold by Q4.' His thread already has 800 likes. Your DMs are a graveyard of 'you good?' messages.",
+    "effects": { "twitterDunked": true },
+    "tags": ["hater", "twitter", "sahil", "bootstrapping"],
+    "cooldownEpisodes": 6
+  },
+  {
+    "id": "mentor_generic_advice",
+    "archetype": "mentor",
+    "tier": "early",
+    "requires": {},
+    "beat": "A second-time founder offers to grab coffee. They spend twelve minutes telling you about their company, three minutes asking about yours, and end with 'happy to help, just ping me.'",
+    "effects": { "mentorEncounter": true },
+    "tags": ["mentor", "early", "lukewarm"]
+  },
+  {
+    "id": "mentor_pg_essay",
+    "archetype": "mentor",
+    "tier": "mid",
+    "requires": { "cameo": "paul-graham" },
+    "beat": "Paul Graham emails you a four-line response. It's a link to one of his old essays and the words 'this one.' The essay is twelve years old and exactly about what you're doing wrong.",
+    "effects": { "mentorEncounter": true, "wasEssayed": true },
+    "tags": ["mentor", "pg", "essays", "yc"],
+    "cooldownEpisodes": 6
+  },
+  {
+    "id": "mentor_altman_blessing",
+    "archetype": "mentor",
+    "tier": "mid",
+    "requires": { "cameo": "sam-altman", "hypeGte": 3 },
+    "beat": "Sam Altman replies to your DM in 90 seconds. 'Interesting. Send me a deck.' That's it. Three words, three hours, and your inbox lights up with seventeen new investor cold-emails.",
+    "effects": { "mentorEncounter": true, "altmanNoticed": true },
+    "tags": ["mentor", "altman", "blessing", "ai"],
+    "cooldownEpisodes": 8
+  },
+  {
+    "id": "mentor_gut_punch",
+    "archetype": "mentor",
+    "tier": "late",
+    "requires": { "hypeGte": 2, "integrityLte": 0 },
+    "beat": "A mentor you trust takes you to the back of Tartine and tells you, calmly, that you're becoming someone they wouldn't introduce to their friends. They mean it kindly. It still hits.",
+    "effects": { "mentorEncounter": true, "wasCalledOut": true },
+    "tags": ["mentor", "late", "gut-punch", "integrity"]
+  }
+]
