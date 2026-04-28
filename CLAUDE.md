@@ -59,10 +59,10 @@ ENDING
 
 - Real SF landmarks, accelerators (YC, a16z, Sequoia), and famous figures are seeded into the story.
 - They appear as fate, not player choice.
-- Real people are kept as archetypes — obviously recognizable but not named directly. Funnier and legally safer. The joke lands when the player connects the dots.
-- Examples: "a Thiel-coded VC", "a Sand Hill Road partner", "a hoodie-wearing guy everyone seems to know", "the YC partner with the blog".
+- **Real people are named directly in dialogue** (Sam Altman, Peter Thiel, Paul Graham, Garry Tan, Marc Andreessen, etc.). Full personalization payoff — the joke lands when the player sees the recognized name, not when they have to decode an archetype. The personalization IS the product.
 - Real places can be named: Tartine, Caltrain, Rosewood Sand Hill bar, the YC batch house, SFO arrivals, etc.
 - Flavor tags extracted from the intro conversation seed which cameos and places appear.
+- **Share text on X / LinkedIn describes the encounter without `@`-tagging the real person.** Example: *"I just played Road to SF — Sam Altman told me my AI startup was 'pre-seed energy.' Ended up indicted."* + screenshot. The screenshot does the virality work; no handle tag = no inviting moderation or owner attention. This is the negotiated middle ground between "viral payoff" and "don't get sued."
 
 ---
 
@@ -121,6 +121,16 @@ The epilogue is the single most important shareable artifact. It names specific 
 - Visible stat bars (kills role-play per Mass Effect cautionary tale)
 - Runtime-generated choice labels (latency + reliability disaster)
 - Starting stats derived from player input (destroys "I earned this" feeling)
-- Named real people directly (archetype them instead)
+- `@`-tagging real people in share posts (use descriptive text + screenshot instead — see Famous SF Characters section)
 - Every-scene multi-choice (doubles authoring scope)
 - Alternate-antagonist explicit replay mode (achievements handle replay naturally)
+
+---
+
+## Merge Strategy (repo policy)
+
+- **Default merge command:** `gh pr merge <PR#> --rebase --delete-branch`. Never squash unless the user explicitly asks for that PR.
+- **Squash is disabled** in repo settings (`allow_squash_merge=false`). If GitHub shows squash as an option, the setting was reverted — flag it before merging.
+- **Why rebase:** every commit on a PR branch should land on `main` as its own commit so the contribution graph reflects actual activity. Squash collapses 10+ commits → 1 dot.
+- **Stacked-PR gotcha:** if PR B branches off PR A's branch (not `main`), do **not** merge A with `--delete-branch` while B is still open. Deleting A's branch out from under B auto-CLOSES B on GitHub and the closed PR cannot be reopened. Either rebase B onto `main` and force-push *before* merging A, or merge A without `--delete-branch` and delete the branch manually after B is also merged.
+- **Worktree quirk:** `gh pr merge` can report `failed to run git: fatal: 'main' is already checked out at <path>` even after the server-side merge succeeded. The error is misleading — verify with `gh pr view <PR#> --json state` (looking for `"state": "MERGED"`) before retrying.
