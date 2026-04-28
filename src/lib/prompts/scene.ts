@@ -47,6 +47,8 @@ HARD RULES:
 - Total dialogue across all lines in this scene MUST be ≤${MAX_DIALOGUE_CHARS_PER_SCENE} chars (TTS budget).
 - Each individual dialogue line ≤160 chars and MUST contain non-empty text. Do not use empty strings for "silent beats" — express silence in narration prose, not as an empty player line.
 - 2–4 dialogue lines per scene total.
+- JSON STRING SAFETY (the most-broken rule, do not relax): inside any "text" field, NEVER use the " character. If you need to quote in-text speech, use single quotes (') or em-dashes. Bad: "text": "He said \\"sure\\" and walked off." Good: "text": "He said 'sure' and walked off." This is a hard parser-failure rule — every unescaped " breaks the scene and forces a fallback that interrupts audio.
+- Each dialogue line is ONE speaker's utterance. Do NOT mix narration + quoted speech in a single "text" value. If the beat is "X says A, then Y reacts with B," split into TWO dialogue entries with different speakers — not a single line containing both. The renderer assigns voices per speaker; mixing them inside one line is voiced as one continuous read.
 - Choice labels: 2–3 per scene, ≤8 words each, action-flavored.
 - Stat deltas: hype and integrity each ∈ {-2, -1, 0, +1, +2}. Most should be ±1.
 - timeoutSeconds: integer from 8 to 60 only (not seconds-per-line totals).
