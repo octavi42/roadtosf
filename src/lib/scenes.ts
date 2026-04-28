@@ -3,6 +3,8 @@
 // scene with Jordan that captures the structured facts the LLM needs:
 // team, funding model, and current concern.
 
+import type { AmbienceKey } from "./audio-keys";
+
 export interface DialogueLine {
   speaker?: string;
   text: string;
@@ -49,6 +51,9 @@ export interface SceneData {
   // button that advances the scene. Used for cinematic-pivot beats like
   // scene 3 (the dare → paywall).
   ctaLabel?: string;
+  // Optional override for the ambience bed (defaults to a key derived from
+  // the background image — see audio-keys.ts).
+  ambienceKey?: AmbienceKey;
 }
 
 export const HOME_BACKGROUND = "/intro-v2/03-airport-bar.png";
