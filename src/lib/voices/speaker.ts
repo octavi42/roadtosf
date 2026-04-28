@@ -9,6 +9,10 @@ export const NARRATOR_VOICE_ID = "6SMKBar4Q5wkVHdFlcQC";
 // warm, expressive, conversational young female.
 export const JORDAN_VOICE_ID = "052jzHJceQiZr7ltnY0C";
 
+// The player's own lines (LLM scenes occasionally voice the founder back).
+// Caldwell — confident, casual young male. Generic founder read.
+export const PLAYER_VOICE_ID = "nqvoG2qlLhOhieQPdowv";
+
 const ARCHETYPE_KEYS = new Set(Object.keys(ARCHETYPES) as Archetype[]);
 
 /**
@@ -32,9 +36,9 @@ export function voiceIdForSpeaker(
   const s = speaker.trim();
   const lower = s.toLowerCase();
 
-  // Player's own words — never voiced.
+  // Player's own words — voiced with the player's default voice.
   if (lower === "player" || lower === "you" || lower === "founder") {
-    return null;
+    return PLAYER_VOICE_ID;
   }
 
   // Narrator (both authored "Narrator" and LLM-normalized "narrator").
