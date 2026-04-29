@@ -40,10 +40,6 @@ export const STATIC_AUDIO_MANIFEST: Record<string, StaticAudioEntry> = {
     "audioUrl": "/voices/static/4f17a684cb2b508d.mp3",
     "alignmentUrl": "/voices/static/4f17a684cb2b508d.json"
   },
-  "6SMKBar4Q5wkVHdFlcQC:\"Founder?\" he asks, like it's a yes-or-no question that means three different things.": {
-    "audioUrl": "/voices/static/2ed97446cde0ca97.mp3",
-    "alignmentUrl": "/voices/static/2ed97446cde0ca97.json"
-  },
   "6SMKBar4Q5wkVHdFlcQC:A few thousand people move to San Francisco every year to start a company.": {
     "audioUrl": "/voices/static/650f19db76e5e3ac.mp3",
     "alignmentUrl": "/voices/static/650f19db76e5e3ac.json"
@@ -55,10 +51,6 @@ export const STATIC_AUDIO_MANIFEST: Record<string, StaticAudioEntry> = {
   "6SMKBar4Q5wkVHdFlcQC:First-timer, second exit, somewhere weirder?": {
     "audioUrl": "/voices/static/815e3ab0809463c0.mp3",
     "alignmentUrl": "/voices/static/815e3ab0809463c0.json"
-  },
-  "6SMKBar4Q5wkVHdFlcQC:Half a block ahead, a guy stops to take a phone call. Allbirds, soft hoodie, voice an octave too low for the volume.": {
-    "audioUrl": "/voices/static/1fd9fe2ebbd7c22a.mp3",
-    "alignmentUrl": "/voices/static/1fd9fe2ebbd7c22a.json"
   },
   "6SMKBar4Q5wkVHdFlcQC:Most become a story other founders tell at dinner.": {
     "audioUrl": "/voices/static/658c6262ac94fd02.mp3",
@@ -72,10 +64,6 @@ export const STATIC_AUDIO_MANIFEST: Record<string, StaticAudioEntry> = {
     "audioUrl": "/voices/static/14fc822ed94696c7.mp3",
     "alignmentUrl": "/voices/static/14fc822ed94696c7.json"
   },
-  "6SMKBar4Q5wkVHdFlcQC:One is a Hacker News link. Someone in your space launched something this morning.": {
-    "audioUrl": "/voices/static/59a55310f1a3b6a5.mp3",
-    "alignmentUrl": "/voices/static/59a55310f1a3b6a5.json"
-  },
   "6SMKBar4Q5wkVHdFlcQC:One ticket. One direction. Non-refundable.": {
     "audioUrl": "/voices/static/4e8152221de47572.mp3",
     "alignmentUrl": "/voices/static/4e8152221de47572.json"
@@ -87,10 +75,6 @@ export const STATIC_AUDIO_MANIFEST: Record<string, StaticAudioEntry> = {
   "6SMKBar4Q5wkVHdFlcQC:That one I can't answer. Ask me something else about the city.": {
     "audioUrl": "/voices/static/eb82a67213133fe5.mp3",
     "alignmentUrl": "/voices/static/eb82a67213133fe5.json"
-  },
-  "6SMKBar4Q5wkVHdFlcQC:The interviewer asks how big the market is. The founder does the thing with their hands.": {
-    "audioUrl": "/voices/static/8a772c2b2c82f9fd.mp3",
-    "alignmentUrl": "/voices/static/8a772c2b2c82f9fd.json"
   },
   "6SMKBar4Q5wkVHdFlcQC:The one with numbers. The one you'd say to a stranger sober.": {
     "audioUrl": "/voices/static/5507ebc062dc8e33.mp3",
@@ -112,25 +96,9 @@ export const STATIC_AUDIO_MANIFEST: Record<string, StaticAudioEntry> = {
     "audioUrl": "/voices/static/98b16919158cb459.mp3",
     "alignmentUrl": "/voices/static/98b16919158cb459.json"
   },
-  "6SMKBar4Q5wkVHdFlcQC:You haven't been alone ninety seconds when a man with a clipboard locks eyes.": {
-    "audioUrl": "/voices/static/28eb433ead4d0c03.mp3",
-    "alignmentUrl": "/voices/static/28eb433ead4d0c03.json"
-  },
-  "6SMKBar4Q5wkVHdFlcQC:You take a window seat. The table next to you is two laptops, two espressos, and one founder being interviewed.": {
-    "audioUrl": "/voices/static/a3ce91aa75f3bddd.mp3",
-    "alignmentUrl": "/voices/static/a3ce91aa75f3bddd.json"
-  },
   "6SMKBar4Q5wkVHdFlcQC:You've got a minute before the city gets its hooks in. Anything you want to ask before it does?": {
     "audioUrl": "/voices/static/c08791b7d0a8b2af.mp3",
     "alignmentUrl": "/voices/static/c08791b7d0a8b2af.json"
-  },
-  "6SMKBar4Q5wkVHdFlcQC:You've seen his face on Twitter. He hasn't seen you yet.": {
-    "audioUrl": "/voices/static/5ce724d40efe5442.mp3",
-    "alignmentUrl": "/voices/static/5ce724d40efe5442.json"
-  },
-  "6SMKBar4Q5wkVHdFlcQC:Your phone lights up. Three messages, not from anyone you know.": {
-    "audioUrl": "/voices/static/f136efe6bf08f4f3.mp3",
-    "alignmentUrl": "/voices/static/f136efe6bf08f4f3.json"
   }
 };
 

@@ -24,14 +24,16 @@ export type Phase =
 
 /**
  * Authored scenes (src/lib/scenes.ts) cover indices 0..AUTHORED_SCENE_COUNT-1:
- *   0–2 pre-paywall (FaceTime with Jordan)
+ *   0–1 narrator setup (Who you are / What you've been telling strangers)
+ *   2   pre-paywall decision (Book the one-way)
  *   3   post-paywall Q&A (the car ride)
- *   4–7 cinematic interlude — narrator-led, one shared pre-gen image
- * After that, the LLM tail runs *unbounded* — episodes of 3–5 scenes,
- * one Sonnet-planned episode at a time. Run ends when the player picks
- * "End my run" or via reset.
+ * After that, the NarratorLobby renders during the generating-episode
+ * phase to bridge LLM-gen latency with an in-character Q&A while the
+ * first episode generates. The unbounded LLM tail (episodes of 3–5
+ * scenes) takes over once the player clicks Continue. Run ends when
+ * the player picks "End my run" or via reset.
  */
-export const AUTHORED_SCENE_COUNT = 8;
+export const AUTHORED_SCENE_COUNT = 4;
 /**
  * First sceneIndex at which all QA-driven player facts (team, fundingModel,
  * stage, targetCustomer, concern) are guaranteed captured. Episode-gen
@@ -852,14 +854,14 @@ export const useSessionStore = create<SessionState>()(
     }),
     {
       name: "roadtosf-session",
-      // Bump on architectural breaks. v3 = multi-beat scenes (pre-fixed
-      // ScenePlans + Beats accumulated inside scene containers).
-      // Persisted v1/v2 state has incompatible Episode shape (v1
-      // ArcSkeleton; v2 lightweight Episode with arcBullets but no
-      // scenes[]). Hard reset for either.
-      version: 3,
+      // Bump on architectural breaks. v4 = AUTHORED_SCENE_COUNT dropped
+      // from 8 to 4 (scenes 5–8 "First Steps in SF" replaced by the
+      // NarratorLobby). Pre-v4 persisted progress with sceneIndex 4–7
+      // would land in invalid territory: those slots are now LLM scenes
+      // that haven't generated. Hard reset for v3 and earlier.
+      version: 4,
       migrate: (persisted, fromVersion) => {
-        if (fromVersion < 3) {
+        if (fromVersion < 4) {
           const p = (persisted ?? {}) as Partial<SessionState>;
           return {
             phase: "welcome",
