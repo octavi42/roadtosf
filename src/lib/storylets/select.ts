@@ -12,6 +12,9 @@ import type {
 const TEMPLATES = templatesData as unknown as Storylet[]
 const SCENES_PER_EPISODE = 5
 const DEFAULT_COOLDOWN = 2
+/** Episode-architecture seed pool size. Larger than SCENES_PER_EPISODE
+ *  so the LLM planner has real choice; the planner picks 3–5. */
+const EPISODE_SEED_POOL_SIZE = 6
 
 // Tier gates: which tiers are eligible at a given episode index. Early
 // runs are dominated by 'early' storylets; later episodes unlock the
@@ -253,4 +256,44 @@ export function selectNextStorylet(
       flags: nextState.storyletState.flags,
     },
   }
+}
+
+/**
+ * Episode-architecture entry point. Returns a pool of candidate
+ * storylets for the LLM episode planner to pick from. Filters for
+ * tier-eligibility, predicate match, and excludes anything already
+ * fired this run (cross-episode cooldown via firedSeedIds — replaces
+ * the old per-storylet cooldownEpisodes machinery).
+ *
+ * Sorted by salience desc, with seed-aware stable hash tiebreak.
+ * Returns up to EPISODE_SEED_POOL_SIZE entries; the LLM picks 3–5.
+ */
+export function selectEpisodeSeeds(
+  state: SelectionState,
+  firedSeedIds: ReadonlyArray<string>,
+): Storylet[] {
+  const fired = new Set(firedSeedIds)
+  const eligible = TEMPLATES.filter((s) => {
+    if (fired.has(s.id)) return false
+    if (!tierEligibleAtEpisode(s.tier, state.episodeIndex)) return false
+    return evaluateRequires(s.requires, state)
+  })
+  if (eligible.length === 0) {
+    // Schema-preservation safety net: serve generic templates so the
+    // planner always has something to pick from. Excluded-firedSeedIds
+    // still applies — once everything has fired, the planner picks
+    // freely from the exhausted pool.
+    return TEMPLATES.filter((s) => Object.keys(s.requires).length === 0).slice(
+      0,
+      EPISODE_SEED_POOL_SIZE,
+    )
+  }
+  return eligible
+    .map((s) => ({ s, score: saliencyScore(s, state) }))
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score
+      return stableHash(a.s.id, state.seed) - stableHash(b.s.id, state.seed)
+    })
+    .slice(0, EPISODE_SEED_POOL_SIZE)
+    .map(({ s }) => s)
 }

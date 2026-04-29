@@ -300,5 +300,6 @@ export async function bindAnonToEmail(
 export const REASONS = {
   STRIPE_PURCHASE: 'stripe_purchase',
   GROUP_DEBIT: 'group_debit',
+  EPISODE_DEBIT: 'episode_debit',
   DEV_GRANT: CREDIT_REASON_DEV,
 } as const

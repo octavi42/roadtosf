@@ -1,5 +1,5 @@
-import { ARCHETYPES } from '../archetypes'
-import type { ArcSkeleton, SceneOutline } from '../types'
+import { ROLES } from '../archetypes'
+import type { Episode, ScenePlan } from '../types'
 import { MAX_DIALOGUE_CHARS_PER_SCENE } from '../schemas/scene'
 import type { ToneSpec } from '../cameos/types'
 
@@ -11,104 +11,82 @@ export interface PriorChoiceSummary {
 }
 
 export interface BuildScenePromptInput {
-  episodeIndex: number
-  llmIndexInEpisode: number // 0..EPISODE_LENGTH-1 (= 0..19), position within episode
-  /** Which archetype group within the episode (0..GROUPS_PER_EPISODE-1). */
-  groupIndex: number
-  /** Position within the archetype group (0..SCENES_PER_GROUP-1). 0 opens. */
-  subSceneIndex: number
-  sceneId: number // 1-based id within the full playthrough
-  outline: SceneOutline
-  arcSkeleton: ArcSkeleton
-  storySoFar?: string // rolling compressed summary across all prior episodes
+  /** Currently-playing episode. Provides theme + cross-scene context. */
+  episode: Episode
+  /** Index of THIS scene within episode.scenes (0..episode.scenes.length-1). */
+  sceneIndexInEpisode: number
+  /** 1-based id within the full playthrough. */
+  sceneId: number
+  /** Compressed memory across all prior episodes. */
+  storySoFar?: string
   startupName: string
-  startupDescription: string
   founderPersona: string
-  stage?: string
   team?: string
   fundingModel?: string
   targetCustomer?: string
   concern?: string
-  flavorTags: string[]
-  recentChoices: PriorChoiceSummary[] // only the last few; older context lives in storySoFar
+  /** Recent player choices — used so dialogue can acknowledge them. */
+  recentChoices: PriorChoiceSummary[]
   currentStats: { hype: number; integrity: number }
-  /** Per-run tone (rolled at run-start, stable across all scenes). */
   tone?: ToneSpec
 }
 
-const SCENE_SYSTEM_RULES = `You are the per-scene engine for "Road to SF", a satirical comic-book founder game running in ENDLESS MODE. You produce ONE scene at a time, given the current episode's arc skeleton, a rolling story-so-far summary, and the player's recent choices.
+const SCENE_SYSTEM_RULES = `You are the per-scene engine for "Road to SF", a satirical comic-book founder game running in ENDLESS MODE.
+
+You receive a PRE-PLANNED scene from the episode planner (setting, cast, beat, imagePrompt all fixed). Your job is ONLY to render dialogue + choices. Do NOT invent a new setting; do NOT introduce new named characters. Do NOT change cast names — copy them verbatim from the cast list.
 
 HARD RULES:
-- Output a single JSON object only. No prose before or after, no markdown fences. Start your response with "{" and end with "}".
-- Numbers must be valid JSON: write 1 not +1, write 2 not +2.
-- Real people are NEVER named — archetype them.
-- Use ONLY the archetype assigned in the outline as the in-scene speaker (other archetypes can be referenced in dialogue but not present).
-- In JSON, "archetype" and NPC dialogue "speaker" MUST be the lowercase archetype KEY (vc|cofounder|reporter|hater|mentor) or player|narrator — NEVER a display string like "Stranger, Co-founder & CTO" or "Victor, Managing Partner…".
-- Total dialogue across all lines in this scene MUST be ≤${MAX_DIALOGUE_CHARS_PER_SCENE} chars (TTS budget).
-- Each individual dialogue line ≤160 chars and MUST contain non-empty text. Do not use empty strings for "silent beats" — express silence in narration prose, not as an empty player line.
-- 2–4 dialogue lines per scene total.
-- JSON STRING SAFETY (the most-broken rule, do not relax): inside any "text" field, NEVER use the " character. If you need to quote in-text speech, use single quotes (') or em-dashes. Bad: "text": "He said \\"sure\\" and walked off." Good: "text": "He said 'sure' and walked off." This is a hard parser-failure rule — every unescaped " breaks the scene and forces a fallback that interrupts audio.
-- Each dialogue line is ONE speaker's utterance. Do NOT mix narration + quoted speech in a single "text" value. If the beat is "X says A, then Y reacts with B," split into TWO dialogue entries with different speakers — not a single line containing both. The renderer assigns voices per speaker; mixing them inside one line is voiced as one continuous read.
-- Choice labels: 2–3 per scene, ≤8 words each, action-flavored.
-- Stat deltas: hype and integrity each ∈ {-2, -1, 0, +1, +2}. Most should be ±1.
-- timeoutSeconds: integer from 8 to 60 only (not seconds-per-line totals).
-- choice "consequence": optional, ≤160 characters each if present.
-- imagePrompt: ≤220 chars. Setting + character action + mood + composition. NEVER style words (no "comic", "cel-shaded", "illustration") — the renderer prepends those.
-- DO NOT resolve the run in dialogue. The player chooses when to end. Each scene leaves a hook.
+- Output a single JSON object only. No prose before or after, no markdown fences. Start with "{" and end with "}".
+- Numbers must be valid JSON (1 not +1).
+- The "role" field MUST be the scene's primary role from the plan (one of: vc | cofounder | reporter | hater | mentor).
+- Dialogue speakers MUST be one of: "player", "narrator", or one of the role keys present in the scene's cast (vc | cofounder | reporter | hater | mentor). Multi-role scenes are allowed — if the cast lists cofounder + competitor (hater), both may speak.
+- Total dialogue across all lines ≤${MAX_DIALOGUE_CHARS_PER_SCENE} chars.
+- Each individual line ≤160 chars; non-empty text only. Express silence in narration prose, not empty player lines.
+- 2–4 dialogue lines per scene.
+- JSON STRING SAFETY (the most-broken rule, do not relax): inside any "text" field, NEVER use the " character. Use single quotes (') or em-dashes for in-text speech. Bad: "text": "He said \\"sure\\"."  Good: "text": "He said 'sure'."  Every unescaped " breaks the parser.
+- Each line is ONE speaker's utterance. Do NOT mix narration + quoted speech in a single "text". Split into separate dialogue entries with different speakers.
+- Choice labels: 2–3 per scene, ≤8 words, action-flavored.
+- Stat deltas: hype + integrity each ∈ {-2,-1,0,+1,+2}. Most should be ±1.
+- timeoutSeconds: integer 8–60.
+- choice "consequence": optional, ≤160 chars.
+- imagePrompt: ≤220 chars. The plan already has one — copy it verbatim or sharpen with the moment's specific action. NEVER style words ("comic", "cel-shaded", "illustration") — the renderer prepends those.
+- DO NOT resolve the run. The player ends it. Each scene leaves a hook.
 
-SHARE MOMENT (OPTIONAL FIELD — default is to OMIT):
-- The player just made a choice. If — and only if — that choice (or this scene's beat) is genuinely brag-worthy, you MAY include a "shareMoment" object.
-- Trigger criteria (need at least one): a famous archetype just appeared (Thiel-coded VC, Sam-coded mentor, etc.); the player made a contrarian/bold call against the obvious option; a stat just crossed |hype| ≥ 4 or |integrity| ≥ 4; a stat reversed sign (e.g. went from +2 to -1).
-- Frequency budget: aim for at most one shareMoment per 5 scenes. When in doubt, OMIT.
-- title: ≤8 words, present-tense, punchy ("You walked from $5M."). Speaks to the player as "you".
-- blurb: 1–2 sentences, ≤180 chars, MUST name a specific in-fiction detail (the cameo archetype, a place, a dollar figure, the founder's startupName). Generic copy is forbidden — no "you made a bold move", no "what a moment".
-- If you cannot satisfy the specificity rule, omit shareMoment entirely.
+CAST CONTRACT:
+- Use cast names verbatim from the plan. If the plan lists "Maya" as the cofounder candidate, refer to her as Maya. If it lists "Peter Thiel" as the partner, use that name.
+- Do NOT introduce a new named character mid-scene. New people enter via narration only ("a partner emeritus glances over from the corner couch") — they do not get a "speaker" line unless the cast already names them.
+- Multi-role scenes: any role present in the cast may speak. Strategic — pick which roles serve the moment best. A 3-role cast doesn't mean all 3 speak in every scene.
 
-ABSOLUTE PROHIBITIONS (override the outline if they conflict):
-- The cofounder speaker has no fixed first name from the roster ("Stranger" is a label only). Use a name only if "Team" facts name someone, verbatim.
-- If the player's Team says "solo" / "no cofounder": do NOT speak as if a cofounder is already in the player's life. The cofounder archetype, if assigned, is a stranger trying to attach themselves OR a memory/ghost — never a current partner.
-- If the player named a cofounder (e.g. "my cofounder Anna"), use that name verbatim. Never substitute a different name.
-- If Funding says "bootstrapping": do NOT reference term sheets the player has, equity advisory clauses, or VC drama in motion. VC scenes are cold solicitations, not active deals.
+SETTING CONTRACT:
+- The plan committed to a SETTING. Render dialogue THAT TAKES PLACE THERE. Do not invent a new location.
+- The episode has a THEME. Stay inside it. If the episode is a hackathon weekend, this scene is at the hackathon (or a moment that's clearly part of it).
+
+PRIOR CHOICE CONTRACT (load-bearing for choice-responsiveness):
+- If a PRIOR CHOICE block appears below, treat it as PAST-TENSE ACTION. The player already did it. Render the doing or the immediate consequence — not the deciding.
+- Bad: "The player walks toward the door, considering whether to leave." Good: "The door clicks shut behind you. The street is louder than you remembered."
 
 ANTI-CLICHÉ OPENERS (the "phone buzzes" scrub):
-- DO NOT open scenes with "your phone buzzes/vibrates/lights up", "a Slack ping", "your inbox pings", "a notification arrives", "your email refreshes", "your Twitter mentions explode", or any "device interrupts you" framing. These are the LLM-default scene openers and they recur across every player and every scene — exactly the bug we're fixing.
-- Open instead with: a place ("Sightglass at 4pm; the espresso line snakes out the door"), an interior ("you've been staring at the second slide for twenty minutes"), an action ("you push your laptop away and walk to the window"), or in-progress dialogue ("'so the gap year was YC,' she says, mid-sentence, like the answer was already obvious").
-- The chosen storylet's beat already establishes the situation — let the dialogue/narration enter that situation already in motion, not as a fresh notification arriving.
-- This rule has NO exceptions for storylets whose source beat references a device event ("Sentry alert", "X locks your account"). Render the consequence and the player's action — not the buzz/ping itself.
+- DO NOT open with "your phone buzzes/vibrates/lights up", "a Slack ping", "an inbox refresh", "Twitter mentions explode", or any "device interrupts" framing. These are LLM-default openers that recur across every player.
+- Open with a place ("Sightglass at 4pm; the espresso line snakes out the door"), an action ("you push your laptop away and walk to the window"), or in-progress dialogue ("'so the gap year was YC,' she says, mid-sentence").
 
-CAST LIST LOCK (anti-retroactive-worldbuilding + anti-cliché — see Hidden Door + Drama Llama findings in STORYLETS.md):
-- The ONLY named characters you may reference are: (a) the player's startup, (b) the player's cofounder if "Team" names one, (c) REAL PUBLIC FIGURES already named in the scene's beat (Peter Thiel, Sam Altman, Paul Graham, Garry Tan, Marc Andreessen, etc. — these came from the cameo engine and are intentional).
-- Do NOT invent new named NPCs ("Jessica from Sequoia", "Arman the technical lead", etc.). Strangers stay strangers.
-- ANTI-CLICHÉ NAME SCRUB: If the input beat contains a generic first name that is NOT a real public figure (e.g. "Victor", "Sandra", "Chad", "Sarah", "Mike", "Marcus" — typical LLM defaults), TREAT IT AS A PLACEHOLDER ONLY. In your rendered scene, refer to that NPC by their archetype role ("the partner", "the reporter", "the mentor") — never by the placeholder name. The same default names recurring across players is exactly the bug we're scrubbing.
-- The speaker for THIS scene is the assigned archetype — do not introduce a second named character into the dialogue.
+SHARE MOMENT (OPTIONAL FIELD — default is to OMIT):
+- Only include "shareMoment" if this scene is genuinely brag-worthy (a famous cameo arrived; the player made a contrarian/bold call; a stat reversal; |stat| ≥ 4).
+- Frequency budget: at most one per ~5 scenes. When in doubt, OMIT.
+- title: ≤8 words, present-tense, punchy. Speaks to the player as "you".
+- blurb: 1–2 sentences, ≤180 chars, must name a specific in-fiction detail.
 
 OUTPUT SHAPE:
 {
   "id": number,
   "title": string,
-  "archetype": "vc"|"cofounder"|"reporter"|"hater"|"mentor" (exactly; same as THIS SCENE in outline),
+  "role": "vc"|"cofounder"|"reporter"|"hater"|"mentor",
   "imagePrompt": string,
-  "dialogue": [{ "speaker": same archetype key OR "player" OR "narrator", "text": string }],
+  "dialogue": [{ "speaker": role-key | "player" | "narrator", "text": string }],
   "choices": [{ "id": "a"|"b"|"c", "label": string, "consequence": string, "hype": number, "integrity": number }],
   "timeoutSeconds": number,
   "timeoutChoiceId": "a"|"b"|"c",
-  "shareMoment"?: { "title": string, "blurb": string }   // OPTIONAL — see SHARE MOMENT rules; usually omit
+  "shareMoment"?: { "title": string, "blurb": string }
 }`
-
-function formatArcSummary(arc: ArcSkeleton): string {
-  const lines: string[] = []
-  lines.push(`Episode ${arc.episodeIndex} premise: ${arc.premise}`)
-  lines.push('Group outlines (each group = 4 sub-scenes with the same archetype, same location):')
-  // Skip placeholder outlines from a streaming-partial skeleton (see
-  // makePartialArcSkeleton in page.tsx). The first scene-gen of each
-  // episode is fired before the full arc finishes streaming; only the
-  // current (real) outline is shown to keep cross-group context honest.
-  arc.scenes.forEach((s) => {
-    if (s.beat === '__pending') return
-    lines.push(`  group ${s.index}: ${s.archetype} — ${s.beat}${s.hingesOn ? ` (hinges on: ${s.hingesOn})` : ''}`)
-  })
-  return lines.join('\n')
-}
 
 function formatRecentChoices(choices: PriorChoiceSummary[]): string {
   if (choices.length === 0) return '(none)'
@@ -120,12 +98,6 @@ function formatRecentChoices(choices: PriorChoiceSummary[]): string {
     .join('\n')
 }
 
-// Choice-illusion fix: surface the single most-recent choice and its
-// stat delta in its OWN block at the top of the live prompt, separate
-// from the bulk recent-choices history. The dialogue must acknowledge
-// this choice's effect — without this hoist, the renderer tends to
-// produce prose that floats free of what the player actually picked.
-// See STORYLETS.md (Hidden Door findings).
 function formatPriorChoiceCallout(
   choices: PriorChoiceSummary[],
 ): string | null {
@@ -137,173 +109,78 @@ function formatPriorChoiceCallout(
 The player chose: "${last.choiceLabel}"
 Effect: hype ${hypeStr}, integrity ${integStr}.
 
-PAST TENSE. The action has happened. The player is mid-doing-it or
-just did it. Do NOT render them deciding whether to do it, driving
-toward doing it, opening the laptop to do it, or thinking about it.
-Render the doing.`
+PAST TENSE. The action has happened. Render the doing or the consequence — not the decision.`
+}
+
+function formatCast(plan: ScenePlan): string {
+  return plan.cast
+    .map((c) => `- ${c.role}: ${c.name}${c.blurb ? ` — ${c.blurb}` : ''}`)
+    .join('\n')
 }
 
 export function buildScenePromptParts(input: BuildScenePromptInput) {
-  const arche = ARCHETYPES[input.outline.archetype]
-  const arcSummary = formatArcSummary(input.arcSkeleton)
+  const { episode, sceneIndexInEpisode } = input
+  const plan = episode.scenes[sceneIndexInEpisode]
+  if (!plan) {
+    throw new Error(
+      `No ScenePlan at index ${sceneIndexInEpisode} of episode ${episode.episodeIndex}`,
+    )
+  }
+  const role = ROLES[plan.role]
 
-  // Cached block: stable across all scene calls in the same episode.
-  // CURRENT EPISODE SKELETON moved OUT of the cached context — see the
-  // live block. The skeleton lists all 5 storylet beats including this
-  // group's anchor; cached, it leaks the canonical setup into every
-  // sub-scene's render and re-anchors Haiku away from the player's
-  // choice. We only include the skeleton for sub 0 (the storylet's
-  // setup beat); sub 1-3 should generate freely from prior choice +
-  // archetype + player context, no anchor.
-  const cachedContext = `## CHARACTER (this scene's speaker)
-JSON keys — use EXACTLY for "archetype" and for NPC dialogue "speaker": ${input.outline.archetype}
-Role card (voice flavor only; never paste this label into JSON): ${arche.name}, ${arche.title}.
-Personality: ${arche.personality}
-${
-  input.outline.archetype === 'cofounder'
-    ? '\nNote: "Stranger" is UI flavor only — not a spoken name. If Team facts say solo, they must not claim to be an existing cofounder unless Team names someone.'
-    : ''
-}
+  const cachedContext = `## ROLE GLOSSARY (voice/personality flavor only — names come from the cast)
+- ${plan.role}: ${role.roleLabel} — ${role.title}. ${role.personality}
 
 ## STORY SO FAR (compressed, covers everything before this episode)
 ${input.storySoFar ?? '(this is the opening episode — no prior summary)'}
 
 ## PLAYER STATE
 Startup: ${input.startupName}
-Pitch: ${input.startupDescription || '(unstated)'}
 Founder vibe: ${input.founderPersona || '(unstated)'}
-Stage: ${input.stage || '(unstated)'}
 
 ## PLAYER FACTS (HONOR THESE — never invent contradictions)
-Team: ${input.team || '(unstated; do not invent a cofounder, treat as solo)'}
-Funding: ${input.fundingModel || '(unstated; do not assume a fundraising track)'}
-Target customer: ${input.targetCustomer || '(unstated; keep generic — don\'t invent a wrong segment)'}
+Team: ${input.team || '(unstated; treat as solo)'}
+Funding: ${input.fundingModel || '(unstated)'}
+Target customer: ${input.targetCustomer || '(unstated)'}
 Current concern: ${input.concern || '(unstated)'}`
 
-  // Per-call (uncached): the recent choices + scene target.
-  //
-  // Each archetype encounter is rendered as 4 sub-scenes that share one
-  // location and one image. Sub-scene 0 opens the encounter; 1–3 progress
-  // the same conversation, reacting to the player's prior choice. The
-  // imagePrompt for sub 1–3 must describe the SAME setting as sub 0 —
-  // the renderer reuses sub 0's image regardless, but consistency in the
-  // narrated setting matters for the dialogue.
-  // Sub 1-3 are generated SEQUENTIALLY: each call is dispatched only after
-  // the player has made their choice in the prior sub. recentChoices
-  // therefore ALWAYS contains the immediately-prior pick, and the dialogue
-  // must honor it as a literal in-fiction action — not gloss past it.
-  // Storylet kind drives the rendering mode for SUB-SCENE 0 only.
-  // Sub-scenes 1-3 are choice-driven: if the player picked "call her,"
-  // there's a second character on the phone — the kind:solo "no NPC
-  // speaks" rule would otherwise block that and force Haiku to render
-  // the player avoiding the call. The kind constraint is a sub-0
-  // setup constraint, not an episode-wide rule.
-  const kind = input.outline.kind ?? 'encounter'
-  const kindBlock =
-    input.subSceneIndex === 0
-      ? kind === 'solo'
-        ? `## SCENE KIND: SOLO (no NPC speaks)
-This scene has NO NPC of any archetype as a speaking character. Dialogue uses ONLY "narrator" and "player" speakers. The "${arche.name}" archetype on this outline is a THEMATIC ANCHOR for tone/image — not a character that walks in.
-Render the scene as: narrator describes the moment + place + time, player has 1–2 internal-monologue lines, the choices are about what the player does next (alone). No second character.`
-        : kind === 'world-event'
-          ? `## SCENE KIND: WORLD-EVENT (an event, not an encounter)
-Something changed in the world; the player reacts. Dialogue is mostly "narrator" describing the event and its visible consequence, optionally one "player" line. The "${arche.name}" archetype is a THEMATIC ANCHOR for tone/image — an NPC of that archetype may be REFERENCED in narration ("a Thiel-coded VC's tweet went viral", "a competitor's blog post drops") but DOES NOT appear as a speaking character.
-The choices are about what the player does in response to the event.`
-          : ''
-      : ''
-
-  const subSceneBlock =
-    input.subSceneIndex === 0
-      ? `## SUB-SCENE 0 of 4 (opens the situation)
-This is the OPENING beat of a 4-beat sequence. Render the storylet's
-anchor situation (see "Beat to render" below). Establish setting +
-character + tension. End on a choice that the player's NEXT scene will
-literally enact. Pick a location flexible enough that any of the
-choices' consequences (calling someone, walking out, agreeing, lying,
-etc.) can plausibly play out from here or just past here.`
-      : `## SUB-SCENE ${input.subSceneIndex} of 4
-
-THE PLAYER ALREADY DID THE THING. Read the PRIOR CHOICE above. Treat its label as past-tense action, not intention. Render this scene as what is happening WHILE OR JUST AFTER the player does it.
-
-Hard rule: do NOT show the player avoiding, delaying, postponing, second-guessing, or overthinking the choice. They already did it. Render the consequence in motion.
-
-Examples — what the FIRST narrator/player line must look like:
-- Choice "Call her right now" → "[narrator] Three rings. Then her voice." or "[narrator] Phone to your ear. The dial tone clicks once. 'Hey?' she says."
-- Choice "Submit the form" → "[narrator] You click submit. The screen flashes 'Application received'." or "[narrator] Send. The page reloads. It's gone."
-- Choice "Walk out" → "[narrator] The door closes behind you. The street is louder than you remembered."
-- Choice "Sleep on it" → "[narrator] You close the laptop. The kitchen is dark now. Tomorrow."
-- Choice "Take the term sheet" → "[narrator] You sign. He slides the contract across the bar. 'Welcome.'"
-- Choice "Push back on the war chest logic" → "[vc] 'Twenty million is the table stakes—' [player] 'No it isn't.' [vc] '...go on.'"
-- Choice "Tell them you're solo by choice" → "[player] 'I'm flying solo. By choice.' [cofounder] silence. then a flat 'Okay.'"
-
-If the choice triggered an external action (call, walkout, signing, submitting), there is now a NEW CHARACTER or NEW SETTING in the scene. INCLUDE THEM. The choice's "kind" overrides the storylet's kind for THIS sub-scene.
-
-Forbidden openings for this scene:
-- "You're driving / you're walking / you're sitting somewhere thinking about [thing]"
-- "The email is still open / the cursor still blinks / the deck still sits"
-- "You haven't [verb] yet"
-- Any framing where the player is in transit or contemplating instead of acting
-
-If the storylet was solo/internal but the player picked an outward-action choice, BREAK the solo frame. Bring the second character on screen via voice or dialogue. Render the ACTION, not the introspection.
-${
-  input.subSceneIndex === 3
-    ? '\nThis is sub-scene 3 — the final beat. Close cleanly so the next archetype can enter; leave a hook, do NOT resolve the run.'
-    : ''
-}`
-
   const priorChoiceBlock = formatPriorChoiceCallout(input.recentChoices)
+  const isFirstScene = sceneIndexInEpisode === 0
 
-  const liveBlock = `${input.tone ? `${input.tone.oneLiner}\n\n` : ''}${priorChoiceBlock ? `${priorChoiceBlock}\n\n` : ''}## RECENT CHOICES (last few only)
+  const liveBlock = `${input.tone ? `${input.tone.oneLiner}\n\n` : ''}${priorChoiceBlock ? `${priorChoiceBlock}\n\n` : ''}## EPISODE
+Theme: ${episode.theme}
+Premise: ${episode.premise}
+Scene ${sceneIndexInEpisode + 1} of ${episode.scenes.length}.
+
+## SCENE PLAN (PRE-FIXED — render dialogue THAT FITS, do not change setting or cast)
+Setting: ${plan.setting}
+Beat: ${plan.beat}
+${plan.kind ? `Kind: ${plan.kind}` : ''}
+
+## CAST (use these names verbatim; multi-role scenes allow any of these to speak)
+${formatCast(plan)}
+
+## IMAGE PROMPT (already committed; copy verbatim or sharpen for the moment)
+${plan.imagePrompt}
+
+## RECENT CHOICES (last few only)
 ${formatRecentChoices(input.recentChoices)}
 
 Current stats — hype ${input.currentStats.hype}, integrity ${input.currentStats.integrity}.
 
-${kindBlock ? `${kindBlock}\n\n` : ''}${subSceneBlock}
-
-## THIS SCENE
-Episode ${input.episodeIndex}, group ${input.groupIndex} sub ${input.subSceneIndex} (id=${input.sceneId})
-
-## SCENE SKELETON (THE SITUATION — same for all 4 sub-scenes of this group)
-${input.outline.summary ?? input.outline.beat}
-
-## CAST LOCK (HARD RULE — no exceptions)
-This entire 4-sub-scene group has exactly THREE allowed dialogue speakers:
-  - "narrator"
-  - "player"
-  - "${input.outline.archetype}" (the archetype's role: ${arche.name})
-
-That's the cast. NO OTHER SPEAKERS. The "${input.outline.archetype}" speaker is
-ONE specific person — the SAME person across all 4 sub-scenes. They do not
-leave and a different "${input.outline.archetype}" arrive; they do not get
-replaced by a different archetype. New characters DO NOT appear mid-group.
-If your dialogue needs a third character, render them via narration only —
-they do not get a "speaker" line.
-
+## YOUR JOB FOR THIS SCENE
 ${
-  input.subSceneIndex === 0
-    ? // Sub 0: generate the OPENING from the skeleton. No verbose
-      // beat — the user has been clear: skeleton + on-the-fly. Sub 0
-      // establishes the cast (the specific person playing the
-      // archetype) and the opening situation; sub 1-3 extend.
-      `## YOUR JOB FOR THIS SUB-SCENE
-This is sub-scene 0 — the OPENER. Establish the situation described in the
-SCENE SKELETON above. Introduce the "${input.outline.archetype}" character
-(give them a coherent voice; if the storylet hints at a real public figure,
-use that name; otherwise leave them unnamed and refer to them as "the
-${arche.name.toLowerCase()}" or similar). End on choices that the player's
-NEXT scene will literally enact.
-
-Generate the dialogue, choices, and imagePrompt fresh from the skeleton. No
-prewritten lines.`
-    : // Sub 1-3: skeleton + choice only.
-      `## YOUR JOB FOR THIS SUB-SCENE
-The PRIOR CHOICE above is the player's literal action. This sub-scene is what
-HAPPENS NEXT in the same conversation, with the same cast. Render the dialogue
-and player response; offer choices that drive the next sub-scene. Do not
-switch settings or characters; do not introduce new people.`
+  isFirstScene
+    ? 'OPEN the episode. Establish the setting + active cast in motion. End on choices that the next scene will literally enact.'
+    : 'CONTINUE the episode. Honor the prior choice (above) as past-tense action. Stay in the episode\'s setting unless the prior choice explicitly took the player elsewhere. End on choices that drive the next scene.'
 }
 
-Output the JSON object for this scene now.`
+Generate the dialogue, choices, and (if needed) a sharpened imagePrompt fresh from the plan + prior choice. No prewritten lines.
+
+## THIS SCENE
+Episode ${episode.episodeIndex}, scene ${sceneIndexInEpisode} (id=${input.sceneId}).
+
+Output the JSON object now.`
 
   return {
     systemBlocks: [
