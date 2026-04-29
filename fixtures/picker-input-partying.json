@@ -1,0 +1,10 @@
+{
+  "episodeIndex": 2,
+  "flavorTags": ["ai", "partying", "community"],
+  "stats": { "hype": 3, "integrity": 1 },
+  "storySoFar": "Two episodes in: the founder pivoted from B2B sales to consumer agents on a Wednesday and announced it on X by Friday. Followers up 3x, ARR down to zero.",
+  "alreadyEncountered": { "eventIds": [], "peopleIds": ["paul-graham"], "storyIds": [] },
+  "seed": "fixture-pt-003",
+  "lastEpisodeTone": "hype",
+  "lastChoiceLabel": "did a live demo at AGI House while drunk"
+}

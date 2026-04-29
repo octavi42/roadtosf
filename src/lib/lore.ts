@@ -70,7 +70,9 @@ export interface FilterInput {
 }
 
 // Tiny string-seeded PRNG (mulberry32). Stable across runs given the same seed.
-function hashSeed(seed: string): number {
+// Exported because the Stage 1 lore-picker (src/lib/lore/candidates.ts) needs
+// the same determinism primitive, and we want one canonical implementation.
+export function hashSeed(seed: string): number {
   let h = 2166136261 >>> 0
   for (let i = 0; i < seed.length; i++) {
     h ^= seed.charCodeAt(i)
@@ -79,7 +81,20 @@ function hashSeed(seed: string): number {
   return h
 }
 
-function makeRng(seed: string | undefined): () => number {
+// Returns a (0..1) float for the given string seed. Pure: same seed → same value.
+// Used by the picker's score functions (LORE_SYSTEM.md §3.1) where the seed is
+// `${playthroughId}:${id}` so two rows of the same playthrough get distinct
+// jitter and two playthroughs get different orderings.
+export function mulberry32(seed: string): number {
+  let s = hashSeed(seed) >>> 0
+  s = (s + 0x6d2b79f5) >>> 0
+  let t = s
+  t = Math.imul(t ^ (t >>> 15), t | 1)
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+}
+
+export function makeRng(seed: string | undefined): () => number {
   if (!seed) return Math.random
   let s = hashSeed(seed) >>> 0
   return () => {
