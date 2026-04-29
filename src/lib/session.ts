@@ -538,8 +538,38 @@ export const useSessionStore = create<SessionState>()(
           const scenes = [...state.arc.scenes];
           if (!scenes[llmIndex]) return state;
           const prior = scenes[llmIndex]!;
+          const priorLen = prior.dialogue.length;
           scenes[llmIndex] = { ...prior, dialogue: [...prior.dialogue, line] };
-          return { arc: { ...state.arc, scenes } };
+          // If this is the FIRST line of an in-flight beat for the
+          // player's current scene, reset progress immediately so the
+          // narrator starts reading the new line as it streams. Without
+          // this, the player sits on the post-choice waiting state until
+          // the `done` event fires appendBeat (5–10s later) — the audio
+          // plays only after the whole beat is generated, defeating the
+          // purpose of SSE streaming.
+          //
+          // Detection: a new beat was just started by resetInFlightBeat,
+          // which pushed beatStarts[last] = priorLen. So if priorLen ===
+          // beatStarts.last AND this scene is the player's current
+          // scene AND choiceMade is set (meaning we're between choice
+          // and next beat landing), this is the first streamed line.
+          const beatStarts = prior.beatStarts ?? [0];
+          const lastBeatStart = beatStarts[beatStarts.length - 1] ?? 0;
+          const playerLLMIndex =
+            state.progress.sceneIndex - AUTHORED_SCENE_COUNT;
+          const isFirstStreamLine =
+            playerLLMIndex === llmIndex &&
+            priorLen === lastBeatStart &&
+            state.progress.choiceMade !== null;
+          const progress = isFirstStreamLine
+            ? {
+                ...state.progress,
+                currentLineIndex: lastBeatStart,
+                showChoices: false,
+                choiceMade: null,
+              }
+            : state.progress;
+          return { arc: { ...state.arc, scenes }, progress };
         }),
 
       resetInFlightBeat: (llmIndex) =>
