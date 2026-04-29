@@ -989,17 +989,16 @@ export default function HomePage() {
   // can't run an episode forever.
 
   // Pre-gen: kick off the next episode's planner the moment the
-  // player enters the LAST planned scene of the current episode, and
-  // ACTIVATE the plan as soon as it lands (call episodePlanReady from
-  // .then). This swaps arc.currentEpisode immediately, which fires
-  // image-gen + scene-gen for the new episode in parallel with the
-  // player's last-scene play. By the time they cross, scene 0
-  // dialogue + image are usually pre-warmed.
+  // player enters the LAST planned scene of the current episode. The
+  // result is held in pendingEpisodeRef and only activated when the
+  // end-trigger below fires (player crosses past the closer).
   //
-  // The promise is also held in pendingEpisodeRef as a fallback for
-  // the case where the player crosses before pre-gen resolves — the
-  // end-trigger below shows the loader and the .then activates when
-  // pre-gen completes.
+  // We CANNOT call episodePlanReady eagerly from .then() — that swaps
+  // arc.currentEpisode mid-play, and fireBeat (which uses
+  // currentEpisode to compute sceneIndexInEpisode) would then send
+  // mismatched scene indices to /api/generate-scene, which 400s on
+  // "no scene plan at index N". Eager activation was tried in PR57
+  // and reverted.
   useEffect(() => {
     if (phase !== "scene") return;
     const ep = arc?.currentEpisode;
@@ -1020,23 +1019,6 @@ export default function HomePage() {
     const promise = fetchEpisode(buildEpisodeRequestBody(nextEpisode), {
       signal: controller.signal,
     })
-      .then((data): FetchEpisodeResult | null => {
-        // Activate immediately — don't wait for the player to cross.
-        // arc.currentEpisode swaps; image-gen + scene-gen effects
-        // fire for the new episode while the player is still in the
-        // prior episode's last scene.
-        episodePlanReady(data.episode);
-        if (typeof data.creditsRemaining === "number") {
-          setCreditsRemaining(data.creditsRemaining);
-        }
-        if (
-          pendingEpisodeRef.current &&
-          pendingEpisodeRef.current.episodeIndex === nextEpisode
-        ) {
-          pendingEpisodeRef.current = null;
-        }
-        return data;
-      })
       .catch((err): FetchEpisodeResult | null => {
         // Silent during pre-gen — the end-trigger will retry fresh
         // when the player crosses, surfacing paywall etc at the
@@ -1057,14 +1039,7 @@ export default function HomePage() {
       .finally(() => clearTimeout(timeoutId));
 
     pendingEpisodeRef.current = { episodeIndex: nextEpisode, promise };
-  }, [
-    phase,
-    sceneIndex,
-    arc?.currentEpisode,
-    buildEpisodeRequestBody,
-    episodePlanReady,
-    setCreditsRemaining,
-  ]);
+  }, [phase, sceneIndex, arc?.currentEpisode, buildEpisodeRequestBody]);
 
   useEffect(() => {
     if (phase !== "scene") return;
@@ -1095,28 +1070,32 @@ export default function HomePage() {
 
     const nextEpisode = ep.episodeIndex + 1;
 
-    // Pre-gen path: pre-gen activates episodePlanReady eagerly in
-    // its own .then(), so by the time the player crosses, arc.
-    // currentEpisode is usually already ep N+1 (and the trigger has
-    // silently disengaged via the playerLocalIndex/endSceneLocal
-    // guards above — endSceneLocal stays -1 for the freshly-loaded
-    // ep N+1).
+    // Fast path: pre-gen already kicked off when the player entered
+    // the last planned scene. Wait on its promise — if it resolved
+    // successfully, activate now. If it resolved to null (pre-gen
+    // failure), fall through to a fresh fetch on the next render.
     //
-    // The only path that lands HERE with currentEpisode still on
-    // ep N is: pre-gen is in flight at cross-time. In that case
-    // pendingEpisodeRef matches; we show the loader and let pre-gen's
-    // own .then() activate. Cinematic-exit then fires once scene 0
-    // dialogue arrives.
+    // CRITICAL: clear pendingEpisodeRef BEFORE attaching the .then.
+    // This effect re-runs whenever its deps change (sceneIndex, arc,
+    // etc), and arc churns while scene-gen streams dialogue lines.
+    // Without clearing first, every re-run attaches another .then to
+    // the same promise, which fires episodePlanReady N times once the
+    // promise resolves and blows the React update depth.
     const pending = pendingEpisodeRef.current;
     if (pending && pending.episodeIndex === nextEpisode) {
       pendingEpisodeRef.current = null;
       enterGeneratingEpisode();
-      // No episodePlanReady call here — pre-gen .then() handles it.
-      // We only need to wake fresh-fetch on outright failure.
       pending.promise.then((data) => {
-        if (data === null) {
-          episodeGenFiredRef.current.delete(nextEpisode);
+        if (data) {
+          episodePlanReady(data.episode);
+          if (typeof data.creditsRemaining === "number") {
+            setCreditsRemaining(data.creditsRemaining);
+          }
+          return;
         }
+        // Pre-gen failed silently. Allow the fresh-fetch path on
+        // next render by re-opening the dedup gate.
+        episodeGenFiredRef.current.delete(nextEpisode);
       });
       return;
     }
