@@ -1,5 +1,5 @@
 import type { Archetype } from './types'
-import { ARCHETYPES, type ArchetypeDefinition } from './archetypes'
+import { ARCHETYPES, type RoleDefinition as ArchetypeDefinition } from './archetypes'
 import placesData from './lore/places.json'
 import jokesData from './lore/running-jokes.json'
 import zeitgeistData from './lore/zeitgeist.json'

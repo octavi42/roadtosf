@@ -80,7 +80,7 @@ export async function generateSceneImage(
 
   const fullPrompt = [
     PRESETS.stylePrefix,
-    `Character: ${archetypeDef.name}, ${archetypeDef.title}. ${archetypeDef.imageStyle}.`,
+    `Character: ${archetypeDef.roleLabel} (${archetypeDef.title}). ${archetypeDef.imageStyle}.`,
     `Scene: ${scenePrompt}`,
     "Match the art style of the reference image exactly.",
   ].join(" ");

@@ -127,7 +127,7 @@ export default function TestImagePage() {
                       : "bg-transparent text-zinc-400 border-zinc-700 hover:border-zinc-500"
                   }`}
                 >
-                  {ARCHETYPES[a].name} ({a})
+                  {ARCHETYPES[a].roleLabel} ({a})
                 </button>
               ))}
             </div>
