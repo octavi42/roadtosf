@@ -13,7 +13,11 @@
     "generate:intro": "node --env-file=.env.local scripts/generate-intro.mjs",
     "generate:group-images": "node --env-file=.env.local scripts/generate-group-images.mjs",
     "db:migrate": "node --env-file=.env.local scripts/migrate.mjs",
-    "probe:silicon-mania": "node --env-file=.env.local scripts/probe-silicon-mania.mjs"
+    "probe:silicon-mania": "node --env-file=.env.local scripts/probe-silicon-mania.mjs",
+    "seed:people": "node --env-file=.env.local scripts/seed-people.mjs",
+    "scrape:events": "node --env-file=.env.local scripts/scrape-events.mjs",
+    "scrape:stories": "node --env-file=.env.local scripts/scrape-stories.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",
@@ -38,9 +42,11 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/ui": "^4.1.5",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.5"
   }
 }

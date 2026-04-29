@@ -1,0 +1,9 @@
+{
+  "episodeIndex": 0,
+  "flavorTags": ["ai", "hype", "yc"],
+  "stats": { "hype": 4, "integrity": 0 },
+  "storySoFar": "",
+  "alreadyEncountered": { "eventIds": [], "peopleIds": [], "storyIds": [] },
+  "seed": "fixture-pt-001",
+  "lastChoiceLabel": "took the founder photo at the YC reception"
+}

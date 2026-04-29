@@ -1,0 +1,10 @@
+{
+  "episodeIndex": 1,
+  "flavorTags": ["fundraising", "vc", "press"],
+  "stats": { "hype": 1, "integrity": -2 },
+  "storySoFar": "After Demo Day, the founder dragged the cofounder to a Sand Hill dinner. The term sheet is still unsigned. Every reporter in the room asked about runway.",
+  "alreadyEncountered": { "eventIds": [], "peopleIds": [], "storyIds": [] },
+  "seed": "fixture-pt-002",
+  "lastEpisodeTone": "cynical",
+  "lastChoiceLabel": "leaked the term sheet to a reporter"
+}
