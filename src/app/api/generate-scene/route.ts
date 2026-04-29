@@ -1,17 +1,17 @@
 import { NextResponse } from 'next/server'
 import { streamJsonText, MODELS, extractJsonObject } from '@/lib/anthropic'
 import {
-  coerceRawSceneJson,
-  sceneSchema,
-  sanitizeScene,
-  type ParsedScene,
+  beatSchema,
+  coerceRawBeatJson,
+  sanitizeBeat,
+  type ParsedBeat,
 } from '@/lib/schemas/scene'
 import { episodePlanSchema } from '@/lib/schemas/episode'
 import {
-  buildScenePromptParts,
+  buildBeatPromptParts,
   type PriorChoiceSummary,
 } from '@/lib/prompts/scene'
-import type { Episode, Role, Scene } from '@/lib/types'
+import type { Beat, DialogueLine, Episode, Role } from '@/lib/types'
 import { getToneSpec } from '@/lib/cameos/tone'
 import type { ToneId, ToneSpec } from '@/lib/cameos/types'
 
@@ -21,11 +21,12 @@ type Body = {
   episode?: unknown
   episodeIndex?: unknown
   sceneIndexInEpisode?: unknown
-  /** Total scenes the player has played in this episode so far. */
-  totalScenesInEpisodeSoFar?: unknown
-  /** The single most-recent choice the player made — the load-bearing
-   *  input for choice-driven scene flow. */
-  lastChoice?: unknown
+  /** 0-based index of THIS beat within the scene's beat sequence. */
+  beatIndex?: unknown
+  /** Dialogue accumulated from prior beats of THIS scene only. */
+  priorBeatsDialogue?: unknown
+  /** The player's choice on the prior beat (within THIS scene). */
+  priorBeatChoice?: unknown
   storySoFar?: unknown
   startupName?: unknown
   startupDescription?: unknown
@@ -81,7 +82,7 @@ function asPriorChoices(v: unknown): PriorChoiceSummary[] {
   })
 }
 
-function asLastChoice(v: unknown): PriorChoiceSummary | undefined {
+function asPriorBeatChoice(v: unknown): PriorChoiceSummary | undefined {
   if (!v || typeof v !== 'object') return undefined
   const o = v as Record<string, unknown>
   return {
@@ -92,11 +93,23 @@ function asLastChoice(v: unknown): PriorChoiceSummary | undefined {
   }
 }
 
+function asPriorBeatsDialogue(v: unknown): DialogueLine[] {
+  if (!Array.isArray(v)) return []
+  return v.flatMap((item): DialogueLine[] => {
+    if (!item || typeof item !== 'object') return []
+    const o = item as Record<string, unknown>
+    const speaker = asString(o.speaker, 'narrator')
+    const text = asString(o.text, '')
+    if (text.trim().length === 0) return []
+    return [{ speaker: speaker as DialogueLine['speaker'], text }]
+  })
+}
+
 function parseFromRaw(
   raw: string,
   primaryRole: Role,
   allowedRoles: ReadonlyArray<Role>,
-): ParsedScene {
+): ParsedBeat {
   let json: unknown
   try {
     json = extractJsonObject(raw)
@@ -104,7 +117,7 @@ function parseFromRaw(
     console.warn('[generate-scene] JSON extraction failed. raw:', raw.slice(0, 800))
     throw e
   }
-  const result = sceneSchema.safeParse(coerceRawSceneJson(json, { primaryRole, allowedRoles }))
+  const result = beatSchema.safeParse(coerceRawBeatJson(json, { primaryRole, allowedRoles }))
   if (!result.success) {
     console.warn(
       '[generate-scene] Zod validation failed. issues:',
@@ -113,10 +126,10 @@ function parseFromRaw(
     console.warn('[generate-scene] payload was:', JSON.stringify(json).slice(0, 800))
     throw result.error
   }
-  return sanitizeScene(result.data, { allowedRoles })
+  return sanitizeBeat(result.data, { allowedRoles })
 }
 
-// ── Incremental JSON extractors for streaming scene generation ──────
+// ── Incremental JSON extractors for streaming beat generation ───────
 function findStringFieldEnd(text: string, key: string): number {
   const re = new RegExp(`"${key}"\\s*:\\s*"`)
   const m = re.exec(text)
@@ -139,19 +152,6 @@ function findStringFieldEnd(text: string, key: string): number {
     i++
   }
   return -1
-}
-
-function readStringFieldValue(text: string, key: string, endPos: number): string | null {
-  const re = new RegExp(`"${key}"\\s*:\\s*"`)
-  const m = re.exec(text)
-  if (!m || m.index === undefined) return null
-  const valueStart = m.index + m[0].length
-  const raw = text.slice(valueStart, endPos - 1)
-  return raw
-    .replace(/\\"/g, '"')
-    .replace(/\\\\/g, '\\')
-    .replace(/\\n/g, '\n')
-    .replace(/\\t/g, '\t')
 }
 
 function findDialogueArrayStart(text: string): number {
@@ -204,6 +204,8 @@ function nextDialogueLine(
   return null
 }
 
+void findStringFieldEnd // currently unused — preserved for symmetry with prior version
+
 function sseEvent(name: string, data: unknown): string {
   return `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`
 }
@@ -228,33 +230,37 @@ export async function POST(request: Request) {
   }
 
   const sceneIndexInEpisode = asInt(body.sceneIndexInEpisode, 0)
-  const totalScenesInEpisodeSoFar = asInt(
-    body.totalScenesInEpisodeSoFar,
-    sceneIndexInEpisode + 1,
-  )
-  const lastChoice = asLastChoice(body.lastChoice)
+  const beatIndex = asInt(body.beatIndex, 0)
+  const plan = episode.scenes[sceneIndexInEpisode]
+  if (!plan) {
+    return NextResponse.json(
+      {
+        error: `no scene plan at index ${sceneIndexInEpisode} (episode has ${episode.scenes.length} scenes)`,
+      },
+      { status: 400 },
+    )
+  }
 
-  const globalLLMIndex =
-    asInt(body.episodeIndex, episode.episodeIndex) * 32 + sceneIndexInEpisode
-  const sceneId = AUTHORED_SCENE_COUNT + globalLLMIndex + 1
+  const isFinalSceneOfEpisode =
+    sceneIndexInEpisode === episode.scenes.length - 1
 
-  // Allowed speakers for this scene = all roles present in the episode
-  // cast roster + player + narrator. Multi-role scenes are allowed; the
-  // schema clamps any speaker outside this set to narrator.
+  const sceneId =
+    AUTHORED_SCENE_COUNT +
+    asInt(body.episodeIndex, episode.episodeIndex) * 8 +
+    sceneIndexInEpisode +
+    1
+
   const allowedRoles: Role[] = Array.from(
-    new Set<Role>(episode.cast.map((c) => c.role as Role)),
+    new Set<Role>(plan.cast.map((c) => c.role as Role).concat(plan.role)),
   )
-
-  // Default primary role for coercion when Haiku omits the field. Use
-  // the most common role in the cast (or first listed). Haiku is asked
-  // to emit `role` itself; this is just the safety net.
-  const defaultRole: Role = allowedRoles[0] ?? 'cofounder'
+  const primaryRole: Role = plan.role
 
   const promptInput = {
     episode,
     sceneIndexInEpisode,
-    totalScenesInEpisodeSoFar,
-    lastChoice,
+    beatIndex,
+    priorBeatsDialogue: asPriorBeatsDialogue(body.priorBeatsDialogue),
+    priorBeatChoice: asPriorBeatChoice(body.priorBeatChoice),
     sceneId,
     storySoFar: asString(body.storySoFar, '') || undefined,
     startupName: asString(body.startupName, 'the startup'),
@@ -272,9 +278,10 @@ export async function POST(request: Request) {
       ),
     },
     tone: asToneSpec(body.tone),
+    isFinalSceneOfEpisode,
   }
 
-  const { systemBlocks, userBlocks } = buildScenePromptParts(promptInput)
+  const { systemBlocks, userBlocks } = buildBeatPromptParts(promptInput)
 
   const encoder = new TextEncoder()
 
@@ -285,24 +292,13 @@ export async function POST(request: Request) {
       }
 
       const sendFallback = () => {
-        // Minimal fallback derived from the episode skeleton — first
-        // cast member, generic dialogue. The LLM path being broken
-        // shouldn't strand the run.
-        const first = episode.cast[0]
-        const role = (first?.role ?? defaultRole) as Role
-        const fallbackScene: Scene = {
-          id: sceneId,
-          title: `Episode ${episode.episodeIndex} · Scene ${sceneIndexInEpisode + 1}`,
-          role,
-          archetype: role,
-          setting: 'somewhere in San Francisco, mid-evening',
-          cast: first ? [{ role: first.role as Role, name: first.name, blurb: first.blurb }] : [],
-          isLastSceneOfEpisode: false,
-          imagePrompt:
-            'a tense moment in San Francisco, two characters in a quiet room, mood of unspoken decision',
+        // Fallback beat — a generic exchange that lets the player keep
+        // playing if the LLM path failed.
+        const speaker: Role = primaryRole
+        const fallbackBeat: Beat = {
           dialogue: [
-            { speaker: 'narrator', text: episode.theme },
-            { speaker: role, text: 'So. What now?' },
+            { speaker: 'narrator', text: 'A long pause. The room is the same.' },
+            { speaker, text: 'So. What now?' },
           ],
           choices: [
             { id: 'a', label: 'Lean in.', hype: 1, integrity: -1 },
@@ -310,9 +306,12 @@ export async function POST(request: Request) {
           ],
           timeoutSeconds: 15,
           timeoutChoiceId: 'b',
+          isLastBeatOfScene: false,
+          isLastSceneOfEpisode: false,
         }
         send('done', {
-          scene: fallbackScene,
+          beat: fallbackBeat,
+          sceneId,
           source: 'fallback' as const,
           creditsRemaining: null,
         })
@@ -322,24 +321,11 @@ export async function POST(request: Request) {
         if (!process.env.ANTHROPIC_API_KEY)
           throw new Error('ANTHROPIC_API_KEY missing')
 
-        let imagePromptFired = false
         let dialogueArrayStart = -1
         let nextDialogueSearchPos = 0
         let dialogueLinesFired = 0
 
         const tryEmitProgress = (full: string) => {
-          // imagePrompt arrives in Haiku's stream — emit when its
-          // closing quote appears so the client can fire image-gen.
-          if (!imagePromptFired) {
-            const ipEnd = findStringFieldEnd(full, 'imagePrompt')
-            if (ipEnd !== -1) {
-              const ip = readStringFieldValue(full, 'imagePrompt', ipEnd)
-              if (ip !== null && ip.length > 0) {
-                imagePromptFired = true
-                send('imagePrompt', { imagePrompt: ip })
-              }
-            }
-          }
           if (dialogueArrayStart === -1) {
             dialogueArrayStart = findDialogueArrayStart(full)
             if (dialogueArrayStart !== -1) nextDialogueSearchPos = dialogueArrayStart
@@ -364,33 +350,37 @@ export async function POST(request: Request) {
           model: MODELS.scene,
           systemBlocks,
           userBlocks,
-          maxTokens: 1200,
+          maxTokens: 900,
           temperature: 0.85,
           onText: (_delta, full) => tryEmitProgress(full),
           signal: request.signal,
         })
 
-        const parsed = parseFromRaw(raw, defaultRole, allowedRoles)
-        const scene: Scene = {
+        const parsed = parseFromRaw(raw, primaryRole, allowedRoles)
+        // Force isLastSceneOfEpisode = false on non-final scenes (LLM
+        // ignores the rule sometimes).
+        const beat: Beat = {
           ...parsed,
-          id: sceneId,
-          archetype: parsed.role,
+          isLastSceneOfEpisode: isFinalSceneOfEpisode
+            ? !!parsed.isLastSceneOfEpisode
+            : false,
         }
         send('done', {
-          scene,
+          beat,
+          sceneId,
           source: 'llm' as const,
           creditsRemaining: null,
         })
       } catch (err) {
         console.warn(
-          `generate-scene episode=${episode.episodeIndex} scene=${sceneIndexInEpisode}: LLM path failed, sending fallback`,
+          `generate-scene episode=${episode.episodeIndex} scene=${sceneIndexInEpisode} beat=${beatIndex}: LLM path failed, sending fallback`,
           err,
         )
         try {
           sendFallback()
         } catch (fallbackErr) {
           console.error('generate-scene: fallback send failed', fallbackErr)
-          send('error', { message: 'scene-gen failed and fallback unavailable' })
+          send('error', { message: 'beat-gen failed and fallback unavailable' })
         }
       } finally {
         controller.close()

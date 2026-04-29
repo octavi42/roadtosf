@@ -398,7 +398,7 @@ export default function DevPanel() {
                 <div className="border border-amber-400/30 rounded p-2 bg-amber-400/[0.04]">
                   <div className="text-[10px] tracking-widest uppercase text-amber-400/70 mb-1.5 flex justify-between gap-2">
                     <span>Episode {arcSkeleton.episodeIndex} skeleton</span>
-                    <span>{arcSkeleton.cast.length} cast · {arcSkeleton.arcBullets.length} bullets</span>
+                    <span>{arcSkeleton.cast.length} cast · {arcSkeleton.scenes.length} scenes</span>
                   </div>
                   <div className="text-[11px] text-white/85 mb-1 leading-snug font-semibold">
                     {arcSkeleton.theme}
@@ -424,15 +424,21 @@ export default function DevPanel() {
                     ))}
                   </div>
                   <div className="text-[10px] text-white/40 uppercase tracking-widest mb-1">
-                    Arc bullets
+                    Scenes
                   </div>
-                  <div className="space-y-0.5">
-                    {arcSkeleton.arcBullets.map((b, i) => (
+                  <div className="space-y-1">
+                    {arcSkeleton.scenes.map((s) => (
                       <div
-                        key={`bullet-${i}`}
-                        className="text-[10px] text-white/55 leading-snug"
+                        key={`plan-${s.index}`}
+                        className="text-[10px] text-white/60 leading-snug"
                       >
-                        · {b}
+                        <span className="text-white/85">
+                          {s.index + 1}. {s.title}
+                        </span>{" "}
+                        <span className="text-white/45">— {s.role}</span>
+                        <div className="text-white/45 italic ml-2">
+                          {s.setting}
+                        </div>
                       </div>
                     ))}
                   </div>

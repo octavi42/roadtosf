@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type {
+  Beat,
   DialogueLine,
   EndingKey,
   Episode,
@@ -175,25 +176,30 @@ interface SessionState {
    * are ignored so re-renders don't change the seed.
    */
   setRunFate: (payload: { rolledCameos: RolledCameo[]; tone: ToneId }) => void;
-  dynamicSceneReady: (llmIndex: number, scene: Scene) => void;
+  /**
+   * Initialize the Scene records for the current episode from its
+   * pre-fixed scene plans. Each plan becomes one slot in arc.scenes
+   * with setting / cast / imagePrompt / role / title pre-populated;
+   * dialogue + choices start empty and fill via appendBeat.
+   */
+  initScenesFromEpisode: () => void;
+  /** Append one beat to the scene at globalLLMIndex. Beat dialogue
+   *  is appended to the scene's accumulated dialogue; choices are
+   *  REPLACED with the beat's; sceneClosed flips true if
+   *  beat.isLastBeatOfScene; isLastSceneOfEpisode mirrors the beat's
+   *  flag. Returns nothing — caller reads the new state. */
+  appendBeat: (globalLLMIndex: number, beat: Beat) => void;
   sceneImageReady: (llmIndex: number, imageUrl: string) => void;
-  /**
-   * Streaming scene-gen — set the imagePrompt as soon as it streams in
-   * (before dialogue / choices arrive) so /api/generate-image can
-   * fire ~5s earlier than waiting for the full scene response. Creates
-   * a stub scene at llmIndex if none exists. No-op if a scene with
-   * dialogue already exists at llmIndex (can't downgrade).
-   */
-  setSceneImagePrompt: (llmIndex: number, imagePrompt: string) => void;
-  /**
-   * Streaming scene-gen — append one dialogue line to the scene at
-   * llmIndex as the line arrives over SSE. Creates a stub scene if
-   * none exists. The DialogueSubtitle + useDialogueAudio hooks pick
-   * up the new line automatically and start TTS / playback —
-   * cutting perceived latency from ~5-7s (full scene wait) to ~1-1.5s
-   * (first line streamed in).
-   */
+  /** Streaming: append one in-flight dialogue line to the scene's
+   *  dialogue (the line is part of the IN-PROGRESS beat). Used by the
+   *  SSE dialogueLine event so audio + subtitles can begin before
+   *  `done` lands. The scene's dialogue grows; appendBeat's final
+   *  pass dedupes / rebases by replacing the trailing partial range
+   *  with the parsed canonical lines. */
   appendDialogueLine: (llmIndex: number, line: DialogueLine) => void;
+  /** Reset the in-progress beat's partial dialogue so the next beat
+   *  starts fresh. Called right before firing the next beat. */
+  resetInFlightBeat: (globalLLMIndex: number) => void;
   setEpilogue: (epilogue: string) => void;
   enterGeneratingEpisode: () => void;
   exitGeneratingEpisode: () => void;
@@ -378,11 +384,30 @@ export const useSessionStore = create<SessionState>()(
           const nextFired = fate?.firedSeedIds
             ? Array.from(new Set([...priorFired, ...fate.firedSeedIds]))
             : Array.from(new Set([...priorFired, ...episode.seedIds]));
-          // The new episode's scene 0 will live at the current end of
-          // arc.scenes. Capture that offset so per-scene gen can compute
-          // sceneIndexInEpisode = globalLLMIndex - startLLMIndex.
           const startLLMIndex = state.arc?.scenes.length ?? 0;
           const stamped: Episode = { ...episode, startLLMIndex };
+          // Pre-fill arc.scenes with one slot per scene plan, so the
+          // image-gen and player-flow effects can address scenes by
+          // global llmIndex without waiting for the first beat to
+          // populate the row.
+          const priorScenes = state.arc?.scenes ?? [];
+          const initializedSlots: Scene[] = stamped.scenes.map((plan, i) => ({
+            id: AUTHORED_SCENE_COUNT + startLLMIndex + i + 1,
+            title: plan.title,
+            role: plan.role,
+            archetype: plan.role,
+            setting: plan.setting,
+            cast: plan.cast,
+            imagePrompt: plan.imagePrompt,
+            dialogue: [],
+            choices: [],
+            timeoutSeconds: 15,
+            timeoutChoiceId: "a",
+            beatStarts: [0],
+            sceneClosed: false,
+            isLastSceneOfEpisode: false,
+          }));
+          const allScenes = [...priorScenes, ...initializedSlots];
           if (!state.arc) {
             return {
               shareMomentFiredInEpisode: null,
@@ -393,7 +418,7 @@ export const useSessionStore = create<SessionState>()(
                 flavorTags: state.intro.flavorTags,
                 episodeIndex: episode.episodeIndex,
                 currentEpisode: stamped,
-                scenes: [],
+                scenes: allScenes,
                 storySoFar: nextStorySoFar,
                 stats: {
                   firedCofounder: false,
@@ -411,75 +436,127 @@ export const useSessionStore = create<SessionState>()(
               ...state.arc,
               episodeIndex: episode.episodeIndex,
               currentEpisode: stamped,
+              scenes: allScenes,
               storySoFar: nextStorySoFar,
               firedSeedIds: nextFired,
             },
           };
         }),
 
-      dynamicSceneReady: (llmIndex, scene) =>
+      initScenesFromEpisode: () =>
         set((state) => {
-          if (!state.arc) return state;
+          if (!state.arc?.currentEpisode) return state;
+          const ep = state.arc.currentEpisode;
+          const startLLM = ep.startLLMIndex ?? state.arc.scenes.length;
           const scenes = [...state.arc.scenes];
-          while (scenes.length <= llmIndex) {
-            scenes.push({
-              id: 0,
-              title: "",
-              role: "cofounder",
-              imagePrompt: "",
-              dialogue: [],
-              choices: [],
-              timeoutSeconds: 15,
-              timeoutChoiceId: "a",
-            });
+          for (let i = 0; i < ep.scenes.length; i++) {
+            const slot = startLLM + i;
+            const plan = ep.scenes[i];
+            // If this slot already has dialogue (rehydrate / refire),
+            // preserve the rendered scene; just ensure plan-derived
+            // metadata (image, setting, cast, title, role) is filled
+            // for the dev panel + image fan-out.
+            const existing = scenes[slot];
+            const baseScene: Scene = existing && existing.id !== 0
+              ? existing
+              : {
+                  id: AUTHORED_SCENE_COUNT + slot + 1,
+                  title: plan.title,
+                  role: plan.role,
+                  archetype: plan.role,
+                  setting: plan.setting,
+                  cast: plan.cast,
+                  imagePrompt: plan.imagePrompt,
+                  imageUrl: existing?.imageUrl,
+                  dialogue: [],
+                  choices: [],
+                  timeoutSeconds: 15,
+                  timeoutChoiceId: "a",
+                  beatStarts: [0],
+                  sceneClosed: false,
+                  isLastSceneOfEpisode: false,
+                };
+            scenes[slot] = {
+              ...baseScene,
+              title: plan.title,
+              role: plan.role,
+              archetype: plan.role,
+              setting: plan.setting,
+              cast: plan.cast,
+              imagePrompt: plan.imagePrompt,
+            };
           }
-          const prior = scenes[llmIndex];
-          scenes[llmIndex] = prior?.imageUrl
-            ? { ...scene, imageUrl: prior.imageUrl }
-            : scene;
           return { arc: { ...state.arc, scenes } };
         }),
 
-      setSceneImagePrompt: (llmIndex, imagePrompt) =>
+      appendBeat: (llmIndex, beat) =>
         set((state) => {
           if (!state.arc) return state;
           const scenes = [...state.arc.scenes];
-          while (scenes.length <= llmIndex) {
-            scenes.push({
-              id: 0,
-              title: "",
-              role: "cofounder",
-              imagePrompt: "",
-              dialogue: [],
-              choices: [],
-              timeoutSeconds: 15,
-              timeoutChoiceId: "a",
-            });
-          }
-          const prior = scenes[llmIndex]!;
-          if (prior.imagePrompt && prior.imagePrompt.length > 0) return state;
-          scenes[llmIndex] = { ...prior, imagePrompt };
-          return { arc: { ...state.arc, scenes } };
+          if (!scenes[llmIndex]) return state;
+          const prior = scenes[llmIndex];
+          // Beat dialogue may already be partially appended via
+          // streaming dialogueLine events. Rebase: trim back to the
+          // start of the in-flight beat (beatStarts.last) and replace
+          // with the canonical beat dialogue.
+          const beatStarts = prior.beatStarts ?? [0];
+          const lastBeatStart = beatStarts[beatStarts.length - 1] ?? 0;
+          const dialogueBefore = prior.dialogue.slice(0, lastBeatStart);
+          const dialogue = [...dialogueBefore, ...beat.dialogue];
+          scenes[llmIndex] = {
+            ...prior,
+            dialogue,
+            choices: beat.choices,
+            timeoutSeconds: beat.timeoutSeconds,
+            timeoutChoiceId: beat.timeoutChoiceId,
+            sceneClosed: !!beat.isLastBeatOfScene,
+            isLastSceneOfEpisode: !!beat.isLastSceneOfEpisode,
+            shareMoment: beat.shareMoment ?? prior.shareMoment,
+          };
+          // If this beat is for the scene the player is currently on,
+          // reset their progress so they read the new dialogue lines
+          // (currentLineIndex jumps to the start of the new beat;
+          // showChoices=false; choiceMade clears so they can pick from
+          // the new choice block).
+          const playerLLMIndex =
+            state.progress.sceneIndex - AUTHORED_SCENE_COUNT;
+          const progress =
+            playerLLMIndex === llmIndex
+              ? {
+                  ...state.progress,
+                  currentLineIndex: lastBeatStart,
+                  showChoices: false,
+                  choiceMade: null,
+                }
+              : state.progress;
+          return { arc: { ...state.arc, scenes }, progress };
         }),
 
       appendDialogueLine: (llmIndex, line) =>
         set((state) => {
           if (!state.arc) return state;
           const scenes = [...state.arc.scenes];
-          while (scenes.length <= llmIndex) {
-            scenes.push({
-              id: 0,
-              title: "",
-              role: "cofounder",
-              imagePrompt: "",
-              dialogue: [],
-              choices: [],
-              timeoutSeconds: 15,
-              timeoutChoiceId: "a",
-            });
-          }
+          if (!scenes[llmIndex]) return state;
           const prior = scenes[llmIndex]!;
           scenes[llmIndex] = { ...prior, dialogue: [...prior.dialogue, line] };
+          return { arc: { ...state.arc, scenes } };
+        }),
+
+      resetInFlightBeat: (llmIndex) =>
+        set((state) => {
+          if (!state.arc) return state;
+          const scenes = [...state.arc.scenes];
+          if (!scenes[llmIndex]) return state;
+          const prior = scenes[llmIndex]!;
+          const beatStarts = prior.beatStarts ?? [0];
+          // Mark the next beat's start at the current dialogue length;
+          // the in-flight dialogueLine events will append from there.
+          const newStarts = [...beatStarts, prior.dialogue.length];
+          scenes[llmIndex] = {
+            ...prior,
+            beatStarts: newStarts,
+            sceneClosed: false,
+          };
           return { arc: { ...state.arc, scenes } };
         }),
 

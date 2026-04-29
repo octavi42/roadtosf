@@ -1,24 +1,21 @@
-import type { Scene, DialogueLine } from './types'
+import type { Beat, DialogueLine } from './types'
 export { PaywallRequiredError } from './paywall'
 import { PaywallRequiredError } from './paywall'
 
-// Streams /api/generate-scene's SSE response. Surfaces incremental
-// progress events so the UI can render partial scenes (image prompt,
-// dialogue lines) as they arrive — perceived latency drops from ~5-7s
-// (waiting for the full Haiku response) to ~1-1.5s (first dialogue
-// line). The full Scene object still arrives via the `done` event;
-// callers that don't care about partial state can ignore the events.
+// Streams /api/generate-scene's SSE response. Each call returns ONE
+// BEAT (dialogue + choices + isLastBeatOfScene flag). The client
+// accumulates beats inside a Scene container as the player makes
+// choices.
 
 export interface StreamSceneOptions {
   signal?: AbortSignal
-  /** Fired once when imagePrompt completes — usually the first event. */
-  onImagePrompt?: (imagePrompt: string) => void
   /** Fired once per completed dialogue entry as it streams in. */
   onDialogueLine?: (line: DialogueLine, index: number) => void
 }
 
 export interface StreamSceneResult {
-  scene: Scene
+  beat: Beat
+  sceneId: number
   source: 'llm' | 'fallback'
   creditsRemaining?: number | null
 }
@@ -34,8 +31,6 @@ export async function streamScene(
     signal: opts.signal,
   })
 
-  // The credit-debit path returns a 402 JSON response BEFORE the stream
-  // starts, so we still need to handle non-streaming paywall responses.
   if (res.status === 402) {
     const data = (await res.json().catch(() => ({}))) as {
       creditsRemaining?: number
@@ -52,9 +47,6 @@ export async function streamScene(
   let result: StreamSceneResult | null = null
   let streamError: string | null = null
 
-  // Each SSE message is `event: <name>\ndata: <json>\n\n`. Same parser
-  // pattern as streamArc — accumulate bytes, split on the blank-line
-  // terminator, dispatch each block.
   const handleBlock = (block: string) => {
     let event = 'message'
     const dataLines: string[] = []
@@ -72,10 +64,7 @@ export async function streamScene(
     } catch {
       return
     }
-    if (event === 'imagePrompt') {
-      const ip = (payload as { imagePrompt?: string })?.imagePrompt
-      if (typeof ip === 'string' && ip.length > 0) opts.onImagePrompt?.(ip)
-    } else if (event === 'dialogueLine') {
+    if (event === 'dialogueLine') {
       const p = payload as { index?: number; speaker?: string; text?: string }
       if (typeof p.text !== 'string' || p.text.length === 0) return
       const speaker =
@@ -86,19 +75,21 @@ export async function streamScene(
       opts.onDialogueLine?.({ speaker, text: p.text }, idx)
     } else if (event === 'done') {
       const p = payload as {
-        scene?: Scene
+        beat?: Beat
+        sceneId?: number
         source?: 'llm' | 'fallback'
         creditsRemaining?: number | null
       }
-      if (p.scene) {
+      if (p.beat) {
         result = {
-          scene: p.scene,
+          beat: p.beat,
+          sceneId: typeof p.sceneId === 'number' ? p.sceneId : 0,
           source: p.source ?? 'llm',
           creditsRemaining: p.creditsRemaining ?? null,
         }
       }
     } else if (event === 'error') {
-      const msg = (payload as { message?: string })?.message ?? 'scene-gen stream error'
+      const msg = (payload as { message?: string })?.message ?? 'beat-gen stream error'
       streamError = msg
     }
   }

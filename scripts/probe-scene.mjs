@@ -1,14 +1,16 @@
-// Hits /api/generate-scene with a realistic Episode SKELETON (no
-// per-scene plans) and reads the SSE stream. Scene-gen now invents
-// setting + cast subset + dialogue + choices + imagePrompt fresh
-// per call, reading the skeleton + lastChoice.
+// Hits /api/generate-scene with a realistic Episode skeleton (with
+// pre-fixed scene plans) and reads the SSE stream. Each call returns
+// ONE BEAT — dialogue + choices + isLastBeatOfScene. Multiple beats
+// per scene flow inside the same scene container.
 //
 // Usage:
-//   PORT=3000 node scripts/probe-scene.mjs                              # scene 0 of episode 0
-//   PORT=3000 SCENE=2 LAST="Call Priya" node scripts/probe-scene.mjs    # scene 2 with prior choice
+//   PORT=3000 node scripts/probe-scene.mjs                                # scene 0 beat 0
+//   PORT=3000 SCENE=0 BEAT=1 PRIOR="Walk over to Maya" node scripts/probe-scene.mjs
+//   PORT=3000 SCENE=2 BEAT=0 node scripts/probe-scene.mjs
 
 const SCENE = Number(process.env.SCENE ?? 0)
-const LAST = process.env.LAST ?? null
+const BEAT = Number(process.env.BEAT ?? 0)
+const PRIOR = process.env.PRIOR ?? null
 const port = process.env.PORT ?? '3001'
 const url = `http://localhost:${port}/api/generate-scene`
 
@@ -18,31 +20,41 @@ const episode = {
   premise:
     'You crash the YC space your first night. The room is mostly empty but three people are still here, each wanting something different from you.',
   cast: [
-    {
-      role: 'cofounder',
-      name: 'Maya',
-      blurb:
-        'Ex-Stripe engineer, three coffees deep, has a deck about you on her laptop she made on the BART ride over. Wants to be your cofounder.',
-    },
-    {
-      role: 'hater',
-      name: 'Brandon',
-      blurb:
-        'CEO of a competing startup with $4M and a year head start. Knows your name. Likes the espresso machine. Will ask about your runway.',
-    },
-    {
-      role: 'mentor',
-      name: 'Linda',
-      blurb:
-        'Partner emeritus at YC. Has watched 200 startups fail. Closes her book and asks if you have eaten.',
-    },
+    { role: 'cofounder', name: 'Maya', blurb: 'Wants to be your cofounder; has equity terms drafted.' },
+    { role: 'hater', name: 'Brandon', blurb: 'Competing CEO with $4M and a year head start.' },
+    { role: 'mentor', name: 'Linda', blurb: 'Partner emeritus at YC; closes her book and asks if you have eaten.' },
   ],
-  arcBullets: [
-    'the player might get cornered at the kitchen island by a stranger pitching themselves as cofounder',
-    'a competitor CEO might appear at the espresso machine and probe for weaknesses',
-    'an older mentor figure could close her book and offer one terse piece of advice',
-    'the player might choose to leave the building entirely — Folsom Street, late, alone with the deck',
-    'an unexpected text could land mid-arc and pull the player away',
+  scenes: [
+    {
+      index: 0,
+      role: 'cofounder',
+      setting: 'YC co-working space, kitchen island, 11pm Tuesday',
+      cast: [{ role: 'cofounder', name: 'Maya' }],
+      topic: 'Maya pitches herself as your cofounder; you can probe her motivation, push back on terms, or end the conversation.',
+      imagePrompt:
+        'interior of a YC co-working space kitchen at night, warm fluorescent overhead, a young woman with a hoodie and laptop leaning across a kitchen island toward the founder',
+      title: 'The Kitchen Pitch',
+    },
+    {
+      index: 1,
+      role: 'hater',
+      setting: 'espresso machine in the back hallway, ten minutes later',
+      cast: [{ role: 'hater', name: 'Brandon' }],
+      topic: 'Brandon greets you by name and probes for weaknesses; you can dodge, deflect, or counter.',
+      imagePrompt:
+        'espresso machine in a back hallway of a co-working space, two people in their late 20s, cinematic two-shot, golden lamplight',
+      title: 'Espresso With The Enemy',
+    },
+    {
+      index: 2,
+      role: 'mentor',
+      setting: 'a corner couch in the same YC space, midnight',
+      cast: [{ role: 'mentor', name: 'Linda' }],
+      topic: 'Linda closes her book; the question is a test. You can be honest, deflect, or ask a question back.',
+      imagePrompt:
+        'interior of a co-working common area at midnight, an older woman with reading glasses on a corner couch closing a hardback book, founder approaching, soft warm lighting',
+      title: 'The Question About Dinner',
+    },
   ],
   seedIds: [],
   startLLMIndex: 0,
@@ -52,14 +64,17 @@ const body = {
   episode,
   episodeIndex: 0,
   sceneIndexInEpisode: SCENE,
-  totalScenesInEpisodeSoFar: SCENE + 1,
-  lastChoice: LAST
-    ? {
-        sceneId: 8 + SCENE,
-        choiceLabel: LAST,
-        hypeDelta: 0,
-        integrityDelta: 1,
-      }
+  beatIndex: BEAT,
+  priorBeatsDialogue:
+    BEAT > 0
+      ? [
+          { speaker: 'narrator', text: 'The kitchen island is half-empty espresso cups and a sourdough crust.' },
+          { speaker: 'cofounder', text: "I built the deck on the BART ride over. I think we both know what's missing." },
+          { speaker: 'player', text: 'You think you know.' },
+        ]
+      : [],
+  priorBeatChoice: PRIOR
+    ? { sceneId: 9 + BEAT, choiceLabel: PRIOR, hypeDelta: 0, integrityDelta: 1 }
     : undefined,
   storySoFar: '',
   startupName: 'wagr',
@@ -72,7 +87,7 @@ const body = {
   playthroughId: 'probe-scene',
 }
 
-console.log('POST', url, 'scene', SCENE, LAST ? `last="${LAST}"` : '(no lastChoice)')
+console.log('POST', url, 'scene', SCENE, 'beat', BEAT, PRIOR ? `prior="${PRIOR}"` : '(no prior)')
 const fs = await import('node:fs')
 let cookieHeader
 try {
@@ -117,21 +132,18 @@ while (true) {
       try {
         const parsed = JSON.parse(dataStr)
         console.log(`\n=== ${eventName} ===`)
-        if (parsed.scene) {
+        if (parsed.beat) {
           console.log('source:', parsed.source)
-          console.log('role:', parsed.scene.role)
-          console.log('title:', parsed.scene.title)
-          console.log('setting:', parsed.scene.setting)
-          console.log('isLastSceneOfEpisode:', parsed.scene.isLastSceneOfEpisode)
-          console.log('imagePrompt:', parsed.scene.imagePrompt?.slice(0, 100))
-          console.log('cast:', parsed.scene.cast?.map((c) => `${c.role}:${c.name}`).join(' | '))
+          console.log('sceneId:', parsed.sceneId)
+          console.log('isLastBeatOfScene:', parsed.beat.isLastBeatOfScene)
+          console.log('isLastSceneOfEpisode:', parsed.beat.isLastSceneOfEpisode)
           console.log('dialogue:')
-          for (const d of parsed.scene.dialogue ?? []) {
+          for (const d of parsed.beat.dialogue ?? []) {
             console.log(`  [${d.speaker}] ${d.text}`)
           }
           console.log(
             'choices:',
-            parsed.scene.choices?.map((c) => `${c.id}:${c.label}`).join(' | '),
+            parsed.beat.choices?.map((c) => `${c.id}:${c.label}`).join(' | '),
           )
         } else {
           console.log(JSON.stringify(parsed, null, 2))

@@ -281,7 +281,7 @@ export default function HomePage() {
     factsExtracted,
     paywallSatisfied,
     episodePlanReady,
-    dynamicSceneReady,
+    appendBeat,
     sceneImageReady,
     enterGeneratingEpisode,
     exitGeneratingEpisode,
@@ -303,7 +303,7 @@ export default function HomePage() {
       factsExtracted: s.factsExtracted,
       paywallSatisfied: s.paywallSatisfied,
       episodePlanReady: s.episodePlanReady,
-      dynamicSceneReady: s.dynamicSceneReady,
+      appendBeat: s.appendBeat,
       sceneImageReady: s.sceneImageReady,
       enterGeneratingEpisode: s.enterGeneratingEpisode,
       exitGeneratingEpisode: s.exitGeneratingEpisode,
@@ -320,8 +320,8 @@ export default function HomePage() {
     })),
   );
   const setRunFate = useSessionStore((s) => s.setRunFate);
-  const setSceneImagePrompt = useSessionStore((s) => s.setSceneImagePrompt);
   const appendDialogueLine = useSessionStore((s) => s.appendDialogueLine);
+  const resetInFlightBeat = useSessionStore((s) => s.resetInFlightBeat);
   // Read sessionEmail directly off the store so any code path that flips
   // it (LoginModal success, /history logout) re-renders this component
   // and re-runs the balance refetch effect without depending on Next.js's
@@ -516,7 +516,8 @@ export default function HomePage() {
 
   // Per-run refs — reset on new playthrough.
   const episodeGenFiredRef = useRef<Set<number>>(new Set()); // episodes already requested
-  const sceneGenFiredRef = useRef<Set<number>>(new Set()); // global llm indices already requested
+  const sceneGenFiredRef = useRef<Set<number>>(new Set()); // legacy, unused after multi-beat rewrite
+  const beatFireKeysRef = useRef<Set<string>>(new Set()); // "globalLLM-beatIdx" keys for dedup
   const imageGenFiredRef = useRef<Set<number>>(new Set()); // llm indices whose image gen was requested
   const arcPersistedRef = useRef<number>(-1); // last episodeIndex whose plan was PATCHed
   const extractFiredForRef = useRef<string | null>(null); // last startupDescription extracted for
@@ -527,6 +528,7 @@ export default function HomePage() {
   useEffect(() => {
     episodeGenFiredRef.current = new Set();
     sceneGenFiredRef.current = new Set();
+    beatFireKeysRef.current = new Set();
     imageGenFiredRef.current = new Set();
     arcPersistedRef.current = -1;
     extractFiredForRef.current = null;
@@ -686,49 +688,61 @@ export default function HomePage() {
     creditsExhausted,
   ]);
 
-  // Per-scene generation. Each scene = ONE moment with ONE decision
-  // point, generated entirely on-the-fly by Haiku reading the episode
-  // skeleton + the player's prior choice. Scenes are NOT pre-planned
-  // — Haiku invents setting/cast subset/dialogue/choices/imagePrompt
-  // fresh per call. The LLM signals episode end via
-  // scene.isLastSceneOfEpisode, which the end-of-episode trigger
-  // effect picks up.
-  useEffect(() => {
-    if (phase !== "scene" && phase !== "generating-episode") return;
-    const ep = arc?.currentEpisode;
-    if (!ep) return;
-    const startLLM = ep.startLLMIndex ?? 0;
-
-    const fireScene = (sceneIndexInEpisode: number) => {
+  // Per-beat generation. A scene is a CONTAINER with a pre-fixed
+  // setting/cast/imagePrompt; many beats (dialogue+choice cycles)
+  // play inside that container. Each beat is generated on the fly
+  // when the player makes a choice. The scene closes when the LLM
+  // emits isLastBeatOfScene.
+  //
+  // This effect is the dispatcher:
+  //  - on episode plan landing → fire beat 0 of scene 0
+  //  - on choice click (handleChoice → fireNextBeat below) → fires
+  //    next beat of current scene OR moves to next scene's beat 0
+  // Tracking: sceneGenFiredRef holds keys "globalLLM-beatIndex" for
+  // dedup across renders.
+  const beatGenFiredRef = beatFireKeysRef;
+  const fireBeat = useCallback(
+    (sceneIndexInEpisode: number, beatIdx: number, priorBeatChoice?: { sceneId: number; choiceLabel: string; hypeDelta: number; integrityDelta: number }) => {
+      const ep = arc?.currentEpisode;
+      if (!ep) return;
+      const startLLM = ep.startLLMIndex ?? 0;
       const globalLLMIndex = startLLM + sceneIndexInEpisode;
-      if (sceneGenFiredRef.current.has(globalLLMIndex)) return;
+      const key = `${globalLLMIndex}-${beatIdx}`;
+      if (beatGenFiredRef.current.has(key)) return;
       const stored = arc?.scenes[globalLLMIndex];
-      if (stored && stored.dialogue.length > 0) return;
-      sceneGenFiredRef.current.add(globalLLMIndex);
+      const beatStarts = stored?.beatStarts ?? [0];
+      // If this beat already has dialogue past its start index, skip
+      // (rehydrate / re-render).
+      if (
+        stored &&
+        beatIdx < beatStarts.length &&
+        stored.dialogue.length > (beatStarts[beatIdx] ?? 0) &&
+        stored.choices.length > 0
+      ) {
+        return;
+      }
+      beatGenFiredRef.current.add(key);
 
-      // Last choice = the most recent entry in history. For scene 0 of
-      // a new episode, this is the prior episode's last choice (which
-      // the episode planner already used to pick the theme — passing
-      // it here as well lets scene-gen acknowledge the carry-over).
-      // For scene N+1 within an episode, this is the choice the player
-      // just made on scene N — the load-bearing input.
-      const last = history[history.length - 1];
-      const lastChoice = last
-        ? {
-            sceneId: last.sceneId,
-            choiceLabel: last.choiceLabel,
-            hypeDelta: last.hypeDelta,
-            integrityDelta: last.integrityDelta,
-          }
-        : undefined;
+      // For beat 0 of scene 0: priorBeatChoice undefined.
+      // For beat 0 of scene N>0: priorBeatChoice = the player's last
+      //   choice from scene N-1's last beat (lives in history; the
+      //   route also reads `recentChoices` for cross-scene tone).
+      // For beat N>0 of any scene: priorBeatChoice = the choice from
+      //   beat N-1 of THIS scene.
+      // The route uses priorBeatChoice as the load-bearing input.
+      const priorBeatsDialogue =
+        beatIdx > 0 && stored
+          ? stored.dialogue.slice(0, beatStarts[beatIdx] ?? stored.dialogue.length)
+          : [];
 
       streamScene(
         {
           episode: ep,
           episodeIndex: ep.episodeIndex,
           sceneIndexInEpisode,
-          totalScenesInEpisodeSoFar: sceneIndexInEpisode + 1,
-          lastChoice,
+          beatIndex: beatIdx,
+          priorBeatsDialogue,
+          priorBeatChoice,
           storySoFar: arc?.storySoFar,
           startupName: arc?.startupName,
           startupDescription: intro.startupDescription ?? "",
@@ -748,92 +762,103 @@ export default function HomePage() {
           tone: arc?.tone,
         },
         {
-          onImagePrompt: (imagePrompt) => {
-            setSceneImagePrompt(globalLLMIndex, imagePrompt);
-            // Fire image-gen the moment Haiku emits its imagePrompt
-            // (well before the dialogue finishes streaming). Scene's
-            // primary role won't be known until done; image-gen uses
-            // the prompt only — role is a flavor hint that defaults
-            // safely.
-            if (!imageGenFiredRef.current.has(globalLLMIndex)) {
-              imageGenFiredRef.current.add(globalLLMIndex);
-              fetch("/api/generate-image", {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({
-                  mode: "scene",
-                  scenePrompt: imagePrompt,
-                  archetype: "cofounder",
-                  quality: "low",
-                }),
-              })
-                .then((r) =>
-                  r.ok
-                    ? r.json()
-                    : Promise.reject(new Error(`HTTP ${r.status}`)),
-                )
-                .then((data: { url?: string }) => {
-                  if (data.url) sceneImageReady(globalLLMIndex, data.url);
-                })
-                .catch((err) => {
-                  imageGenFiredRef.current.delete(globalLLMIndex);
-                  console.error(
-                    `[image-gen] failed scene=${globalLLMIndex}`,
-                    err,
-                  );
-                });
-            }
-          },
-          onDialogueLine: (line) =>
-            appendDialogueLine(globalLLMIndex, line),
+          onDialogueLine: (line) => appendDialogueLine(globalLLMIndex, line),
         },
       )
         .then((data) => {
-          dynamicSceneReady(globalLLMIndex, data.scene);
+          appendBeat(globalLLMIndex, data.beat);
           exitGeneratingEpisode();
         })
         .catch((err) => {
-          sceneGenFiredRef.current.delete(globalLLMIndex);
+          beatGenFiredRef.current.delete(key);
           if (err instanceof PaywallRequiredError) {
             setCreditsRemaining(err.balance);
             creditsExhausted();
             return;
           }
-          console.error(`generate-scene[${globalLLMIndex}] failed`, err);
+          console.error(`generate-scene[${key}] failed`, err);
         });
-    };
+    },
+    [
+      arc,
+      intro.startupDescription,
+      intro.team,
+      intro.fundingModel,
+      intro.targetCustomer,
+      intro.concern,
+      history,
+      hype,
+      integrity,
+      appendBeat,
+      appendDialogueLine,
+      exitGeneratingEpisode,
+      playthroughId,
+      setCreditsRemaining,
+      creditsExhausted,
+      beatGenFiredRef,
+    ],
+  );
 
-    // Always fire scene 0 of the current episode the moment the
-    // skeleton lands (covers cinematic-exit + first-scene reveal).
-    fireScene(0);
-
-    // Fire whichever scene the player is currently on (refresh /
-    // dev-jump path).
+  // Fire beat 0 of scene 0 the moment the episode plan lands. Subsequent
+  // beats fire from handleChoice (player clicks → next beat).
+  useEffect(() => {
+    if (phase !== "scene" && phase !== "generating-episode") return;
+    const ep = arc?.currentEpisode;
+    if (!ep) return;
+    const startLLM = ep.startLLMIndex ?? 0;
+    const sceneZero = arc?.scenes[startLLM];
+    // If scene 0 has no dialogue and no in-flight beat-gen, fire beat 0.
+    if (sceneZero && sceneZero.dialogue.length === 0) {
+      fireBeat(0, 0, undefined);
+    }
+    // If player jumped via dev panel to a scene that hasn't been
+    // generated, fire its beat 0.
     if (phase === "scene" && sceneIndex >= AUTHORED_SCENE_COUNT) {
       const localIndex = sceneIndex - AUTHORED_SCENE_COUNT - startLLM;
-      if (localIndex >= 0) fireScene(localIndex);
+      if (localIndex >= 0 && localIndex < ep.scenes.length) {
+        const slot = arc?.scenes[startLLM + localIndex];
+        if (slot && slot.dialogue.length === 0) {
+          fireBeat(localIndex, 0, undefined);
+        }
+      }
     }
-  }, [
-    phase,
-    sceneIndex,
-    arc,
-    intro.startupDescription,
-    intro.team,
-    intro.fundingModel,
-    intro.targetCustomer,
-    intro.concern,
-    history,
-    hype,
-    integrity,
-    dynamicSceneReady,
-    exitGeneratingEpisode,
-    playthroughId,
-    sceneImageReady,
-    setSceneImagePrompt,
-    appendDialogueLine,
-    setCreditsRemaining,
-    creditsExhausted,
-  ]);
+  }, [phase, sceneIndex, arc, fireBeat]);
+
+  // Image-gen: fire ALL scenes' images in parallel as soon as the
+  // episode plan lands. By the time the player walks through scene
+  // 1's beats, scene 2/3/4's images are already loaded.
+  useEffect(() => {
+    if (!arc?.currentEpisode) return;
+    const ep = arc.currentEpisode;
+    const startLLM = ep.startLLMIndex ?? 0;
+    ep.scenes.forEach((plan, i) => {
+      const slot = startLLM + i;
+      if (imageGenFiredRef.current.has(slot)) return;
+      const stored = arc?.scenes[slot];
+      if (stored?.imageUrl) return;
+      imageGenFiredRef.current.add(slot);
+      fetch("/api/generate-image", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode: "scene",
+          scenePrompt: plan.imagePrompt,
+          archetype: plan.role,
+          quality: "low",
+        }),
+      })
+        .then((r) =>
+          r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)),
+        )
+        .then((data: { url?: string }) => {
+          if (data.url) sceneImageReady(slot, data.url);
+        })
+        .catch((err) => {
+          imageGenFiredRef.current.delete(slot);
+          console.error(`[image-gen] failed slot=${slot}`, err);
+        });
+    });
+  }, [arc?.currentEpisode, arc?.scenes, sceneImageReady]);
 
   // Cinematic exit: as soon as the first scene of a freshly-planned
   // episode has dialogue, drop out of the loader.
@@ -1093,10 +1118,6 @@ export default function HomePage() {
       if (!currentScene) return;
 
       const choice = currentScene.choices?.find((c) => c.id === choiceId);
-      // CTA-only scenes (Scene 3 — the dare → paywall) have no `choices`
-      // array; the click is a stat-neutral commit, labelled by the CTA copy.
-      // Without this fallback, handleChoice silently bails and the player
-      // can never advance past the paywall scene.
       if (!choice && !currentScene.ctaLabel) return;
       const choiceLabel = choice?.label ?? currentScene.ctaLabel ?? choiceId;
       const hypeDelta = choice?.hype ?? 0;
@@ -1128,11 +1149,73 @@ export default function HomePage() {
         }).catch((err) => console.error("logSceneEvent failed", err));
       }
 
+      // Episode-architecture: LLM scenes are CONTAINERS that hold many
+      // beats. When the player clicks a choice on an LLM scene:
+      //   - If sceneClosed (LLM marked isLastBeatOfScene=true): advance
+      //     to the next scene container.
+      //   - Else: stay in this scene; fire the next beat. The new
+      //     beat's dialogue appends and choices replace.
+      // Authored scenes (sceneIndex < AUTHORED_SCENE_COUNT) keep the
+      // legacy advanceScene flow.
+      if (sceneIndex < AUTHORED_SCENE_COUNT) {
+        setTimeout(() => advanceScene(), 600);
+        return;
+      }
+
+      const ep = arc?.currentEpisode;
+      if (!ep) {
+        setTimeout(() => advanceScene(), 600);
+        return;
+      }
+      const startLLM = ep.startLLMIndex ?? 0;
+      const sceneIdxInEp = sceneIndex - AUTHORED_SCENE_COUNT - startLLM;
+      const llmScene = arc?.scenes[sceneIndex - AUTHORED_SCENE_COUNT];
+      const sceneClosed = !!llmScene?.sceneClosed;
+
+      if (sceneClosed) {
+        setTimeout(() => advanceScene(), 600);
+        return;
+      }
+
+      // Fire next beat in this scene. Mark the in-flight boundary so
+      // streaming dialogueLine events append from the right offset;
+      // appendBeat will rebase trailing partial lines on `done`.
+      const globalLLMIndex = sceneIndex - AUTHORED_SCENE_COUNT;
+      resetInFlightBeat(globalLLMIndex);
+      // Reset the scene's dialogue cursor for the player to read the
+      // new beat's lines fresh. We do this via the existing
+      // chooseOption-clears-progress path, but progress was set to
+      // showChoices=true; we want showChoices=false for the new beat.
+      // The session store's chooseOption already records the choice.
+      // We need a small extra: reset progress to read new dialogue.
+      // Use advanceLine indirectly via a workaround: rely on the
+      // currentLineIndex moving forward to the new dialogue's start
+      // when next beat lands. The dialogue rendering effect picks it
+      // up.
+      const beatIdx = (llmScene?.beatStarts?.length ?? 1); // beatStarts already extended by resetInFlightBeat
+      const priorBeatChoice = {
+        sceneId: currentScene.id,
+        choiceLabel,
+        hypeDelta,
+        integrityDelta,
+      };
+      // Allow the choice's UI feedback to land before we kick the
+      // next beat. The 600ms also covers the typical chooseOption
+      // animation.
       setTimeout(() => {
-        advanceScene();
-      }, 600);
+        fireBeat(sceneIdxInEp, beatIdx, priorBeatChoice);
+      }, 250);
     },
-    [currentScene, chooseOption, advanceScene, playthroughId],
+    [
+      currentScene,
+      chooseOption,
+      advanceScene,
+      playthroughId,
+      sceneIndex,
+      arc,
+      resetInFlightBeat,
+      fireBeat,
+    ],
   );
 
   const handleCTA = useCallback(() => {
