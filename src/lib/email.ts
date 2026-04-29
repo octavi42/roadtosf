@@ -17,6 +17,16 @@ function getResend(): Resend {
 // set RESEND_FROM to a verified-domain address.
 const FROM = process.env.RESEND_FROM ?? 'onboarding@resend.dev'
 
+// Loud warning so an unset RESEND_FROM in production doesn't quietly
+// bounce every recipient that isn't the Resend account owner.
+if (!process.env.RESEND_FROM && process.env.NODE_ENV === 'production') {
+  console.warn(
+    '[email] RESEND_FROM is unset — falling back to onboarding@resend.dev. ' +
+      'Resend will only deliver to the account-owner email; all other ' +
+      'recipients will bounce. Set RESEND_FROM to a verified-domain address.',
+  )
+}
+
 export async function sendOtpEmail(email: string, code: string): Promise<void> {
   const resend = getResend()
   // Resend's send() resolves with {data, error}; sandbox restrictions
