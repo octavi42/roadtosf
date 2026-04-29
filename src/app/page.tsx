@@ -888,13 +888,14 @@ export default function HomePage() {
     imageGenFiredRef.current.add(slot);
     imageQueueRef.current.inFlight = true;
 
-    // Pick the appearance of the scene's primary character — first
-    // cast member whose role matches plan.role, falling back to the
-    // first cast member in the scene. Empty string means the route
-    // falls back to the archetype's generic imageStyle.
+    // Pick the primary character of the scene — first cast member whose
+    // role matches plan.role, falling back to the first cast member.
+    // Both the name (so gpt-image-2 can render real-figure likenesses)
+    // and appearance (clothing/build/features) get forwarded.
     const primaryCast =
       plan.cast?.find((c) => c.role === plan.role) ?? plan.cast?.[0];
     const appearance = primaryCast?.appearance;
+    const name = primaryCast?.name;
 
     fetch("/api/generate-image", {
       method: "POST",
@@ -905,6 +906,7 @@ export default function HomePage() {
         archetype: plan.role,
         quality: "low",
         appearance,
+        name,
       }),
     })
       .then((r) =>

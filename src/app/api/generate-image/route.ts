@@ -18,11 +18,18 @@ interface SceneRequestBody {
   archetype: Archetype
   quality?: Quality
   appearance?: string
+  name?: string
 }
 
 interface ScenesBatchRequestBody {
   mode: 'scenes'
-  scenes: Array<{ scenePrompt: string; archetype: Archetype; quality?: Quality; appearance?: string }>
+  scenes: Array<{
+    scenePrompt: string
+    archetype: Archetype
+    quality?: Quality
+    appearance?: string
+    name?: string
+  }>
 }
 
 interface HeroRequestBody {
@@ -78,6 +85,7 @@ export async function POST(req: NextRequest) {
         archetype: body.archetype,
         quality: body.quality ?? 'medium',
         appearance: body.appearance,
+        name: body.name,
       })
       const url = await uploadToBlob(result.b64Json, result.format)
       return NextResponse.json({ url, format: result.format })
@@ -96,6 +104,7 @@ export async function POST(req: NextRequest) {
           archetype: s.archetype,
           quality: s.quality ?? 'medium',
           appearance: s.appearance,
+          name: s.name,
         })),
       )
       const results = await Promise.all(
