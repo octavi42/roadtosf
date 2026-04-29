@@ -1,5 +1,5 @@
 import type { RolledCameo, ToneId } from './cameos/types'
-import type { StoryletKind, StoryletState } from './storylets/types'
+import type { StoryletState } from './storylets/types'
 
 // Role keys — the kind of character. The 5 core roles are kept as
 // stable string keys for image / voice / cameo wiring. Display labels
@@ -42,15 +42,20 @@ export interface CastMember {
 export interface Scene {
   id: number
   title: string
-  /** Primary role for this scene's image / portrait. Multi-role scenes
-   *  list all speakers in `cast` (mirrored from the parent ScenePlan).
-   *  Kept as a single Role for the image pipeline. */
+  /** Primary role for this scene's image / portrait. */
   role: Role
   /** @deprecated mirror of `role`; kept for back-compat readers. */
   archetype?: Role
-  /** Mirrored from the parent ScenePlan so dialogue rendering can map
-   *  speaker → display name without a lookup back to the Episode. */
+  /** Concrete setting Haiku invented for this scene ("the YC kitchen
+   *  at 11pm Tuesday"). Drives both the dialogue framing and the
+   *  imagePrompt. */
+  setting?: string | null
+  /** Subset of the episode's cast roster who actually appear in this
+   *  scene. Picked by Haiku per-scene based on the prior choice. */
   cast?: CastMember[]
+  /** Haiku-emitted: true on the scene that closes the episode arc.
+   *  Triggers the next /api/generate-episode call client-side. */
+  isLastSceneOfEpisode?: boolean | null
   imagePrompt: string
   imageUrl?: string
   dialogue: DialogueLine[]
@@ -63,63 +68,36 @@ export interface Scene {
 }
 
 // ── EPISODE ARCHITECTURE ─────────────────────────────────────────────
-// Episodes are the new unit of LLM-generated content. One Sonnet call
-// per episode produces a coherent theme (location/event/cast) and a
-// 3–5 scene plan with pre-fixed setting + cast + imagePrompt for each
-// scene. Haiku (scene-gen) only writes dialogue + choices, reading
-// the pre-fixed scene context.
+// Episodes are a LIGHTWEIGHT skeleton: theme + cast roster + a rough
+// arc. Scenes are NOT pre-planned — Haiku invents setting + dialogue +
+// choices + imagePrompt fresh for each scene at scene-gen time, reading
+// the episode skeleton + the player's prior choice. The LLM signals
+// when the episode arc closes via Scene.isLastSceneOfEpisode.
 
-/** One scene's pre-fixed context inside an episode plan. Setting,
- *  cast, and image prompt are committed at episode-gen time so
- *  scene-gen has no freedom to invent a new location or new
- *  characters mid-episode. */
-export interface ScenePlan {
-  /** 0-indexed within the episode. */
-  index: number
-  /** Primary role for image + voice routing. */
-  role: Role
-  /** Concrete location ("the Y Combinator co-working space", "Peter
-   *  Thiel's office at Founders Fund"). */
-  setting: string
-  /** Everyone who could plausibly speak in this scene. Multi-role
-   *  scenes are explicitly allowed: a hackathon scene might list
-   *  cofounder + competitor + mentor. */
-  cast: CastMember[]
-  /** What happens. The single sentence that anchors Haiku's render. */
-  beat: string
-  /** Optional storylet kind: encounter (default), solo, world-event.
-   *  Sonnet emits explicit null for omitted optionals — accept it. */
-  kind?: StoryletKind | null
-  /** Pre-baked image prompt. The scene route emits this as the
-   *  imagePrompt SSE event the moment Haiku starts streaming, so
-   *  image-gen begins ~5s earlier than waiting on Haiku's output. */
-  imagePrompt: string
-  /** Number of dialogue rounds within this scene. Each round = one
-   *  dialogue exchange + one choice block. Setting + cast + image
-   *  stay locked across all rounds; only dialogue + choices vary,
-   *  branching on the prior round's choice. Default 3. */
-  roundCount?: number
-}
-
-/** One episode = one /api/generate-episode call. */
+/** One episode = one /api/generate-episode call. Lightweight skeleton
+ *  only — no per-scene plans. Scenes are generated on the fly. */
 export interface Episode {
   episodeIndex: number
-  /** One coherent theme: "hackathon weekend", "demo day prep",
-   *  "cofounder is leaving", etc. Spliced into scene prompts so each
-   *  scene knows what episode it lives in. */
+  /** Coherent theme spanning the whole episode: "hackathon weekend",
+   *  "demo day prep", "cofounder is leaving". */
   theme: string
-  /** 1–2 sentence premise the planner committed to before laying out
-   *  scenes. Drives the through-line. */
+  /** 1–2 sentence through-line. */
   premise: string
-  /** 3–5 ScenePlans, in order. */
-  scenes: ScenePlan[]
+  /** Full speaker roster for the episode — every named character who
+   *  could plausibly appear in any scene. Scene-gen picks a subset
+   *  based on the prior choice; it MUST NOT invent new named
+   *  characters outside this list. */
+  cast: CastMember[]
+  /** 3–5 short bullet points of *possible* beats / arc directions
+   *  the LLM may draw from. NOT scene-by-scene plans — these are
+   *  loose hints. Scene-gen invents the actual concrete moments. */
+  arcBullets: string[]
   storySoFar?: string | null
-  /** Ids of storylet seeds the planner picked from. Persisted across
+  /** Ids of storylet seeds the planner drew on. Persisted across
    *  episodes via StoryArc.firedSeedIds for cross-episode cooldown. */
   seedIds: string[]
-  /** Client-side: the global llmIndex at which this episode's scene 0
-   *  lives in arc.scenes. Set in episodePlanReady (= arc.scenes.length
-   *  at the moment the plan landed). Used to compute sceneIndexInEpisode
+  /** Client-side: the global llmIndex at which this episode's first
+   *  scene lives in arc.scenes. Used to compute sceneIndexInEpisode
    *  for any global llmIndex. */
   startLLMIndex?: number
 }

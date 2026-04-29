@@ -1,77 +1,30 @@
 {
   "episodeIndex": 0,
   "theme": "First night in SF — the YC co-working space at 11pm",
-  "premise": "You crash at the YC space your first night in San Francisco. Three people you don't know yet are already there — a competitor's CEO at the espresso machine, a founder who wants to be your cofounder, and a partner emeritus pretending not to listen.",
-  "scenes": [
+  "premise": "You crash the YC space your first night in San Francisco. The room is mostly empty but three people are still here, each wanting something different from you.",
+  "cast": [
     {
-      "index": 0,
       "role": "cofounder",
-      "setting": "the YC co-working space, 11pm Tuesday, kitchen island with a half-eaten sourdough loaf",
-      "cast": [
-        {
-          "role": "cofounder",
-          "name": "Maya",
-          "blurb": "Ex-Stripe engineer, three coffees deep, has a deck about you on her laptop she made on the BART ride over."
-        }
-      ],
-      "beat": "A founder you barely know corners you at the kitchen island and pitches herself as your missing cofounder. She has equity terms drafted.",
-      "kind": "encounter",
-      "roundCount": 3,
-      "imagePrompt": "interior of a YC co-working space kitchen at night, warm fluorescent overhead, a young woman with a hoodie and laptop leaning across a kitchen island toward the founder, two-shot, cinematic, shallow depth"
+      "name": "Maya",
+      "blurb": "Ex-Stripe engineer, three coffees deep, has a deck about you on her laptop she made on the BART ride over. Wants to be your cofounder."
     },
     {
-      "index": 1,
       "role": "hater",
-      "setting": "the same YC space, the espresso machine in the back hallway, ten minutes later",
-      "cast": [
-        {
-          "role": "hater",
-          "name": "Brandon",
-          "blurb": "CEO of a startup doing what you do but with $4M and a year's head start. Knows your name."
-        }
-      ],
-      "beat": "You bump into the competitor's CEO at the espresso machine. He greets you by name and asks how the runway is holding up.",
-      "kind": "encounter",
-      "roundCount": 3,
-      "imagePrompt": "espresso machine in a back hallway of a co-working space, two men in their late 20s, one in expensive streetwear, one in a t-shirt, cinematic two-shot, golden lamplight"
+      "name": "Brandon",
+      "blurb": "CEO of a competing startup with $4M and a year head start. Knows your name. Likes the espresso machine. Will ask about your runway."
     },
     {
-      "index": 2,
       "role": "mentor",
-      "setting": "a corner couch in the same YC space, midnight, partner emeritus reading a book they were never reading",
-      "cast": [
-        {
-          "role": "mentor",
-          "name": "Linda",
-          "blurb": "Partner emeritus at YC. Has watched 200 startups fail. Knows you walked in tonight."
-        }
-      ],
-      "beat": "A partner emeritus you didn't know was watching closes her book and asks if you've eaten. The question is a test.",
-      "kind": "encounter",
-      "roundCount": 3,
-      "imagePrompt": "interior of a co-working space common area at midnight, an older woman with reading glasses on a corner couch closing a hardback book, founder approaching, soft warm lighting"
-    },
-    {
-      "index": 3,
-      "role": "cofounder",
-      "setting": "the empty mezzanine of the YC space, 2am, a single light still on at your laptop",
-      "cast": [
-        {
-          "role": "cofounder",
-          "name": "Maya",
-          "blurb": "Same as scene 0 — she didn't leave. She's two desks away pretending to work."
-        }
-      ],
-      "beat": "Everyone else has cleared out. Maya is still here. She walks over, asks if you've decided.",
-      "kind": "encounter",
-      "roundCount": 3,
-      "imagePrompt": "interior mezzanine of an empty co-working space at 2am, one desk lamp on, a woman walking toward a seated founder with a closed laptop on her arm, long shadows"
+      "name": "Linda",
+      "blurb": "Partner emeritus at YC. Has watched 200 startups fail. Closes her book and asks if you've eaten. The question is a test."
     }
   ],
-  "seedIds": [
-    "cofounder_pitch_generic",
-    "hater_generic_dunk",
-    "mentor_generic_advice",
-    "cofounder_pitch_generic"
-  ]
+  "arcBullets": [
+    "the player might get cornered at the kitchen island by a stranger pitching themselves as cofounder",
+    "a competitor's CEO might appear at the espresso machine and probe for weaknesses",
+    "an older mentor figure could close her book and offer one terse piece of advice",
+    "the player might choose to leave the building entirely — Folsom Street, late, alone with the deck",
+    "an unexpected text could land mid-arc and pull the player away"
+  ],
+  "seedIds": ["cofounder_pitch_generic", "hater_generic_dunk", "mentor_generic_advice"]
 }

@@ -686,111 +686,49 @@ export default function HomePage() {
     creditsExhausted,
   ]);
 
-  // Per-round generation. Each "round" is one dialogue exchange + one
-  // choice block. A scene plan declares 2-4 rounds; each round is
-  // rendered into its own arc.scenes[] slot (one Scene record per
-  // round). Setting/cast/imagePrompt are shared across rounds of the
-  // same scene; only dialogue + choices vary, branching on the prior
-  // round's choice within the same scene.
+  // Per-scene generation. Each scene = ONE moment with ONE decision
+  // point, generated entirely on-the-fly by Haiku reading the episode
+  // skeleton + the player's prior choice. Scenes are NOT pre-planned
+  // — Haiku invents setting/cast subset/dialogue/choices/imagePrompt
+  // fresh per call. The LLM signals episode end via
+  // scene.isLastSceneOfEpisode, which the end-of-episode trigger
+  // effect picks up.
   useEffect(() => {
     if (phase !== "scene" && phase !== "generating-episode") return;
     const ep = arc?.currentEpisode;
     if (!ep) return;
     const startLLM = ep.startLLMIndex ?? 0;
 
-    // Helper: cumulative round-offset before scene N in this episode.
-    // arc.scenes[startLLM + offsetForScene(N) + R] holds round R of scene N.
-    const offsetForScene = (sceneIdx: number): number => {
-      let off = 0;
-      for (let i = 0; i < sceneIdx; i++) {
-        off += ep.scenes[i]?.roundCount ?? 3;
-      }
-      return off;
-    };
-
-    // Map a global llmIndex within the current episode back to (sceneIdx, roundIdx).
-    const localizeRound = (
-      globalLLM: number,
-    ): { sceneIdx: number; roundIdx: number } | null => {
-      let local = globalLLM - startLLM;
-      if (local < 0) return null;
-      for (let i = 0; i < ep.scenes.length; i++) {
-        const rc = ep.scenes[i]?.roundCount ?? 3;
-        if (local < rc) return { sceneIdx: i, roundIdx: local };
-        local -= rc;
-      }
-      return null;
-    };
-
-    const fireRound = (sceneIdx: number, roundIdx: number) => {
-      const plan = ep.scenes[sceneIdx];
-      if (!plan) return;
-      const roundCount = plan.roundCount ?? 3;
-      if (roundIdx < 0 || roundIdx >= roundCount) return;
-      const globalLLMIndex = startLLM + offsetForScene(sceneIdx) + roundIdx;
+    const fireScene = (sceneIndexInEpisode: number) => {
+      const globalLLMIndex = startLLM + sceneIndexInEpisode;
       if (sceneGenFiredRef.current.has(globalLLMIndex)) return;
       const stored = arc?.scenes[globalLLMIndex];
       if (stored && stored.dialogue.length > 0) return;
       sceneGenFiredRef.current.add(globalLLMIndex);
 
-      // Image-gen: fire ONCE per scene (round 0). Subsequent rounds of
-      // the same scene fan out from the leader's imageUrl via the
-      // dedicated effect below.
-      if (
-        roundIdx === 0 &&
-        !imageGenFiredRef.current.has(globalLLMIndex)
-      ) {
-        imageGenFiredRef.current.add(globalLLMIndex);
-        fetch("/api/generate-image", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            mode: "scene",
-            scenePrompt: plan.imagePrompt,
-            archetype: plan.role,
-            quality: "low",
-          }),
-        })
-          .then((r) =>
-            r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)),
-          )
-          .then((data: { url?: string }) => {
-            if (data.url) sceneImageReady(globalLLMIndex, data.url);
-          })
-          .catch((err) => {
-            imageGenFiredRef.current.delete(globalLLMIndex);
-            console.error(`[image-gen] failed scene=${globalLLMIndex}`, err);
-          });
-      }
-
-      // Prior-round choice within THIS scene only. The first round of
-      // a scene has no priorRoundChoice — even if the player just made
-      // a choice in scene N-1's last round, that choice belongs to
-      // recentChoices/lastChoice, not to this scene's within-scene
-      // branching.
-      let priorRoundChoice: { sceneId: number; choiceLabel: string; hypeDelta: number; integrityDelta: number } | undefined;
-      if (roundIdx > 0) {
-        const priorGlobalLLM = globalLLMIndex - 1;
-        const priorSceneId = AUTHORED_SCENE_COUNT + priorGlobalLLM + 1;
-        const h = history.find((entry) => entry.sceneId === priorSceneId);
-        if (h) {
-          priorRoundChoice = {
-            sceneId: h.sceneId,
-            choiceLabel: h.choiceLabel,
-            hypeDelta: h.hypeDelta,
-            integrityDelta: h.integrityDelta,
-          };
-        }
-      }
+      // Last choice = the most recent entry in history. For scene 0 of
+      // a new episode, this is the prior episode's last choice (which
+      // the episode planner already used to pick the theme — passing
+      // it here as well lets scene-gen acknowledge the carry-over).
+      // For scene N+1 within an episode, this is the choice the player
+      // just made on scene N — the load-bearing input.
+      const last = history[history.length - 1];
+      const lastChoice = last
+        ? {
+            sceneId: last.sceneId,
+            choiceLabel: last.choiceLabel,
+            hypeDelta: last.hypeDelta,
+            integrityDelta: last.integrityDelta,
+          }
+        : undefined;
 
       streamScene(
         {
           episode: ep,
           episodeIndex: ep.episodeIndex,
-          sceneIndexInEpisode: sceneIdx,
-          roundIndex: roundIdx,
-          roundCount,
-          priorRoundChoice,
+          sceneIndexInEpisode,
+          totalScenesInEpisodeSoFar: sceneIndexInEpisode + 1,
+          lastChoice,
           storySoFar: arc?.storySoFar,
           startupName: arc?.startupName,
           startupDescription: intro.startupDescription ?? "",
@@ -810,8 +748,42 @@ export default function HomePage() {
           tone: arc?.tone,
         },
         {
-          onImagePrompt: (imagePrompt) =>
-            setSceneImagePrompt(globalLLMIndex, imagePrompt),
+          onImagePrompt: (imagePrompt) => {
+            setSceneImagePrompt(globalLLMIndex, imagePrompt);
+            // Fire image-gen the moment Haiku emits its imagePrompt
+            // (well before the dialogue finishes streaming). Scene's
+            // primary role won't be known until done; image-gen uses
+            // the prompt only — role is a flavor hint that defaults
+            // safely.
+            if (!imageGenFiredRef.current.has(globalLLMIndex)) {
+              imageGenFiredRef.current.add(globalLLMIndex);
+              fetch("/api/generate-image", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  mode: "scene",
+                  scenePrompt: imagePrompt,
+                  archetype: "cofounder",
+                  quality: "low",
+                }),
+              })
+                .then((r) =>
+                  r.ok
+                    ? r.json()
+                    : Promise.reject(new Error(`HTTP ${r.status}`)),
+                )
+                .then((data: { url?: string }) => {
+                  if (data.url) sceneImageReady(globalLLMIndex, data.url);
+                })
+                .catch((err) => {
+                  imageGenFiredRef.current.delete(globalLLMIndex);
+                  console.error(
+                    `[image-gen] failed scene=${globalLLMIndex}`,
+                    err,
+                  );
+                });
+            }
+          },
           onDialogueLine: (line) =>
             appendDialogueLine(globalLLMIndex, line),
         },
@@ -831,28 +803,15 @@ export default function HomePage() {
         });
     };
 
-    // Always fire scene 0 round 0 of the current episode the moment
-    // the plan lands (covers the cinematic exit + first-scene reveal).
-    fireRound(0, 0);
+    // Always fire scene 0 of the current episode the moment the
+    // skeleton lands (covers cinematic-exit + first-scene reveal).
+    fireScene(0);
 
-    // Fire the round the player is currently on (refresh-rehydrate /
-    // dev-jump path) and the next round, so it's pre-warmed for when
-    // the player makes their choice.
+    // Fire whichever scene the player is currently on (refresh /
+    // dev-jump path).
     if (phase === "scene" && sceneIndex >= AUTHORED_SCENE_COUNT) {
-      const globalLLMIndex = sceneIndex - AUTHORED_SCENE_COUNT;
-      const localized = localizeRound(globalLLMIndex);
-      if (localized) {
-        fireRound(localized.sceneIdx, localized.roundIdx);
-        // Pre-warm the next round in the same scene.
-        const plan = ep.scenes[localized.sceneIdx];
-        const rc = plan?.roundCount ?? 3;
-        if (localized.roundIdx + 1 < rc) {
-          fireRound(localized.sceneIdx, localized.roundIdx + 1);
-        } else if (localized.sceneIdx + 1 < ep.scenes.length) {
-          // Pre-warm scene N+1 round 0 when player is on the last round of N.
-          fireRound(localized.sceneIdx + 1, 0);
-        }
-      }
+      const localIndex = sceneIndex - AUTHORED_SCENE_COUNT - startLLM;
+      if (localIndex >= 0) fireScene(localIndex);
     }
   }, [
     phase,
@@ -876,7 +835,7 @@ export default function HomePage() {
     creditsExhausted,
   ]);
 
-  // Cinematic exit: as soon as the first round of a freshly-planned
+  // Cinematic exit: as soon as the first scene of a freshly-planned
   // episode has dialogue, drop out of the loader.
   useEffect(() => {
     if (phase !== "generating-episode") return;
@@ -888,32 +847,6 @@ export default function HomePage() {
       exitGeneratingEpisode();
     }
   }, [phase, arc, exitGeneratingEpisode]);
-
-  // Image fan-out: rounds within the same scene share one image.
-  // Image-gen fires only on round 0 of each scene (see fireRound
-  // above); this effect copies the leader's imageUrl onto subsequent
-  // rounds of the same scene as they arrive.
-  useEffect(() => {
-    const ep = arc?.currentEpisode;
-    const scenes = arc?.scenes;
-    if (!ep || !scenes) return;
-    const startLLM = ep.startLLMIndex ?? 0;
-    let cursor = startLLM;
-    for (const plan of ep.scenes) {
-      const rc = plan.roundCount ?? 3;
-      const leader = scenes[cursor];
-      if (leader?.imageUrl) {
-        for (let r = 1; r < rc; r++) {
-          const idx = cursor + r;
-          const round = scenes[idx];
-          if (round && round.dialogue.length > 0 && !round.imageUrl) {
-            sceneImageReady(idx, leader.imageUrl);
-          }
-        }
-      }
-      cursor += rc;
-    }
-  }, [arc?.scenes, arc?.currentEpisode, sceneImageReady]);
 
   // Episode persistence: PATCH the playthrough each time a new episode
   // plan lands. Strips imageUrls (runtime-only).
@@ -935,27 +868,40 @@ export default function HomePage() {
     }).catch((err) => console.error("persistArc failed", err));
   }, [playthroughId, arc]);
 
-  // End-of-episode trigger: when the player makes a choice on the LAST
-  // ROUND of the LAST SCENE of the current episode, kick off the NEXT
-  // episode's planner. The lastChoice in the request body IS that
-  // choice — the planner uses it as the dominant input for the new
-  // episode's theme.
+  // End-of-episode trigger: when the player has advanced PAST a scene
+  // marked `isLastSceneOfEpisode: true`, kick off the next episode's
+  // planner. The LLM (Haiku, scene-gen) decides when the arc closes
+  // by setting this flag on whichever scene closes the episode's
+  // arc — typically after 3–6 scenes.
+  // Safety: also force-end after MAX_SCENES_PER_EPISODE so the LLM
+  // can't run an episode forever.
   useEffect(() => {
     if (phase !== "scene") return;
     const ep = arc?.currentEpisode;
     if (!ep) return;
     const startLLM = ep.startLLMIndex ?? 0;
-    // Total rounds across all scenes in this episode.
-    const totalRounds = ep.scenes.reduce(
-      (s, sc) => s + (sc.roundCount ?? 3),
-      0,
-    );
-    const lastRoundGlobalIndex =
-      AUTHORED_SCENE_COUNT + startLLM + totalRounds - 1;
-    if (sceneIndex <= lastRoundGlobalIndex) {
-      // Mid-episode: nothing to do here.
-      return;
+    const playerLocalIndex = sceneIndex - AUTHORED_SCENE_COUNT - startLLM;
+    if (playerLocalIndex < 0) return;
+
+    const MAX_SCENES_PER_EPISODE = 8;
+    // Find the lowest scene-in-episode index where:
+    //   (a) the scene exists in arc.scenes with dialogue (LLM finished it)
+    //   (b) the LLM marked it as the episode's closer, OR
+    //       the player has already played MAX_SCENES_PER_EPISODE scenes
+    //       in this episode (safety force-end)
+    // and the player has advanced PAST it.
+    let endSceneLocal = -1;
+    for (let i = 0; i < arc.scenes.length - startLLM; i++) {
+      const s = arc?.scenes[startLLM + i];
+      if (!s || s.dialogue.length === 0) break;
+      if (s.isLastSceneOfEpisode || i + 1 >= MAX_SCENES_PER_EPISODE) {
+        endSceneLocal = i;
+        break;
+      }
     }
+    if (endSceneLocal < 0) return;
+    if (playerLocalIndex <= endSceneLocal) return;
+
     const nextEpisode = ep.episodeIndex + 1;
     if (episodeGenFiredRef.current.has(nextEpisode)) return;
     episodeGenFiredRef.current.add(nextEpisode);

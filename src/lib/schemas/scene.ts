@@ -38,12 +38,26 @@ const shareMomentSchema = z.object({
   blurb: z.string().min(1).max(180),
 })
 
+const castMemberSchema = z.object({
+  role: z.enum(ROLE_VALUES),
+  name: z.string().min(1).max(80),
+  blurb: z.string().max(300).optional(),
+})
+
 export const sceneSchema = z
   .object({
     id: z.number().int().min(1).max(9999),
     title: z.string().min(1).max(120),
     role: z.enum(ROLE_VALUES),
-    imagePrompt: z.string().min(10).max(500),
+    /** Concrete setting Haiku invented for THIS scene. */
+    setting: z.string().min(8).max(600).nullable().optional(),
+    /** Subset of episode cast appearing in THIS scene. Picked by
+     *  Haiku based on the prior choice. */
+    cast: z.array(castMemberSchema).max(6).optional(),
+    /** True on the scene that closes the episode arc. Triggers next
+     *  /api/generate-episode call client-side. */
+    isLastSceneOfEpisode: z.boolean().nullable().optional(),
+    imagePrompt: z.string().min(10).max(600),
     dialogue: z.array(dialogueLineSchema).min(2).max(6),
     choices: z.array(choiceSchema).min(2).max(3),
     timeoutSeconds: z.number().int().min(8).max(60).default(15),
