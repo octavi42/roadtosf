@@ -648,12 +648,14 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
           </button>
         )}
 
-        <p
-          className="text-[10px] text-center mt-3 tracking-[0.18em] uppercase"
-          style={{ color: "rgba(32,32,31,0.5)" }}
-        >
-          Stripe test · 4242 4242 4242 4242
-        </p>
+        {STRIPE_PUBLISHABLE_KEY.startsWith("pk_test_") && (
+          <p
+            className="text-[10px] text-center mt-3 tracking-[0.18em] uppercase"
+            style={{ color: "rgba(32,32,31,0.5)" }}
+          >
+            Stripe test · 4242 4242 4242 4242
+          </p>
+        )}
       </div>
 
     </PaywallShell>
