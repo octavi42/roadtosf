@@ -1065,25 +1065,30 @@ export default function HomePage() {
     // resolved) when the player entered the last planned scene. Wait
     // on its promise — if it resolved successfully, activate. If it
     // resolved to null (pre-gen failure), fall through to a fresh
-    // fetch.
+    // fetch on the next render.
+    //
+    // CRITICAL: clear pendingEpisodeRef BEFORE attaching the .then.
+    // This effect re-runs whenever its deps change (sceneIndex, arc,
+    // etc), and arc churns while scene-gen streams dialogue lines.
+    // Without clearing first, every re-run attaches another .then to
+    // the same promise, which fires episodePlanReady N times once
+    // the promise resolves and blows the React update depth.
     const pending = pendingEpisodeRef.current;
     if (pending && pending.episodeIndex === nextEpisode) {
+      pendingEpisodeRef.current = null;
       enterGeneratingEpisode();
-      pending.promise
-        .then((data) => {
-          if (data) {
-            episodePlanReady(data.episode);
-            if (typeof data.creditsRemaining === "number") {
-              setCreditsRemaining(data.creditsRemaining);
-            }
-            pendingEpisodeRef.current = null;
-            return;
+      pending.promise.then((data) => {
+        if (data) {
+          episodePlanReady(data.episode);
+          if (typeof data.creditsRemaining === "number") {
+            setCreditsRemaining(data.creditsRemaining);
           }
-          // Pre-gen failed silently. Clear and let the next render
-          // refire this effect via the fresh-fetch path below.
-          pendingEpisodeRef.current = null;
-          episodeGenFiredRef.current.delete(nextEpisode);
-        });
+          return;
+        }
+        // Pre-gen failed silently. Allow the fresh-fetch path on
+        // next render by re-opening the dedup gate.
+        episodeGenFiredRef.current.delete(nextEpisode);
+      });
       return;
     }
 
