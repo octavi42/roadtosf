@@ -112,17 +112,54 @@ export default function DialogueSubtitle({
     setAudioEnded(true);
   };
 
-  // `autoPlay` on <audio> is silently blocked on first page load until the
-  // user has interacted with the page — no onError, no onPlaying, the
-  // typewriter would freeze forever. Explicitly call play() so we can catch
-  // the rejection and fall back to fixed-cadence reveal.
+  // `autoPlay` is silently blocked on first page load until the user has
+  // interacted — no onError, no onPlaying, and the typewriter freezes
+  // because audioPending stays true forever. Strategy: try play() ourselves;
+  // if blocked, attach a one-shot pointerdown listener on the document and
+  // retry on first interaction (the user will click *somewhere*). As a last
+  // resort, after 6s fall back to fixed-cadence reveal so the line never
+  // gets fully stuck.
   useEffect(() => {
     const el = audioRef.current;
     if (!el || !audioUrl) return;
-    const p = el.play();
-    if (p && typeof p.catch === "function") {
-      p.catch(() => setAudioEnded(true));
-    }
+
+    let resolved = false;
+    let unbind: (() => void) | null = null;
+
+    const giveUp = () => {
+      if (resolved) return;
+      resolved = true;
+      unbind?.();
+      setAudioEnded(true);
+    };
+
+    const fallbackTimer = setTimeout(giveUp, 6000);
+
+    const tryPlay = (): Promise<void> => {
+      const p = el.play();
+      return p && typeof p.then === "function"
+        ? p.then(() => {
+            resolved = true;
+          })
+        : Promise.resolve();
+    };
+
+    tryPlay().catch(() => {
+      const onGesture = () => {
+        tryPlay().catch(giveUp);
+      };
+      document.addEventListener("pointerdown", onGesture, { once: true });
+      document.addEventListener("keydown", onGesture, { once: true });
+      unbind = () => {
+        document.removeEventListener("pointerdown", onGesture);
+        document.removeEventListener("keydown", onGesture);
+      };
+    });
+
+    return () => {
+      clearTimeout(fallbackTimer);
+      unbind?.();
+    };
   }, [audioUrl]);
 
   const handleTransitionEnd = () => {
