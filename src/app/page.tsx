@@ -547,6 +547,15 @@ export default function HomePage() {
     episodeIndex: number;
     promise: Promise<FetchEpisodeResult | null>;
   } | null>(null);
+  // Pre-fired image URLs for the next episode's scenes. Keyed by
+  // `${episodeIndex}-${localSceneIndex}`. Populated by the pre-gen
+  // .then() handler firing /api/generate-image directly while the
+  // player is still in the prior episode's last scene; consumed by
+  // the image-gen effect when episodePlanReady eventually swaps
+  // arc.currentEpisode (post-cross). Decoupled from the currentEpisode
+  // swap so we get parallel pre-warming WITHOUT breaking fireBeat.
+  const preFiredImagesRef = useRef<Map<string, string>>(new Map());
+  const preFiredKeysRef = useRef<Set<string>>(new Set());
   // Flips true once extraction has settled (success or failure). Arc-gen is
   // gated on this so Sonnet never receives a half-populated player facts block
   // — the cause of the "Maya in The Uninvited Cofounder" bleed.
@@ -559,6 +568,8 @@ export default function HomePage() {
     arcPersistedRef.current = -1;
     extractFiredForRef.current = null;
     pendingEpisodeRef.current = null;
+    preFiredImagesRef.current = new Map();
+    preFiredKeysRef.current = new Set();
     // If the intro arrived with missingQuestions already populated (dev skip,
     // or a hydrated session), treat extraction as resolved — otherwise gen
     // would stall waiting for an extract-facts call that won't be re-issued.
@@ -887,10 +898,13 @@ export default function HomePage() {
     const ep = arc.currentEpisode;
     if (!Array.isArray(ep.scenes)) return;
     const startLLM = ep.startLLMIndex ?? 0;
-    if (imageQueueRef.current.inFlight) return;
 
-    // Find the next un-fired slot in episode order.
-    let nextIndex = -1;
+    // First pass: apply any URLs that pre-gen pre-fired while the
+    // player was still in the prior episode. preFiredImagesRef is
+    // keyed by `${episodeIndex}-${localSceneIndex}`. preFiredKeysRef
+    // marks slots whose pre-fire is in flight (we mark imageGenFiredRef
+    // for those so we don't double-fire; pre-fire .then() will bump
+    // imageQueueTick when the URL arrives, re-running this effect).
     for (let i = 0; i < ep.scenes.length; i++) {
       const slot = startLLM + i;
       if (imageGenFiredRef.current.has(slot)) continue;
@@ -898,6 +912,29 @@ export default function HomePage() {
         imageGenFiredRef.current.add(slot);
         continue;
       }
+      const key = `${ep.episodeIndex}-${i}`;
+      const cachedUrl = preFiredImagesRef.current.get(key);
+      if (cachedUrl) {
+        sceneImageReady(slot, cachedUrl);
+        imageGenFiredRef.current.add(slot);
+        continue;
+      }
+      if (preFiredKeysRef.current.has(key)) {
+        // Pre-fire is in flight for this slot; mark fired so the
+        // fresh-fetch path skips it. URL will land via the cachedUrl
+        // branch on a later tick when pre-fire resolves.
+        imageGenFiredRef.current.add(slot);
+      }
+    }
+
+    if (imageQueueRef.current.inFlight) return;
+
+    // Second pass: find the first slot that's still unfired (pre-fire
+    // didn't claim it AND the URL isn't already in arc) and fire fresh.
+    let nextIndex = -1;
+    for (let i = 0; i < ep.scenes.length; i++) {
+      const slot = startLLM + i;
+      if (imageGenFiredRef.current.has(slot)) continue;
       nextIndex = i;
       break;
     }
@@ -1019,6 +1056,57 @@ export default function HomePage() {
     const promise = fetchEpisode(buildEpisodeRequestBody(nextEpisode), {
       signal: controller.signal,
     })
+      .then((data): FetchEpisodeResult | null => {
+        // Pre-fire image-gen for every scene of the new episode in
+        // parallel, while the player walks the prior episode's last
+        // scene. URLs land in preFiredImagesRef; the image-gen effect
+        // applies them as soon as episodePlanReady runs (post-cross).
+        // We do NOT swap arc.currentEpisode here (see PR57/PR58 — that
+        // breaks fireBeat). The currentEpisode swap still happens
+        // through the end-trigger when the player crosses.
+        const ep = data.episode;
+        for (let i = 0; i < ep.scenes.length; i++) {
+          const key = `${ep.episodeIndex}-${i}`;
+          if (preFiredKeysRef.current.has(key)) continue;
+          preFiredKeysRef.current.add(key);
+
+          const plan = ep.scenes[i];
+          const primaryCast =
+            plan.cast?.find((c) => c.role === plan.role) ?? plan.cast?.[0];
+          fetch("/api/generate-image", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              mode: "scene",
+              scenePrompt: plan.imagePrompt,
+              archetype: plan.role,
+              quality: "low",
+              appearance: primaryCast?.appearance,
+              name: primaryCast?.name,
+            }),
+          })
+            .then((r) =>
+              r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)),
+            )
+            .then((d: { url?: string }) => {
+              if (d.url) {
+                preFiredImagesRef.current.set(key, d.url);
+                // Wake the image-gen effect so it can pick the URL up
+                // (via its cache-check loop) once arc.currentEpisode
+                // is the matching episode.
+                setImageQueueTick((n) => n + 1);
+              }
+            })
+            .catch((err) => {
+              preFiredKeysRef.current.delete(key);
+              console.warn(
+                `pre-fire image-gen[${key}] failed (will refire on cross)`,
+                err,
+              );
+            });
+        }
+        return data;
+      })
       .catch((err): FetchEpisodeResult | null => {
         // Silent during pre-gen — the end-trigger will retry fresh
         // when the player crosses, surfacing paywall etc at the
