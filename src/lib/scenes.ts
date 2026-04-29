@@ -69,18 +69,6 @@ export const BOARDING_PASS_BACKGROUND = "/intro-v3/03-confirm-flight.png";
 export const SF_BACKGROUND = "/intro-v3/04-sfo-arrival.png";
 export const GROUP1_BACKGROUND = "/groups/01-exploring-sf.png";
 
-// Pool of "first afternoon in SF" establishing shots. Scenes 5–8 all
-// declare GROUP1_BACKGROUND statically; the renderer substitutes a
-// shuffled pick from this pool at mount-time so a single playthrough
-// shows four distinct images instead of the same frame four times.
-export const GROUP_BACKGROUNDS = [
-  "/groups/01-exploring-sf.png",
-  "/groups/02-clipboard-stranger.png",
-  "/groups/03-recognized-founder.png",
-  "/groups/04-cafe-interview.png",
-  "/groups/05-phone-lights-up.png",
-] as const;
-
 const NARRATOR = "Narrator";
 const JORDAN = "Jordan · Friend, SF";
 
