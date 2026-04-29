@@ -145,9 +145,11 @@ function adaptLLMScene(scene: LLMScene): UnifiedScene {
   return {
     id: scene.id,
     title: scene.title,
-    // Generated scene image takes over once it lands; HOME_BACKGROUND is the
-    // placeholder while gpt-image-2 is still in flight.
-    background: scene.imageUrl ?? HOME_BACKGROUND,
+    // Generated scene image takes over once it lands. Until then, fall
+    // back to GROUP1_BACKGROUND so resolveSceneBackground swaps in a
+    // shuffled "first afternoon in SF" frame — varied per scene, not
+    // the cafe-planning intro shot.
+    background: scene.imageUrl ?? GROUP1_BACKGROUND,
     dialogue: scene.dialogue.map((d) => ({
       speaker: formatRoleSpeaker(d.speaker, scene.cast),
       text: d.text,
