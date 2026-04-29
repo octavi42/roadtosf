@@ -135,10 +135,35 @@ function formatRecentChoices(choices: PriorChoiceSummary[]): string {
     .join('\n')
 }
 
-function formatPriorBeatChoice(c?: PriorChoiceSummary): string | null {
+function formatPriorBeatChoice(
+  c?: PriorChoiceSummary,
+  opts: { isCrossSceneOpen?: boolean } = {},
+): string | null {
   if (!c) return null
   const hypeStr = `${c.hypeDelta >= 0 ? '+' : ''}${c.hypeDelta}`
   const integStr = `${c.integrityDelta >= 0 ? '+' : ''}${c.integrityDelta}`
+
+  // Cross-scene boundary: the prior choice happened in the previous
+  // scene with a different cast. Putting the player's choice-words
+  // back in their mouth at the new cast member produces nonsense
+  // (e.g. "Ask him to grab coffee tomorrow" said to Theo in scene 10
+  // was being re-spoken to Simone at the open of scene 11). Land the
+  // player in the new setting and let the prior choice color tone,
+  // not become opening dialogue.
+  if (opts.isCrossSceneOpen) {
+    return `## PRIOR BEAT CHOICE — CONTEXT FROM THE PREVIOUS SCENE (do NOT put these words in this scene's mouth)
+The player just chose: "${c.choiceLabel}"
+Effect: hype ${hypeStr}, integrity ${integStr} (use this for tone, not for opening dialogue).
+
+This choice was directed at a character in the PREVIOUS scene. That character is no longer present. The player has since moved — physically, in time, or both — into the setting + cast for THIS scene.
+
+Do NOT open this beat by having the player re-speak the choice to whoever is in front of them now. That collapses two scenes into one and lands the words on the wrong person.
+
+Open this beat by landing the player in this scene's setting — narrator framing of how they got here, what time has passed, the new cast member's first impression — then let the new cast drive the dialogue. The prior choice may color the player's mood or carry stakes into this scene; it does not become an opening line.
+
+If the prior choice names a roster member who IS in this scene, defer to the PIVOT AUTHORITY block above instead.`
+  }
+
   return `## PRIOR BEAT CHOICE — THE PLAYER ALREADY DID THIS (LOAD-BEARING)
 The player just chose: "${c.choiceLabel}"
 Effect: hype ${hypeStr}, integrity ${integStr}.
@@ -219,8 +244,14 @@ Current concern: ${input.concern || '(unstated)'}
 ## ROLE INFO FOR THIS SCENE'S PRIMARY ROLE
 ${plan.role}: ${role.roleLabel} — ${role.title}. ${role.personality}`
 
-  const lastChoiceBlock = formatPriorBeatChoice(input.priorBeatChoice)
   const isFirstBeat = beatIndex === 0
+  // A cross-scene cold-open is the first beat of any new scene
+  // container that has a priorBeatChoice (i.e. the choice came from
+  // the previous scene's last beat, not from a sibling beat in this
+  // scene). The literal-enactment rule does not apply here.
+  const lastChoiceBlock = formatPriorBeatChoice(input.priorBeatChoice, {
+    isCrossSceneOpen: isFirstBeat,
+  })
 
   // Detect if the prior choice mentions a roster member by name. If
   // so, the pivot is FORCED — that character must be the speaker of
