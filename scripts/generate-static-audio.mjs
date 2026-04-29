@@ -85,6 +85,12 @@ const LINES = [
   // ---- Scene 8 — "The First Signal" (2 narrator lines) ----
   { voiceId: N, text: "Your phone lights up. Three messages, not from anyone you know." },
   { voiceId: N, text: "One is a Hacker News link. Someone in your space launched something this morning." },
+
+  // ---- Narrator lobby (between authored scenes and first generated episode) ----
+  // Keep in sync with NARRATOR_LOBBY_OPENER in src/components/NarratorLobby.tsx
+  // and the off-topic fallback line.
+  { voiceId: N, text: "You've got a minute before the city gets its hooks in. Anything you want to ask before it does?" },
+  { voiceId: N, text: "That one I can't answer. Ask me something else about the city." },
 ];
 
 const OUT_DIR = path.join(ROOT, "public", "voices", "static");

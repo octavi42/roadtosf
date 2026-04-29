@@ -84,6 +84,10 @@ export const STATIC_AUDIO_MANIFEST: Record<string, StaticAudioEntry> = {
     "audioUrl": "/voices/static/d49f17a1b93c5ad2.mp3",
     "alignmentUrl": "/voices/static/d49f17a1b93c5ad2.json"
   },
+  "6SMKBar4Q5wkVHdFlcQC:That one I can't answer. Ask me something else about the city.": {
+    "audioUrl": "/voices/static/eb82a67213133fe5.mp3",
+    "alignmentUrl": "/voices/static/eb82a67213133fe5.json"
+  },
   "6SMKBar4Q5wkVHdFlcQC:The interviewer asks how big the market is. The founder does the thing with their hands.": {
     "audioUrl": "/voices/static/8a772c2b2c82f9fd.mp3",
     "alignmentUrl": "/voices/static/8a772c2b2c82f9fd.json"
@@ -115,6 +119,10 @@ export const STATIC_AUDIO_MANIFEST: Record<string, StaticAudioEntry> = {
   "6SMKBar4Q5wkVHdFlcQC:You take a window seat. The table next to you is two laptops, two espressos, and one founder being interviewed.": {
     "audioUrl": "/voices/static/a3ce91aa75f3bddd.mp3",
     "alignmentUrl": "/voices/static/a3ce91aa75f3bddd.json"
+  },
+  "6SMKBar4Q5wkVHdFlcQC:You've got a minute before the city gets its hooks in. Anything you want to ask before it does?": {
+    "audioUrl": "/voices/static/c08791b7d0a8b2af.mp3",
+    "alignmentUrl": "/voices/static/c08791b7d0a8b2af.json"
   },
   "6SMKBar4Q5wkVHdFlcQC:You've seen his face on Twitter. He hasn't seen you yet.": {
     "audioUrl": "/voices/static/5ce724d40efe5442.mp3",

@@ -8,6 +8,7 @@ import ChoicePanel from "@/components/ChoicePanel";
 import TextInputPanel from "@/components/TextInputPanel";
 import DialogueSubtitle from "@/components/DialogueSubtitle";
 import DialogueSpeaker from "@/components/DialogueSpeaker";
+import NarratorLobby from "@/components/NarratorLobby";
 import PaywallPanel from "@/components/PaywallPanel";
 import LoginModal from "@/components/LoginModal";
 import { ShareNotification } from "@/components/ShareNotification";
@@ -807,7 +808,16 @@ export default function HomePage() {
       )
         .then((data) => {
           appendBeat(globalLLMIndex, data.beat);
-          exitGeneratingEpisode();
+          // Skip auto-exit during the first-episode Narrator lobby — the
+          // Continue button drives the exit so the player can ask the
+          // narrator questions while gen completes. Mid-run transitions
+          // still auto-exit as before.
+          const inLobby =
+            useSessionStore.getState().progress.sceneIndex ===
+            AUTHORED_SCENE_COUNT;
+          if (!inLobby) {
+            exitGeneratingEpisode();
+          }
         })
         .catch((err) => {
           beatGenFiredRef.current.delete(key);
@@ -988,8 +998,12 @@ export default function HomePage() {
 
   // Cinematic exit: as soon as the first scene of a freshly-planned
   // episode has dialogue, drop out of the loader.
+  // Exception: the authored→first-episode handoff renders NarratorLobby,
+  // which gates exit on the player's Continue button. Skip auto-exit
+  // when sceneIndex === AUTHORED_SCENE_COUNT (= the lobby slot).
   useEffect(() => {
     if (phase !== "generating-episode") return;
+    if (sceneIndex === AUTHORED_SCENE_COUNT) return;
     const ep = arc?.currentEpisode;
     if (!ep) return;
     const startLLM = ep.startLLMIndex ?? 0;
@@ -997,7 +1011,7 @@ export default function HomePage() {
     if (stored && stored.dialogue.length > 0) {
       exitGeneratingEpisode();
     }
-  }, [phase, arc, exitGeneratingEpisode]);
+  }, [phase, sceneIndex, arc, exitGeneratingEpisode]);
 
   // Episode persistence: PATCH the playthrough each time a new episode
   // plan lands. Strips imageUrls (runtime-only).
@@ -1638,7 +1652,34 @@ export default function HomePage() {
   const qaPromptLine = qaCurrentQuestion?.prompt;
   const showQAPrompt = isQAScene && showChoices && !!qaPromptLine;
 
+  const lobbyActive =
+    phase === "generating-episode" && sceneIndex === AUTHORED_SCENE_COUNT;
+  const lobbyStartLLM = arc?.currentEpisode?.startLLMIndex ?? 0;
+  const lobbyFirstScene = arc?.scenes?.[lobbyStartLLM];
+  const lobbyReady =
+    !!arc?.currentEpisode &&
+    !!lobbyFirstScene &&
+    (lobbyFirstScene.dialogue?.length ?? 0) > 0 &&
+    !!lobbyFirstScene.imageUrl;
+
   const dialogueSlot = (() => {
+    if (lobbyActive) {
+      return (
+        <NarratorLobby
+          ready={lobbyReady}
+          context={{
+            startupName: arc?.startupName ?? intro.startupName,
+            startupDescription: intro.startupDescription,
+            selfDescription: intro.selfDescription,
+            team: intro.team,
+            fundingModel: intro.fundingModel,
+            concern: intro.concern,
+          }}
+          onContinue={exitGeneratingEpisode}
+        />
+      );
+    }
+
     if (phase === "welcome" && !welcomeDone) {
       return (
         <div className="w-full max-w-2xl mx-auto px-2 select-none">
@@ -1806,6 +1847,9 @@ export default function HomePage() {
         return null;
 
       case "generating-episode":
+        // First-episode transition: NarratorLobby renders in dialogueSlot
+        // and owns its own UI. Skip the centered loading card.
+        if (lobbyActive) return null;
         return (
           <div
             className="comic-outline animate-bounce-in rounded-2xl p-8 max-w-md w-full text-center flex flex-col gap-4"
