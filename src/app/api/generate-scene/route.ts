@@ -443,38 +443,21 @@ export async function POST(request: Request) {
         // creative variation. We tried 0.6 and the model still drifted.
         const sceneTemperature = subSceneIndex === 0 ? 0.9 : 0.4
 
-        // Forced assistant prefix: pre-fills JSON to pin the
-        // structural metadata (id + archetype) so Haiku can't drift
-        // the archetype mid-stream. Sub 1-3 additionally pre-fills
-        // the FIRST dialogue line with "You " to force past-tense
-        // action voice. Sub 0 only pins the id + archetype (the
-        // opener still needs to introduce the situation freely).
-        const assistantPrefix =
-          subSceneIndex === 0
-            ? `{
-  "id": ${sceneId},
-  "archetype": "${outline.archetype}",
-`
-            : `{
-  "id": ${sceneId},
-  "archetype": "${outline.archetype}",
-  "dialogue": [
-    {"speaker": "narrator", "text": "You `
-
         const raw = await streamJsonText({
           model: MODELS.scene,
           systemBlocks,
           userBlocks,
           maxTokens: 1000,
           temperature: sceneTemperature,
-          assistantPrefix,
           onText: (_delta, full) => tryEmitProgress(full),
           signal: request.signal,
         })
 
         const scene = parseFromRaw(raw, outline.archetype)
+        // The route owns sceneId. Whatever the model emitted for `id`
+        // is irrelevant to downstream bookkeeping; pin it here.
         send('done', {
-          scene,
+          scene: { ...scene, id: sceneId },
           source: 'llm' as const,
           creditsRemaining,
         })
