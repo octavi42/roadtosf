@@ -217,14 +217,41 @@ ${plan.role}: ${role.roleLabel} — ${role.title}. ${role.personality}`
   const lastChoiceBlock = formatPriorBeatChoice(input.priorBeatChoice)
   const isFirstBeat = beatIndex === 0
 
+  // Detect if the prior choice mentions a roster member by name. If
+  // so, the pivot is FORCED — that character must be the speaker of
+  // this scene, regardless of the planned cast.
+  const priorChoiceText = (input.priorBeatChoice?.choiceLabel ?? '').toLowerCase()
+  const namedInChoice = priorChoiceText
+    ? episode.cast.find((c) =>
+        priorChoiceText.includes(c.name.toLowerCase().split(' ')[0]!),
+      )
+    : undefined
+
   const pivotBlock = isPivotPoint
     ? `## PIVOT AUTHORITY — READ BEFORE RENDERING
 The episode planner committed to this scene's setting + cast BEFORE the player played the prior scene. Read the PRIOR BEAT CHOICE above carefully. It's the player's last action from the PRIOR SCENE, not from this scene.
 
-You have THREE options:
+${
+  namedInChoice
+    ? `### HARD PIVOT REQUIRED (a roster member is named in the prior choice)
+The prior choice contains "${namedInChoice.name}" — a member of the EPISODE ROSTER. The player's choice was: "${input.priorBeatChoice?.choiceLabel}".
+
+This means the player is now interacting with ${namedInChoice.name} — NOT the planned cast. You MUST pivot:
+- "role" output → "${namedInChoice.role}"
+- "cast" output → [{ "role": "${namedInChoice.role}", "name": "${namedInChoice.name}", "blurb": ${JSON.stringify(namedInChoice.blurb ?? '')} }]
+- "setting" output → invent a setting that fits how the player reached ${namedInChoice.name} (a phone call from the player's car, ${namedInChoice.name}'s apartment, a meeting they pulled together on the way, etc.)
+- "title" output → reflect the new scene (e.g. "On the phone with ${namedInChoice.name}", "${namedInChoice.name}'s apartment")
+- The first dialogue line is ${priorChoiceText.startsWith('call') ? `the call connecting ([narrator] You hit dial. Two rings. Then ${namedInChoice.name} picks up.)` : `the player arriving / ${namedInChoice.name} opening the door / etc.`}
+- The second dialogue line is ${namedInChoice.name} speaking with role="${namedInChoice.role}"
+
+Do NOT render the planned scene. Do NOT use the planned cast. The roster member named in the prior choice is the actual scene.
+
+`
+    : ''
+}You have THREE options (use them when no roster member is named in the prior choice):
 A) Render the planned scene as-is (setting + cast above). USE THIS when the planned scene still fits naturally with where the player ended up — e.g. they took a meeting, walked toward the planned cast member, didn't reject them.
-B) Render the planned scene's SETTING but with a DIFFERENT cast member from the EPISODE ROSTER below. USE THIS when the planned cast member is no longer narratively present (the player walked away from them, ended that thread) but the location still makes sense.
-C) PIVOT FULLY — invent a NEW setting + pick a different cast member from the EPISODE ROSTER. USE THIS when the planned scene is incoherent given the prior choice. Examples: planned scene is "Two Cars, One Lot" with Lena, but the player just told Lena to leave / drove past / ended the relationship. PIVOT: the player is now driving alone, or at a diner counter alone, or has called someone else from the roster.
+B) Render the planned scene's SETTING but with a DIFFERENT cast member from the EPISODE ROSTER below. USE THIS when the planned cast member is no longer narratively present.
+C) PIVOT FULLY — invent a NEW setting + pick a different cast member from the EPISODE ROSTER. USE THIS when the planned scene is incoherent given the prior choice.
 
 Whichever you pick, output your CHOSEN setting + cast in the JSON. Stay inside the EPISODE THEME ("${episode.theme}") — the pivot keeps the narrative line, just shifts which beat is in front of the player.
 

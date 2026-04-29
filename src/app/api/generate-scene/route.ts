@@ -299,14 +299,45 @@ export async function POST(request: Request) {
       }
 
       const sendFallback = () => {
-        // Fallback beat — a generic exchange that lets the player keep
-        // playing if the LLM path failed.
-        const speaker: Role = primaryRole
-        const fallbackBeat: Beat = {
-          dialogue: [
+        // Fallback beat — used when the LLM call fails. If the prior
+        // choice mentioned a named cast member from the episode roster
+        // (e.g. "Call Priya" → Priya speaks), use that character so
+        // the player's last choice is honored even on the fallback
+        // path. Otherwise fall through to a generic exchange with the
+        // planned cast.
+        const priorChoiceText = (
+          asPriorBeatChoice(body.priorBeatChoice)?.choiceLabel ?? ''
+        ).toLowerCase()
+        const namedFromChoice = priorChoiceText
+          ? episode.cast.find((c) =>
+              priorChoiceText.includes(c.name.toLowerCase().split(' ')[0]!),
+            )
+          : undefined
+
+        let dialogue: Beat['dialogue']
+        let role: Role
+        if (namedFromChoice) {
+          role = namedFromChoice.role as Role
+          dialogue = [
+            {
+              speaker: 'narrator',
+              text: `You ${priorChoiceText.startsWith('call') ? 'pick up the phone' : 'turn toward'} ${namedFromChoice.name}.`,
+            },
+            {
+              speaker: role,
+              text: `Yeah. I'm here.`,
+            },
+          ]
+        } else {
+          role = primaryRole
+          dialogue = [
             { speaker: 'narrator', text: 'A long pause. The room is the same.' },
-            { speaker, text: 'So. What now?' },
-          ],
+            { speaker: role, text: 'So. What now?' },
+          ]
+        }
+
+        const fallbackBeat: Beat = {
+          dialogue,
           choices: [
             { id: 'a', label: 'Lean in.', hype: 1, integrity: -1 },
             { id: 'b', label: 'Hold the line.', hype: 0, integrity: 1 },
@@ -315,6 +346,18 @@ export async function POST(request: Request) {
           timeoutChoiceId: 'b',
           isLastBeatOfScene: false,
           isLastSceneOfEpisode: false,
+          // Pivot overrides: tell the client to swap the scene's
+          // setting + cast + role to the chosen character. Without
+          // these, the rendered Scene record stays committed to the
+          // planned cast (Reid Hoffman) even though the dialogue is
+          // about Priya.
+          ...(namedFromChoice
+            ? {
+                role,
+                cast: [namedFromChoice],
+                title: `With ${namedFromChoice.name}`,
+              }
+            : {}),
         }
         send('done', {
           beat: fallbackBeat,
