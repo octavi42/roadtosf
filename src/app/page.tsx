@@ -804,15 +804,12 @@ export default function HomePage() {
   useEffect(() => {
     if (phase !== "scene" && phase !== "generating-episode") return;
     const ep = arc?.currentEpisode;
-    if (!ep) return;
+    if (!ep || !Array.isArray(ep.scenes) || ep.scenes.length === 0) return;
     const startLLM = ep.startLLMIndex ?? 0;
     const sceneZero = arc?.scenes[startLLM];
-    // If scene 0 has no dialogue and no in-flight beat-gen, fire beat 0.
     if (sceneZero && sceneZero.dialogue.length === 0) {
       fireBeat(0, 0, undefined);
     }
-    // If player jumped via dev panel to a scene that hasn't been
-    // generated, fire its beat 0.
     if (phase === "scene" && sceneIndex >= AUTHORED_SCENE_COUNT) {
       const localIndex = sceneIndex - AUTHORED_SCENE_COUNT - startLLM;
       if (localIndex >= 0 && localIndex < ep.scenes.length) {
@@ -830,6 +827,7 @@ export default function HomePage() {
   useEffect(() => {
     if (!arc?.currentEpisode) return;
     const ep = arc.currentEpisode;
+    if (!Array.isArray(ep.scenes)) return;
     const startLLM = ep.startLLMIndex ?? 0;
     ep.scenes.forEach((plan, i) => {
       const slot = startLLM + i;
@@ -903,7 +901,7 @@ export default function HomePage() {
   useEffect(() => {
     if (phase !== "scene") return;
     const ep = arc?.currentEpisode;
-    if (!ep) return;
+    if (!ep || !Array.isArray(ep.scenes)) return;
     const startLLM = ep.startLLMIndex ?? 0;
     const playerLocalIndex = sceneIndex - AUTHORED_SCENE_COUNT - startLLM;
     if (playerLocalIndex < 0) return;
@@ -1163,7 +1161,7 @@ export default function HomePage() {
       }
 
       const ep = arc?.currentEpisode;
-      if (!ep) {
+      if (!ep || !Array.isArray(ep.scenes)) {
         setTimeout(() => advanceScene(), 600);
         return;
       }

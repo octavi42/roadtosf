@@ -764,15 +764,14 @@ export const useSessionStore = create<SessionState>()(
     }),
     {
       name: "roadtosf-session",
-      // Bump on architectural breaks. v2 = new Episode/ScenePlan types
-      // (Apr 2026 episode-architecture rewrite); persisted v1 state with
-      // ArcSkeleton/SceneOutline shapes is incompatible with the new
-      // readers, so the migrate handler below wipes it.
-      version: 2,
+      // Bump on architectural breaks. v3 = multi-beat scenes (pre-fixed
+      // ScenePlans + Beats accumulated inside scene containers).
+      // Persisted v1/v2 state has incompatible Episode shape (v1
+      // ArcSkeleton; v2 lightweight Episode with arcBullets but no
+      // scenes[]). Hard reset for either.
+      version: 3,
       migrate: (persisted, fromVersion) => {
-        if (fromVersion < 2) {
-          // Hard reset for in-progress runs from the pre-episode era.
-          // Preserve only player identity + payment state.
+        if (fromVersion < 3) {
           const p = (persisted ?? {}) as Partial<SessionState>;
           return {
             phase: "welcome",
