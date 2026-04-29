@@ -496,6 +496,13 @@ export default function HomePage() {
           ? recentChoices[recentChoices.length - 1]
           : undefined;
 
+      // Carry forward the just-completed episode's cast so the new
+      // episode's planner can return characters by name with voice +
+      // appearance preserved (assignVoicesToEpisode reuses the prior
+      // voice IDs for matching names server-side).
+      const priorCast =
+        episodeIndex > 0 ? arc?.currentEpisode?.cast ?? [] : [];
+
       return {
         episodeIndex,
         priorStorySoFar: arc?.storySoFar,
@@ -516,6 +523,7 @@ export default function HomePage() {
         tone: arc?.tone,
         firedSeedIds: arc?.firedSeedIds ?? [],
         playthroughId,
+        priorCast,
       };
     },
     [arc, intro, history, hype, integrity, playthroughId],

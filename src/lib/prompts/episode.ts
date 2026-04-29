@@ -1,6 +1,6 @@
 import { ROLES } from '../archetypes'
 import { filterLore } from '../lore'
-import type { Role } from '../types'
+import type { CastMember, Role } from '../types'
 import type { SMItem } from '../silicon-mania/types'
 import type { RolledCameo, ToneSpec } from '../cameos/types'
 import type { Storylet } from '../storylets/types'
@@ -37,6 +37,13 @@ export interface BuildEpisodePromptInput {
   tone?: ToneSpec
   seedPool: Storylet[]
   firedSeedIds: string[]
+  /** Cast roster from the immediately prior episode. When supplied,
+   *  the planner is told to carry these characters forward by name
+   *  with identity (gender / age / descriptives / appearance)
+   *  preserved verbatim. The voice resolver also reuses prior voice
+   *  IDs for matching names, so Maya keeps Maya's voice across
+   *  episodes. */
+  priorCast?: CastMember[]
 }
 
 const SYSTEM_RULES = `You are the EPISODE PLANNER for "Road to SF", a satirical comic-book founder game. You produce ONE episode at a time.
@@ -65,6 +72,13 @@ CAST ROSTER RULES:
 - 2–8 named characters at episode level. Each scene's "cast" field is a SUBSET of these names — never names not in the episode roster.
 - ASSIGN CONCRETE NAMES. NO placeholder names: do NOT use Sandra, Chad, Victor, Brock, Stranger.
 - Cast members carry through scenes: if "Maya" is the cofounder candidate in scene 1, she's still Maya in scene 3.
+
+CAST CONTINUITY ACROSS EPISODES (LOAD-BEARING for character consistency):
+- If a "RETURNING CAST" block appears below, those characters lived through prior episodes. Carry them forward by name when narratively appropriate (the Maya from episode 0 is the same Maya in episode 1).
+- When carrying a returning character, copy their name, gender, age, descriptives, and appearance VERBATIM from the RETURNING CAST block. Do not invent a new appearance or change their gender/age — they are the same person, the same voice, the same face.
+- A typical episode has 1-3 returning characters + 1-3 new ones. Returning characters give the run continuity. New characters are the episode's fresh hooks.
+- It is fine to introduce zero new characters if the returning cast covers the episode's needs. Don't pad the roster.
+- If the player's last choice "fires" or "splits with" or "ghosts" a returning character, they may not appear in the next episode (ghosted) — but if they're still in the player's life, they should recur.
 
 FAMOUS-FIGURE BUDGET (LOAD-BEARING — most-broken rule, do NOT relax):
 - AT MOST 1 cast member per episode may be a real, recognizable public figure (Sam Altman, Peter Thiel, Patrick Collison, Vinod Khosla, Marc Andreessen, Reid Hoffman, Garry Tan, Eric Newcomer, etc.).
@@ -154,6 +168,20 @@ OUTPUT SHAPE:
 function formatRolledCameos(items: RolledCameo[]): string {
   return items
     .map((c) => `- ${c.displayName} (anchor: ${c.archetype}) — ${c.blurb}`)
+    .join('\n')
+}
+
+function formatPriorCast(items: CastMember[]): string {
+  return items
+    .map((c) => {
+      const ident = `gender=${c.gender ?? 'neutral'}, age=${c.age ?? 'middle'}`
+      const desc = c.descriptives && c.descriptives.length > 0
+        ? `, descriptives=[${c.descriptives.join(', ')}]`
+        : ''
+      const look = c.appearance ? `\n  appearance: ${c.appearance}` : ''
+      const blurb = c.blurb ? `\n  blurb: ${c.blurb}` : ''
+      return `- ${c.name} [${c.role}] (${ident}${desc})${blurb}${look}`
+    })
     .join('\n')
 }
 
@@ -288,6 +316,16 @@ SF figures the city has reserved for this run. Pick AT MOST ONE to cast in this 
 <cameos>
 ${formatRolledCameos(input.rolledCameos)}
 </cameos>
+`
+    : ''
+}${
+  input.priorCast && input.priorCast.length > 0
+    ? `
+## RETURNING CAST (from prior episodes — carry these by name when narratively appropriate)
+These characters lived through prior episodes of this run. When you reuse one in this episode's roster, copy their name, gender, age, descriptives, and appearance VERBATIM — they are the same person. A typical episode mixes 1-3 returning + 1-3 new characters. See CAST CONTINUITY rules above.
+<returning>
+${formatPriorCast(input.priorCast)}
+</returning>
 `
     : ''
 }
