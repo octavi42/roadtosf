@@ -42,7 +42,6 @@ import type {
 } from "@/lib/session";
 import {
   SCENES,
-  HOME_BACKGROUND,
   GROUP1_BACKGROUND,
   type SceneData,
   type DialogueLine as AuthoredDialogueLine,
@@ -144,10 +143,10 @@ function adaptLLMScene(scene: LLMScene): UnifiedScene {
   return {
     id: scene.id,
     title: scene.title,
-    // Generated scene image takes over once it lands. Until then, fall
-    // back to GROUP1_BACKGROUND so resolveSceneBackground swaps in a
-    // shuffled "first afternoon in SF" frame — varied per scene, not
-    // the cafe-planning intro shot.
+    // Generated scene image takes over once it lands. Until then,
+    // fall back to GROUP1_BACKGROUND so the in-game loading state
+    // shows a SF establishing frame instead of the cafe-planning
+    // intro shot.
     background: scene.imageUrl ?? GROUP1_BACKGROUND,
     dialogue: scene.dialogue.map((d) => ({
       speaker: formatRoleSpeaker(d.speaker, scene.cast),
@@ -1984,9 +1983,9 @@ export default function HomePage() {
           phase === "welcome"
             ? WELCOME_BACKGROUND
             : phase === "scene"
-              ? (currentScene?.background ?? HOME_BACKGROUND)
+              ? (currentScene?.background ?? GROUP1_BACKGROUND)
               : phase === "generating-episode"
-                ? HOME_BACKGROUND
+                ? GROUP1_BACKGROUND
                 : WELCOME_BACKGROUND
         }
         dialogueSlot={dialogueSlot}
