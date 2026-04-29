@@ -48,7 +48,10 @@ const shareMomentSchema = z.object({
 
 export const sceneSchema = z
   .object({
-    id: z.number().int().min(1).max(50),
+    // Endless mode generates well past 50 sub-scenes; the route pins
+    // the canonical id post-parse so the model's emitted id is just a
+    // sanity-bound integer.
+    id: z.number().int().min(1).max(9999),
     title: z.string().min(1).max(120),
     archetype: z.enum(ARCHETYPE_VALUES),
     imagePrompt: z.string().min(10).max(500),
