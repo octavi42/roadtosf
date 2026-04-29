@@ -5,7 +5,7 @@ import { useShallow } from "zustand/react/shallow";
 import {
   useSessionStore,
   AUTHORED_SCENE_COUNT,
-  EPISODE_LENGTH,
+  EPISODE_LENGTH_DEFAULT,
   type Phase,
 } from "@/lib/session";
 import { SCENES } from "@/lib/scenes";
@@ -25,7 +25,7 @@ const STATIC_TARGETS_HEAD: DevTarget[] = [
   { label: "Scene 2", phase: "scene", sceneIndex: 1 },
   { label: "Scene 3", phase: "scene", sceneIndex: 2 },
   { label: "Scene 4 (Q&A)", phase: "scene", sceneIndex: 3 },
-  { label: "Generating Arc", phase: "generating-arc" },
+  { label: "Generating Episode", phase: "generating-episode" },
 ];
 
 const STATIC_TARGETS_TAIL: DevTarget[] = [{ label: "Ending", phase: "ending" }];
@@ -54,12 +54,12 @@ const HARDCODED_INTRO = {
   missingQuestions: [],
 };
 
-function formatArchetypeSpeaker(speaker: string): string {
+function formatRoleSpeaker(speaker: string): string {
   if (speaker === "player") return "You";
   if (speaker === "narrator") return "";
   const def = ARCHETYPES[speaker as keyof typeof ARCHETYPES];
   if (!def) return speaker;
-  return `${def.name} · ${def.title}`;
+  return `${def.roleLabel} · ${def.title}`;
 }
 
 export default function DevPanel() {
@@ -76,7 +76,7 @@ export default function DevPanel() {
   const paywallOpen = useSessionStore((s) => s.paywallOpen);
   const devGrantCredits = useSessionStore((s) => s.devGrantCredits);
   const paywallSatisfied = useSessionStore((s) => s.paywallSatisfied);
-  const arcSkeleton = useSessionStore((s) => s.arc?.arcSkeleton);
+  const arcSkeleton = useSessionStore((s) => s.arc?.currentEpisode);
   const storySoFar = useSessionStore((s) => s.arc?.storySoFar);
   const dynamicScenes = useSessionStore(
     useShallow((s) => s.arc?.scenes ?? []),
@@ -97,7 +97,7 @@ export default function DevPanel() {
   const generatedCount = dynamicScenes.filter(
     (s) => s && s.dialogue.length > 0,
   ).length;
-  const targetSlotCount = Math.max(EPISODE_LENGTH, generatedCount + 1);
+  const targetSlotCount = Math.max(EPISODE_LENGTH_DEFAULT, generatedCount + 1);
   const llmTargets: DevTarget[] = Array.from({ length: targetSlotCount }, (_, i) => {
     const scene = dynamicScenes[i];
     const ready = !!scene && scene.dialogue.length > 0;
@@ -410,7 +410,7 @@ export default function DevPanel() {
                         className="text-[10px] text-white/60 leading-snug"
                       >
                         <span className="text-white/40">
-                          {s.index + 1}. {s.archetype} —
+                          {s.index + 1}. {s.role} —
                         </span>{" "}
                         {s.beat}
                       </div>
@@ -424,8 +424,8 @@ export default function DevPanel() {
                 .map((scene, llmIndex) => ({ scene, llmIndex }))
                 .filter(({ scene }) => scene && scene.dialogue.length > 0)
                 .map(({ scene, llmIndex }) => {
-                  const epi = Math.floor(llmIndex / EPISODE_LENGTH);
-                  const positionInEpi = llmIndex % EPISODE_LENGTH;
+                  const epi = Math.floor(llmIndex / EPISODE_LENGTH_DEFAULT);
+                  const positionInEpi = llmIndex % EPISODE_LENGTH_DEFAULT;
                   return (
                     <DynamicSceneCard
                       key={`llm-${llmIndex}`}
@@ -499,12 +499,12 @@ function DynamicSceneCard({
       <div className="text-[10px] tracking-widest uppercase text-sky-400/70 mb-1.5 flex justify-between gap-2">
         <span>{scene.title || `Scene ${AUTHORED_SCENE_COUNT + llmIndex + 1}`}</span>
         <span>
-          ep {episodeIndex}.{positionInEpisode} · {scene.archetype}
+          ep {episodeIndex}.{positionInEpisode} · {scene.role}
         </span>
       </div>
       <div className="space-y-1.5">
         {scene.dialogue.map((line, i) => {
-          const formatted = formatArchetypeSpeaker(line.speaker);
+          const formatted = formatRoleSpeaker(line.speaker);
           return (
             <div key={i} className="text-[11px] leading-snug">
               {formatted ? (

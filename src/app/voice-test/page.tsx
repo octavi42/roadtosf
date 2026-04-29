@@ -69,7 +69,7 @@ function VoiceTest() {
           >
             {ARCHETYPE_KEYS.map((key) => (
               <option key={key} value={key}>
-                {ARCHETYPES[key].name} — {ARCHETYPES[key].title}
+                {ARCHETYPES[key].roleLabel} — {ARCHETYPES[key].title}
               </option>
             ))}
           </select>
