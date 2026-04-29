@@ -227,6 +227,67 @@ export function coerceRawBeatJson(data: unknown, opts: CoerceBeatOptions): unkno
       out.isLastBeatOfScene === 'true' || out.isLastBeatOfScene === 1
   }
 
+  // Pivot cast field: Sonnet sometimes emits cast in malformed shapes:
+  //   - ["hater"]                          (array of role strings)
+  //   - {"mentor": "Linda"}                (object map of role→name)
+  //   - "Linda"                            (single name)
+  // The schema wants [{role, name, blurb?}, ...]. Try to recover; if
+  // we can't, DROP the field so the planned cast applies (better than
+  // rejecting the whole beat).
+  if (out.cast !== undefined) {
+    const c = out.cast
+    if (Array.isArray(c)) {
+      const normalized = c
+        .flatMap((item): Array<{ role: string; name: string; blurb?: string }> => {
+          if (!item) return []
+          if (typeof item === 'string') {
+            // ["hater"] — can't recover the name, drop the entry.
+            return []
+          }
+          if (typeof item === 'object') {
+            const o = item as Record<string, unknown>
+            if (
+              typeof o.role === 'string' &&
+              ROLE_SET.has(o.role) &&
+              typeof o.name === 'string' &&
+              o.name.length > 0
+            ) {
+              const blurb = typeof o.blurb === 'string' ? o.blurb : undefined
+              return [{ role: o.role, name: o.name, blurb }]
+            }
+          }
+          return []
+        })
+      out.cast = normalized.length > 0 ? normalized : undefined
+    } else if (c && typeof c === 'object') {
+      // {"mentor": "Linda"} or {"role": "mentor", "name": "Linda"} stuck on
+      // the wrong nesting level.
+      const o = c as Record<string, unknown>
+      // Detect single-cast-member shape: { role, name, blurb? }
+      if (typeof o.role === 'string' && ROLE_SET.has(o.role) && typeof o.name === 'string') {
+        out.cast = [
+          {
+            role: o.role,
+            name: o.name,
+            blurb: typeof o.blurb === 'string' ? o.blurb : undefined,
+          },
+        ]
+      } else {
+        // Map shape: {role: name, role: name, ...}
+        const recovered: Array<{ role: string; name: string }> = []
+        for (const [k, v] of Object.entries(o)) {
+          if (ROLE_SET.has(k) && typeof v === 'string' && v.length > 0) {
+            recovered.push({ role: k, name: v })
+          }
+        }
+        out.cast = recovered.length > 0 ? recovered : undefined
+      }
+    } else {
+      // Anything else — drop.
+      out.cast = undefined
+    }
+  }
+
   return out
 }
 
