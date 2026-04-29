@@ -21,12 +21,41 @@ function specFor(member: CastMember) {
  * scene 1, it's excluded for the rest of the episode's roster. The
  * narrator and player voices are reserved up-front so a cast member
  * can never collide with them.
+ *
+ * If `priorCast` is supplied (a prior episode's roster), any cast
+ * member whose name matches inherits the prior identity verbatim —
+ * voiceId, gender, age, descriptives, appearance. This is what makes
+ * Maya from episode 0 sound and look the same in episode 1.
  */
-export function assignVoicesToEpisode(plan: ParsedEpisodePlan): ParsedEpisodePlan {
+export function assignVoicesToEpisode(
+  plan: ParsedEpisodePlan,
+  priorCast: ReadonlyArray<CastMember> = [],
+): ParsedEpisodePlan {
   const exclude = new Set<string>([NARRATOR_RESERVED, PLAYER_RESERVED])
   const voiceByName = new Map<string, string>()
+  const priorByName = new Map<string, CastMember>()
+  for (const p of priorCast) {
+    priorByName.set(p.name, p)
+    if (p.voiceId) {
+      voiceByName.set(p.name, p.voiceId)
+      exclude.add(p.voiceId)
+    }
+  }
 
   const cast = plan.cast.map((member) => {
+    // Carry-over: if this name was canonical in a prior episode, the
+    // prior identity wins. Voice/look stays consistent across episodes.
+    const prior = priorByName.get(member.name)
+    if (prior?.voiceId) {
+      return {
+        ...member,
+        voiceId: prior.voiceId,
+        gender: prior.gender ?? member.gender,
+        age: prior.age ?? member.age,
+        descriptives: prior.descriptives ?? member.descriptives,
+        appearance: prior.appearance ?? member.appearance,
+      }
+    }
     const existing = voiceByName.get(member.name)
     if (existing) return { ...member, voiceId: existing }
     const voiceId = resolveVoiceId(specFor(member), Array.from(exclude))

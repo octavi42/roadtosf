@@ -27,7 +27,7 @@ import {
   InsufficientCreditsError,
   REASONS,
 } from '@/lib/credits'
-import type { Episode } from '@/lib/types'
+import type { CastMember, Episode, Role } from '@/lib/types'
 
 type Body = {
   episodeIndex?: unknown
@@ -52,6 +52,9 @@ type Body = {
   rolledCameos?: unknown
   tone?: unknown
   playthroughId?: unknown
+  /** Cast roster from the immediately prior episode. Used to carry
+   *  characters forward by name with voice + appearance preserved. */
+  priorCast?: unknown
 }
 
 const VALID_TONES: ReadonlySet<ToneId> = new Set([
@@ -136,6 +139,48 @@ function asStringArray(v: unknown): string[] {
     : []
 }
 
+const VALID_ROLES: ReadonlySet<Role> = new Set([
+  'vc',
+  'cofounder',
+  'reporter',
+  'hater',
+  'mentor',
+])
+const VALID_GENDERS = new Set(['male', 'female', 'neutral'])
+const VALID_AGES = new Set(['young', 'middle', 'old'])
+
+function asPriorCast(v: unknown): CastMember[] {
+  if (!Array.isArray(v)) return []
+  return v.flatMap((item): CastMember[] => {
+    if (!item || typeof item !== 'object') return []
+    const o = item as Record<string, unknown>
+    if (
+      typeof o.role !== 'string' ||
+      !VALID_ROLES.has(o.role as Role) ||
+      typeof o.name !== 'string' ||
+      o.name.trim().length === 0
+    ) {
+      return []
+    }
+    const m: CastMember = { role: o.role as Role, name: o.name }
+    if (typeof o.blurb === 'string') m.blurb = o.blurb
+    if (typeof o.voiceId === 'string') m.voiceId = o.voiceId
+    if (typeof o.appearance === 'string') m.appearance = o.appearance
+    if (typeof o.gender === 'string' && VALID_GENDERS.has(o.gender)) {
+      m.gender = o.gender as CastMember['gender']
+    }
+    if (typeof o.age === 'string' && VALID_AGES.has(o.age)) {
+      m.age = o.age as CastMember['age']
+    }
+    if (Array.isArray(o.descriptives)) {
+      m.descriptives = o.descriptives.filter(
+        (s): s is string => typeof s === 'string',
+      )
+    }
+    return [m]
+  })
+}
+
 function asPriorChoices(v: unknown): PriorChoiceSummary[] {
   if (!Array.isArray(v)) return []
   return v.flatMap((item): PriorChoiceSummary[] => {
@@ -218,6 +263,7 @@ export async function POST(request: Request) {
   const teamRaw = asString(body.team, '') || undefined
   const fundingRaw = asString(body.fundingModel, '') || undefined
   const firedSeedIds = asStringArray(body.firedSeedIds)
+  const priorCast = asPriorCast(body.priorCast)
   const playthroughId =
     typeof body.playthroughId === 'string' ? body.playthroughId : null
 
@@ -308,6 +354,7 @@ export async function POST(request: Request) {
     tone: asToneSpec(body.tone),
     seedPool,
     firedSeedIds,
+    priorCast,
   }
 
   const { systemBlocks, userBlocks } = buildEpisodePromptParts(promptInput)
@@ -333,7 +380,7 @@ export async function POST(request: Request) {
           ...fallbackEpisode,
           episodeIndex,
         })
-        const withVoices = assignVoicesToEpisode(parsed)
+        const withVoices = assignVoicesToEpisode(parsed, priorCast)
         const ep: Episode = { ...withVoices, seedIds: withVoices.seedIds }
         send('done', {
           episode: ep,
@@ -362,7 +409,7 @@ export async function POST(request: Request) {
         })
 
         const plan = parseFromRaw(raw, episodeIndex)
-        const withVoices = assignVoicesToEpisode(plan)
+        const withVoices = assignVoicesToEpisode(plan, priorCast)
         const ep: Episode = {
           ...withVoices,
           seedIds: validateSeedIds(withVoices.seedIds ?? []),
