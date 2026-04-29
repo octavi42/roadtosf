@@ -53,12 +53,24 @@ WHAT A BEAT IS:
 - 2–3 choices the player picks from to drive the next beat (or close the scene)
 - A flag — isLastBeatOfScene — set TRUE when this beat closes the scene's arc, FALSE while there's more to play
 
-CHOICE-RESPONSIVENESS (LOAD-BEARING):
+CHOICE-RESPONSIVENESS (LOAD-BEARING — the most important rule):
 - The PRIOR BEAT CHOICE (when present) is the dominant input.
-- "Call Priya" → THIS beat's dialogue IS the call (Priya speaking, on the phone, the player listening).
-- "Walk to Rin" → THIS beat IS at Rin's desk (her words, her work).
-- "Stay quiet" → THIS beat IS the silence playing out — the other character filling it, the room shifting.
-- Do NOT re-litigate the choice. Render the consequence in motion.
+- The FIRST LINE of this beat MUST literally enact the chosen action. Convert the choice label into the first line of dialogue or narration.
+
+FIRST-LINE PATTERNS (examples — match the shape, don't copy verbatim):
+- Choice "Ask her about her funding" → first line: [player] "So, what's your funding situation?"
+- Choice "Push back on the equity terms" → first line: [player] "That equity split doesn't work for me."
+- Choice "Call Priya" → first line: [narrator] You pick up the phone. Two rings. Then her voice.
+- Choice "Walk over to Rin" → first line: [narrator] The chair scrapes. Three steps. You're at her desk.
+- Choice "Walk out" → first line: [narrator] The door clicks shut behind you. The street is colder than you thought.
+- Choice "Stay quiet" → first line: [narrator] You don't answer. The silence stretches.
+- Choice "Tell him the truth" → first line: [player] "Eighteen months. That's it."
+- Choice "Take the term sheet" → first line: [narrator] You sign. He slides the contract back across the bar.
+- Choice "Sleep on it" → first line: [narrator] You close the laptop. The kitchen is dark now. Tomorrow.
+
+Do NOT open with framing like "You think about whether to call her" or "You're standing at the door deciding." Render the DOING, not the deciding.
+
+The rest of the beat (lines 2–4) is the consequence playing out — the response, the reaction, the room shifting, the next character arriving.
 
 OPENING vs CONTINUATION:
 - Beat 0 (the scene's opener): establish the setting in motion. Drop the player into the room. End on a choice that the next beat will react to.
@@ -122,11 +134,18 @@ function formatPriorBeatChoice(c?: PriorChoiceSummary): string | null {
   if (!c) return null
   const hypeStr = `${c.hypeDelta >= 0 ? '+' : ''}${c.hypeDelta}`
   const integStr = `${c.integrityDelta >= 0 ? '+' : ''}${c.integrityDelta}`
-  return `## PRIOR BEAT CHOICE — THE PLAYER ALREADY DID THIS
+  return `## PRIOR BEAT CHOICE — THE PLAYER ALREADY DID THIS (LOAD-BEARING)
 The player just chose: "${c.choiceLabel}"
 Effect: hype ${hypeStr}, integrity ${integStr}.
 
-PAST TENSE. This beat is the IMMEDIATE consequence. Render the doing or the consequence — not the deciding.`
+The FIRST LINE of this beat MUST literally enact the choice "${c.choiceLabel}":
+- If the choice is a question / statement (e.g. "Ask her about X", "Tell him Y", "Push back on Z") → the first line is the player saying that thing in their own words: [player] "..."
+- If the choice is an action (e.g. "Call X", "Walk out", "Sign the contract") → the first line is the narrator describing the player doing it: [narrator] "..."
+- If the choice is a refusal / silence (e.g. "Stay quiet", "Don't answer") → the first line is the narrator describing the silence playing out.
+
+Do NOT open with framing like "You think about it" or "You're deciding." The choice is past tense. Render it happening.
+
+The rest of the beat is the OTHER person's reaction (or, in solo beats, the consequence playing out).`
 }
 
 function formatPriorBeatsDialogue(lines: DialogueLine[]): string {
