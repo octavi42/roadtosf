@@ -5,42 +5,27 @@ export const ROLE_VALUES = ['vc', 'cofounder', 'reporter', 'hater', 'mentor'] as
 const castMemberSchema = z.object({
   role: z.enum(ROLE_VALUES),
   name: z.string().min(1).max(80),
-  blurb: z.string().max(220).optional(),
+  blurb: z.string().max(300).optional(),
 })
 
-export const scenePlanSchema = z.object({
-  index: z.number().int().min(0).max(20),
-  role: z.enum(ROLE_VALUES),
-  // Caps are generous on purpose — Sonnet routinely emits 600+ char
-  // beats and 400+ char settings with player-specific texture, and
-  // narrow caps were forcing the entire episode to fall back to the
-  // canned JSON. Same lesson as the old arc-gen schema (premise cap
-  // 280 → 600). nullable() accepts Sonnet's explicit-null for
-  // optional fields.
-  setting: z.string().min(8).max(600),
-  /** Full speaker roster for this scene — primary role plus anyone
-   *  the player might call, anyone who might walk in, etc. The
-   *  planner pre-names them all so within-scene branching never
-   *  needs to invent a new character mid-round. */
-  cast: z.array(castMemberSchema).min(1).max(6),
-  beat: z.string().min(8).max(800),
-  kind: z.enum(['encounter', 'solo', 'world-event']).nullable().optional(),
-  imagePrompt: z.string().min(10).max(600),
-  /** Number of dialogue rounds in this scene. Each round = one
-   *  dialogue exchange + one choice block. The whole scene shares
-   *  setting + cast + imagePrompt; only dialogue + choices vary
-   *  per round, branching on the player's choices. */
-  roundCount: z.number().int().min(2).max(4).default(3),
-})
-
+/**
+ * Episode skeleton. Lightweight — theme, premise, cast roster, and a
+ * loose arc. Scenes are NOT pre-planned; they are invented by Haiku
+ * scene-by-scene at scene-gen time. The skeleton just commits to the
+ * episode-level container (who could appear, what kind of arc).
+ */
 export const episodePlanSchema = z.object({
   episodeIndex: z.number().int().min(0).max(50).default(0),
   theme: z.string().min(4).max(240),
   premise: z.string().min(10).max(1200),
-  scenes: z.array(scenePlanSchema).min(3).max(5),
+  /** Full speaker roster for the episode — anyone who might appear
+   *  in any scene. Scene-gen MUST pick from this list. */
+  cast: z.array(castMemberSchema).min(2).max(8),
+  /** Loose arc bullets (3–5). Hints for the scene-gen prompt — NOT
+   *  per-scene plans. Each scene is generated on the fly. */
+  arcBullets: z.array(z.string().min(8).max(400)).min(3).max(8),
   storySoFar: z.string().min(20).max(1500).nullable().optional(),
   seedIds: z.array(z.string()).default([]),
 })
 
-export type ParsedScenePlan = z.infer<typeof scenePlanSchema>
 export type ParsedEpisodePlan = z.infer<typeof episodePlanSchema>

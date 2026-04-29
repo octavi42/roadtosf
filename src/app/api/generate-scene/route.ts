@@ -15,21 +15,17 @@ import type { Episode, Role, Scene } from '@/lib/types'
 import { getToneSpec } from '@/lib/cameos/tone'
 import type { ToneId, ToneSpec } from '@/lib/cameos/types'
 
-// Mirrors client-side constants in src/lib/session.ts.
 const AUTHORED_SCENE_COUNT = 8
 
 type Body = {
   episode?: unknown
   episodeIndex?: unknown
   sceneIndexInEpisode?: unknown
-  /** Round within the scene (0..roundCount-1). Each round = one
-   *  dialogue exchange + one choice block. */
-  roundIndex?: unknown
-  /** Optional override of the plan's roundCount; defaults to plan value. */
-  roundCount?: unknown
-  /** The choice made in the prior round of THIS scene (if any). The
-   *  load-bearing input for within-scene branching. */
-  priorRoundChoice?: unknown
+  /** Total scenes the player has played in this episode so far. */
+  totalScenesInEpisodeSoFar?: unknown
+  /** The single most-recent choice the player made — the load-bearing
+   *  input for choice-driven scene flow. */
+  lastChoice?: unknown
   storySoFar?: unknown
   startupName?: unknown
   startupDescription?: unknown
@@ -67,17 +63,6 @@ function asInt(v: unknown, fallback: number): number {
   return typeof v === 'number' && Number.isFinite(v) ? Math.trunc(v) : fallback
 }
 
-function asPriorRoundChoice(v: unknown): PriorChoiceSummary | undefined {
-  if (!v || typeof v !== 'object') return undefined
-  const o = v as Record<string, unknown>
-  return {
-    sceneId: asInt(o.sceneId, 0),
-    choiceLabel: asString(o.choiceLabel, '(unspecified)'),
-    hypeDelta: asInt(o.hypeDelta, 0),
-    integrityDelta: asInt(o.integrityDelta, 0),
-  }
-}
-
 function asPriorChoices(v: unknown): PriorChoiceSummary[] {
   if (!Array.isArray(v)) return []
   return v.flatMap((item): PriorChoiceSummary[] => {
@@ -94,6 +79,17 @@ function asPriorChoices(v: unknown): PriorChoiceSummary[] {
       },
     ]
   })
+}
+
+function asLastChoice(v: unknown): PriorChoiceSummary | undefined {
+  if (!v || typeof v !== 'object') return undefined
+  const o = v as Record<string, unknown>
+  return {
+    sceneId: asInt(o.sceneId, 0),
+    choiceLabel: asString(o.choiceLabel, '(unspecified)'),
+    hypeDelta: asInt(o.hypeDelta, 0),
+    integrityDelta: asInt(o.integrityDelta, 0),
+  }
 }
 
 function parseFromRaw(
@@ -226,53 +222,39 @@ export async function POST(request: Request) {
     episode = { ...parsed, seedIds: parsed.seedIds ?? [] }
   } catch (err) {
     return NextResponse.json(
-      { error: 'invalid episode plan', detail: String(err) },
+      { error: 'invalid episode skeleton', detail: String(err) },
       { status: 400 },
     )
   }
 
   const sceneIndexInEpisode = asInt(body.sceneIndexInEpisode, 0)
-  const plan = episode.scenes[sceneIndexInEpisode]
-  if (!plan) {
-    return NextResponse.json(
-      {
-        error: `no scene plan at index ${sceneIndexInEpisode} (episode has ${episode.scenes.length} scenes)`,
-      },
-      { status: 400 },
-    )
-  }
-
-  const roundCount = Math.min(
-    4,
-    Math.max(2, asInt(body.roundCount, plan.roundCount ?? 3)),
+  const totalScenesInEpisodeSoFar = asInt(
+    body.totalScenesInEpisodeSoFar,
+    sceneIndexInEpisode + 1,
   )
-  const roundIndex = Math.min(
-    roundCount - 1,
-    Math.max(0, asInt(body.roundIndex, 0)),
-  )
-  const isFinalRound = roundIndex === roundCount - 1
-  const priorRoundChoice = asPriorRoundChoice(body.priorRoundChoice)
+  const lastChoice = asLastChoice(body.lastChoice)
 
-  // Global llmIndex is owned by the client (one rendered Scene per
-  // round). We compose a stable sceneId from (episodeIndex,
-  // sceneIndexInEpisode, roundIndex) but the canonical store key is
-  // still `arc.scenes[globalLLMIndex]`. Each round = one Scene record.
   const globalLLMIndex =
-    asInt(body.episodeIndex, episode.episodeIndex) * 20 +
-    sceneIndexInEpisode * 4 +
-    roundIndex
+    asInt(body.episodeIndex, episode.episodeIndex) * 32 + sceneIndexInEpisode
   const sceneId = AUTHORED_SCENE_COUNT + globalLLMIndex + 1
 
+  // Allowed speakers for this scene = all roles present in the episode
+  // cast roster + player + narrator. Multi-role scenes are allowed; the
+  // schema clamps any speaker outside this set to narrator.
   const allowedRoles: Role[] = Array.from(
-    new Set<Role>(plan.cast.map((c) => c.role as Role).concat(plan.role)),
+    new Set<Role>(episode.cast.map((c) => c.role as Role)),
   )
+
+  // Default primary role for coercion when Haiku omits the field. Use
+  // the most common role in the cast (or first listed). Haiku is asked
+  // to emit `role` itself; this is just the safety net.
+  const defaultRole: Role = allowedRoles[0] ?? 'cofounder'
 
   const promptInput = {
     episode,
     sceneIndexInEpisode,
-    roundIndex,
-    roundCount,
-    priorRoundChoice,
+    totalScenesInEpisodeSoFar,
+    lastChoice,
     sceneId,
     storySoFar: asString(body.storySoFar, '') || undefined,
     startupName: asString(body.startupName, 'the startup'),
@@ -302,34 +284,25 @@ export async function POST(request: Request) {
         controller.enqueue(encoder.encode(sseEvent(name, data)))
       }
 
-      // Emit the pre-fixed imagePrompt immediately so image-gen can
-      // start before Haiku finishes streaming. The plan committed to
-      // it; Haiku may sharpen it in the final scene, but the client
-      // can use the plan's version for the image (already 1 image
-      // per scene budget; sharpening doesn't justify regenerating).
-      send('imagePrompt', { imagePrompt: plan.imagePrompt })
-
       const sendFallback = () => {
-        // Build a minimal placeholder scene from the plan + its first
-        // cast member. No fallback JSON file anymore — the plan IS
-        // the fallback.
-        const speaker = plan.role
+        // Minimal fallback derived from the episode skeleton — first
+        // cast member, generic dialogue. The LLM path being broken
+        // shouldn't strand the run.
+        const first = episode.cast[0]
+        const role = (first?.role ?? defaultRole) as Role
         const fallbackScene: Scene = {
           id: sceneId,
           title: `Episode ${episode.episodeIndex} · Scene ${sceneIndexInEpisode + 1}`,
-          role: plan.role,
-          archetype: plan.role,
-          cast: plan.cast,
-          imagePrompt: plan.imagePrompt,
+          role,
+          archetype: role,
+          setting: 'somewhere in San Francisco, mid-evening',
+          cast: first ? [{ role: first.role as Role, name: first.name, blurb: first.blurb }] : [],
+          isLastSceneOfEpisode: false,
+          imagePrompt:
+            'a tense moment in San Francisco, two characters in a quiet room, mood of unspoken decision',
           dialogue: [
-            {
-              speaker: 'narrator',
-              text: plan.setting,
-            },
-            {
-              speaker,
-              text: plan.beat,
-            },
+            { speaker: 'narrator', text: episode.theme },
+            { speaker: role, text: 'So. What now?' },
           ],
           choices: [
             { id: 'a', label: 'Lean in.', hype: 1, integrity: -1 },
@@ -349,22 +322,21 @@ export async function POST(request: Request) {
         if (!process.env.ANTHROPIC_API_KEY)
           throw new Error('ANTHROPIC_API_KEY missing')
 
+        let imagePromptFired = false
         let dialogueArrayStart = -1
         let nextDialogueSearchPos = 0
         let dialogueLinesFired = 0
-        // We already emitted imagePrompt up front; if Haiku sharpens
-        // it in its emitted JSON, we silently ignore — the client has
-        // already started image-gen on the plan's version.
-        let sharpenedImagePromptFired = false
 
         const tryEmitProgress = (full: string) => {
-          if (!sharpenedImagePromptFired) {
+          // imagePrompt arrives in Haiku's stream — emit when its
+          // closing quote appears so the client can fire image-gen.
+          if (!imagePromptFired) {
             const ipEnd = findStringFieldEnd(full, 'imagePrompt')
             if (ipEnd !== -1) {
               const ip = readStringFieldValue(full, 'imagePrompt', ipEnd)
               if (ip !== null && ip.length > 0) {
-                sharpenedImagePromptFired = true
-                // No second imagePrompt event — image-gen is one-shot.
+                imagePromptFired = true
+                send('imagePrompt', { imagePrompt: ip })
               }
             }
           }
@@ -392,33 +364,17 @@ export async function POST(request: Request) {
           model: MODELS.scene,
           systemBlocks,
           userBlocks,
-          maxTokens: 1000,
-          temperature: 0.7,
+          maxTokens: 1200,
+          temperature: 0.85,
           onText: (_delta, full) => tryEmitProgress(full),
           signal: request.signal,
         })
 
-        const parsed = parseFromRaw(raw, plan.role, allowedRoles)
-        // Mid-round deltas are server-clamped to ±1 — final round
-        // gets the full ±2 range. The prompt asks for it, but Haiku
-        // sometimes ignores; this is the structural guarantee that
-        // stats accumulate at the same rate as the old architecture.
-        const choices = parsed.choices.map((c) => ({
-          ...c,
-          hype: isFinalRound
-            ? c.hype
-            : Math.max(-1, Math.min(1, c.hype)),
-          integrity: isFinalRound
-            ? c.integrity
-            : Math.max(-1, Math.min(1, c.integrity)),
-        }))
+        const parsed = parseFromRaw(raw, defaultRole, allowedRoles)
         const scene: Scene = {
           ...parsed,
-          choices,
           id: sceneId,
           archetype: parsed.role,
-          cast: plan.cast,
-          imagePrompt: plan.imagePrompt,
         }
         send('done', {
           scene,
@@ -427,7 +383,7 @@ export async function POST(request: Request) {
         })
       } catch (err) {
         console.warn(
-          `generate-scene episode=${episode.episodeIndex} scene=${sceneIndexInEpisode}: LLM path failed, returning fallback`,
+          `generate-scene episode=${episode.episodeIndex} scene=${sceneIndexInEpisode}: LLM path failed, sending fallback`,
           err,
         )
         try {

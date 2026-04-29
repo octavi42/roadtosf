@@ -398,21 +398,41 @@ export default function DevPanel() {
                 <div className="border border-amber-400/30 rounded p-2 bg-amber-400/[0.04]">
                   <div className="text-[10px] tracking-widest uppercase text-amber-400/70 mb-1.5 flex justify-between gap-2">
                     <span>Episode {arcSkeleton.episodeIndex} skeleton</span>
-                    <span>{arcSkeleton.scenes.length} beats</span>
+                    <span>{arcSkeleton.cast.length} cast · {arcSkeleton.arcBullets.length} bullets</span>
                   </div>
-                  <div className="text-[11px] text-white/75 italic mb-2 leading-snug">
+                  <div className="text-[11px] text-white/85 mb-1 leading-snug font-semibold">
+                    {arcSkeleton.theme}
+                  </div>
+                  <div className="text-[11px] text-white/65 italic mb-2 leading-snug">
                     {arcSkeleton.premise}
                   </div>
-                  <div className="space-y-0.5">
-                    {arcSkeleton.scenes.map((s) => (
+                  <div className="text-[10px] text-white/40 uppercase tracking-widest mb-1">
+                    Cast
+                  </div>
+                  <div className="space-y-0.5 mb-2">
+                    {arcSkeleton.cast.map((c, i) => (
                       <div
-                        key={s.index}
+                        key={`cast-${i}`}
                         className="text-[10px] text-white/60 leading-snug"
                       >
-                        <span className="text-white/40">
-                          {s.index + 1}. {s.role} —
-                        </span>{" "}
-                        {s.beat}
+                        <span className="text-white/40">{c.role}:</span>{" "}
+                        <span className="text-white/85">{c.name}</span>
+                        {c.blurb ? (
+                          <span className="text-white/45"> — {c.blurb}</span>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="text-[10px] text-white/40 uppercase tracking-widest mb-1">
+                    Arc bullets
+                  </div>
+                  <div className="space-y-0.5">
+                    {arcSkeleton.arcBullets.map((b, i) => (
+                      <div
+                        key={`bullet-${i}`}
+                        className="text-[10px] text-white/55 leading-snug"
+                      >
+                        · {b}
                       </div>
                     ))}
                   </div>

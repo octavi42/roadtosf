@@ -1,77 +1,50 @@
-// Hits /api/generate-scene with a realistic Episode payload and reads the
-// SSE stream. Multi-round model: scene-gen renders ONE round per call.
-// Each scene has multiple rounds (planner picks 2-4); rounds share the
-// scene's setting/cast/imagePrompt and branch on prior round choices.
+// Hits /api/generate-scene with a realistic Episode SKELETON (no
+// per-scene plans) and reads the SSE stream. Scene-gen now invents
+// setting + cast subset + dialogue + choices + imagePrompt fresh
+// per call, reading the skeleton + lastChoice.
 //
 // Usage:
-//   PORT=3009 node scripts/probe-scene.mjs                    # scene 0 round 0
-//   PORT=3009 SCENE=0 ROUND=1 node scripts/probe-scene.mjs    # scene 0 round 1 (with prior choice)
-//   PORT=3009 SCENE=2 ROUND=2 node scripts/probe-scene.mjs    # scene 2 round 2
+//   PORT=3000 node scripts/probe-scene.mjs                              # scene 0 of episode 0
+//   PORT=3000 SCENE=2 LAST="Call Priya" node scripts/probe-scene.mjs    # scene 2 with prior choice
 
 const SCENE = Number(process.env.SCENE ?? 0)
-const ROUND = Number(process.env.ROUND ?? 0)
+const LAST = process.env.LAST ?? null
 const port = process.env.PORT ?? '3001'
 const url = `http://localhost:${port}/api/generate-scene`
 
 const episode = {
   episodeIndex: 0,
-  theme: 'First night at the YC co-working space',
+  theme: 'First night in SF — the YC co-working space at 11pm',
   premise:
-    'A solo founder bootstrapping a city-guide AI agent crashes the YC space their first night in SF; three people they don\'t know yet are already there.',
-  scenes: [
+    'You crash the YC space your first night. The room is mostly empty but three people are still here, each wanting something different from you.',
+  cast: [
     {
-      index: 0,
       role: 'cofounder',
-      setting: 'YC co-working space, kitchen island, 11pm Tuesday',
-      cast: [
-        {
-          role: 'cofounder',
-          name: 'Maya',
-          blurb: 'Ex-Stripe engineer, three coffees deep, has equity terms drafted.',
-        },
-      ],
-      beat: 'A founder you barely know corners you at the kitchen island and pitches herself as your missing cofounder.',
-      kind: 'encounter',
-      roundCount: 3,
-      imagePrompt:
-        'interior of a YC co-working space kitchen at night, warm fluorescent overhead, a young woman with a hoodie and laptop leaning across a kitchen island toward the founder',
+      name: 'Maya',
+      blurb:
+        'Ex-Stripe engineer, three coffees deep, has a deck about you on her laptop she made on the BART ride over. Wants to be your cofounder.',
     },
     {
-      index: 1,
       role: 'hater',
-      setting: 'YC space espresso machine, ten minutes later',
-      cast: [
-        {
-          role: 'hater',
-          name: 'Brandon',
-          blurb: 'CEO of a competing startup with $4M and a year head start.',
-        },
-      ],
-      beat: 'You bump into a competitor\'s CEO at the espresso machine. He greets you by name.',
-      kind: 'encounter',
-      roundCount: 3,
-      imagePrompt:
-        'espresso machine in a back hallway of a co-working space, two men in their late 20s, cinematic two-shot, golden lamplight',
+      name: 'Brandon',
+      blurb:
+        'CEO of a competing startup with $4M and a year head start. Knows your name. Likes the espresso machine. Will ask about your runway.',
     },
     {
-      index: 2,
       role: 'mentor',
-      setting: 'corner couch in the same YC space, midnight',
-      cast: [
-        {
-          role: 'mentor',
-          name: 'Linda',
-          blurb: 'Partner emeritus at YC. Has watched 200 startups fail.',
-        },
-      ],
-      beat: 'A partner emeritus closes her book and asks if you\'ve eaten. The question is a test.',
-      kind: 'encounter',
-      roundCount: 3,
-      imagePrompt:
-        'interior of a co-working common area at midnight, an older woman with reading glasses on a corner couch closing a hardback book, founder approaching, soft warm lighting',
+      name: 'Linda',
+      blurb:
+        'Partner emeritus at YC. Has watched 200 startups fail. Closes her book and asks if you have eaten.',
     },
   ],
-  seedIds: ['cofounder_pitch_generic', 'hater_generic_dunk', 'mentor_generic_advice'],
+  arcBullets: [
+    'the player might get cornered at the kitchen island by a stranger pitching themselves as cofounder',
+    'a competitor CEO might appear at the espresso machine and probe for weaknesses',
+    'an older mentor figure could close her book and offer one terse piece of advice',
+    'the player might choose to leave the building entirely — Folsom Street, late, alone with the deck',
+    'an unexpected text could land mid-arc and pull the player away',
+  ],
+  seedIds: [],
   startLLMIndex: 0,
 }
 
@@ -79,18 +52,15 @@ const body = {
   episode,
   episodeIndex: 0,
   sceneIndexInEpisode: SCENE,
-  roundIndex: ROUND,
-  roundCount: 3,
-  // Pretend prior round was a "Hear her out." choice if ROUND > 0.
-  priorRoundChoice:
-    ROUND === 0
-      ? undefined
-      : {
-          sceneId: 8 + SCENE * 4 + ROUND,
-          choiceLabel: 'Hear her out.',
-          hypeDelta: 0,
-          integrityDelta: 1,
-        },
+  totalScenesInEpisodeSoFar: SCENE + 1,
+  lastChoice: LAST
+    ? {
+        sceneId: 8 + SCENE,
+        choiceLabel: LAST,
+        hypeDelta: 0,
+        integrityDelta: 1,
+      }
+    : undefined,
   storySoFar: '',
   startupName: 'wagr',
   startupDescription: 'a city-guide AI agent for tourists',
@@ -102,7 +72,7 @@ const body = {
   playthroughId: 'probe-scene',
 }
 
-console.log('POST', url, 'scene', SCENE, 'round', ROUND)
+console.log('POST', url, 'scene', SCENE, LAST ? `last="${LAST}"` : '(no lastChoice)')
 const fs = await import('node:fs')
 let cookieHeader
 try {
@@ -123,7 +93,6 @@ const res = await fetch(url, {
   body: JSON.stringify(body),
 })
 console.log('status', res.status, res.statusText)
-console.log('content-type', res.headers.get('content-type'))
 
 if (!res.body) {
   console.log('no body')
@@ -152,7 +121,9 @@ while (true) {
           console.log('source:', parsed.source)
           console.log('role:', parsed.scene.role)
           console.log('title:', parsed.scene.title)
-          console.log('imagePrompt:', parsed.scene.imagePrompt?.slice(0, 80))
+          console.log('setting:', parsed.scene.setting)
+          console.log('isLastSceneOfEpisode:', parsed.scene.isLastSceneOfEpisode)
+          console.log('imagePrompt:', parsed.scene.imagePrompt?.slice(0, 100))
           console.log('cast:', parsed.scene.cast?.map((c) => `${c.role}:${c.name}`).join(' | '))
           console.log('dialogue:')
           for (const d of parsed.scene.dialogue ?? []) {
