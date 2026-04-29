@@ -22,6 +22,14 @@ type Body = {
   episode?: unknown
   episodeIndex?: unknown
   sceneIndexInEpisode?: unknown
+  /** Round within the scene (0..roundCount-1). Each round = one
+   *  dialogue exchange + one choice block. */
+  roundIndex?: unknown
+  /** Optional override of the plan's roundCount; defaults to plan value. */
+  roundCount?: unknown
+  /** The choice made in the prior round of THIS scene (if any). The
+   *  load-bearing input for within-scene branching. */
+  priorRoundChoice?: unknown
   storySoFar?: unknown
   startupName?: unknown
   startupDescription?: unknown
@@ -57,6 +65,17 @@ function asString(v: unknown, fallback = ''): string {
 
 function asInt(v: unknown, fallback: number): number {
   return typeof v === 'number' && Number.isFinite(v) ? Math.trunc(v) : fallback
+}
+
+function asPriorRoundChoice(v: unknown): PriorChoiceSummary | undefined {
+  if (!v || typeof v !== 'object') return undefined
+  const o = v as Record<string, unknown>
+  return {
+    sceneId: asInt(o.sceneId, 0),
+    choiceLabel: asString(o.choiceLabel, '(unspecified)'),
+    hypeDelta: asInt(o.hypeDelta, 0),
+    integrityDelta: asInt(o.integrityDelta, 0),
+  }
 }
 
 function asPriorChoices(v: unknown): PriorChoiceSummary[] {
@@ -223,14 +242,25 @@ export async function POST(request: Request) {
     )
   }
 
-  // Episode-architecture global scene id math: the authored intro
-  // covers indices 0..7. After that, we count by sceneIndexInEpisode
-  // accumulated across episodes — but the client owns the canonical
-  // global llmIndex, so the route just composes a stable id from
-  // (episodeIndex, sceneIndexInEpisode) with the authored offset.
-  // The client persists scenes by global llmIndex separately.
+  const roundCount = Math.min(
+    4,
+    Math.max(2, asInt(body.roundCount, plan.roundCount ?? 3)),
+  )
+  const roundIndex = Math.min(
+    roundCount - 1,
+    Math.max(0, asInt(body.roundIndex, 0)),
+  )
+  const isFinalRound = roundIndex === roundCount - 1
+  const priorRoundChoice = asPriorRoundChoice(body.priorRoundChoice)
+
+  // Global llmIndex is owned by the client (one rendered Scene per
+  // round). We compose a stable sceneId from (episodeIndex,
+  // sceneIndexInEpisode, roundIndex) but the canonical store key is
+  // still `arc.scenes[globalLLMIndex]`. Each round = one Scene record.
   const globalLLMIndex =
-    asInt(body.episodeIndex, episode.episodeIndex) * 5 + sceneIndexInEpisode
+    asInt(body.episodeIndex, episode.episodeIndex) * 20 +
+    sceneIndexInEpisode * 4 +
+    roundIndex
   const sceneId = AUTHORED_SCENE_COUNT + globalLLMIndex + 1
 
   const allowedRoles: Role[] = Array.from(
@@ -240,6 +270,9 @@ export async function POST(request: Request) {
   const promptInput = {
     episode,
     sceneIndexInEpisode,
+    roundIndex,
+    roundCount,
+    priorRoundChoice,
     sceneId,
     storySoFar: asString(body.storySoFar, '') || undefined,
     startupName: asString(body.startupName, 'the startup'),
@@ -366,8 +399,22 @@ export async function POST(request: Request) {
         })
 
         const parsed = parseFromRaw(raw, plan.role, allowedRoles)
+        // Mid-round deltas are server-clamped to ±1 — final round
+        // gets the full ±2 range. The prompt asks for it, but Haiku
+        // sometimes ignores; this is the structural guarantee that
+        // stats accumulate at the same rate as the old architecture.
+        const choices = parsed.choices.map((c) => ({
+          ...c,
+          hype: isFinalRound
+            ? c.hype
+            : Math.max(-1, Math.min(1, c.hype)),
+          integrity: isFinalRound
+            ? c.integrity
+            : Math.max(-1, Math.min(1, c.integrity)),
+        }))
         const scene: Scene = {
           ...parsed,
+          choices,
           id: sceneId,
           archetype: parsed.role,
           cast: plan.cast,
