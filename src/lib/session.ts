@@ -295,7 +295,22 @@ export const useSessionStore = create<SessionState>()(
       welcomeStarted: () =>
         set((state) => {
           if (state.phase !== "welcome") return state;
-          return { phase: "scene", progress: INITIAL_PROGRESS };
+          // Clear run-scoped state defensively. Normally a fresh tab
+          // starts with arc=undefined and history=[], but session-
+          // storage hydration or partial resets could leave stale
+          // scenes/history around — which would inflate
+          // arc.scenes.length when episodePlanReady fires for episode
+          // 0, producing wrong scene ids (saw "scene 13" instead of
+          // "scene 9" once).
+          return {
+            phase: "scene",
+            progress: INITIAL_PROGRESS,
+            arc: undefined,
+            history: [],
+            stats: { hype: 0, integrity: 0 },
+            ending: undefined,
+            shareMomentFiredInEpisode: null,
+          };
         }),
 
       captureIntro: (updates) =>
@@ -384,13 +399,23 @@ export const useSessionStore = create<SessionState>()(
           const nextFired = fate?.firedSeedIds
             ? Array.from(new Set([...priorFired, ...fate.firedSeedIds]))
             : Array.from(new Set([...priorFired, ...episode.seedIds]));
-          const startLLMIndex = state.arc?.scenes.length ?? 0;
-          const stamped: Episode = { ...episode, startLLMIndex };
           // Pre-fill arc.scenes with one slot per scene plan, so the
           // image-gen and player-flow effects can address scenes by
           // global llmIndex without waiting for the first beat to
           // populate the row.
-          const priorScenes = state.arc?.scenes ?? [];
+          //
+          // Guard against stale-state / double-fire: if the incoming
+          // episodeIndex is not strictly greater than the prior arc's
+          // episodeIndex, drop existing scenes. Otherwise a prior
+          // playthrough's leftover scenes — or a duplicate
+          // episodePlanReady for the same episode — would inflate
+          // startLLMIndex and produce wrong scene ids.
+          const priorEpisodeIndex = state.arc?.episodeIndex ?? -1;
+          const isFreshOrDuplicate =
+            state.arc != null && episode.episodeIndex <= priorEpisodeIndex;
+          const priorScenes = isFreshOrDuplicate ? [] : state.arc?.scenes ?? [];
+          const startLLMIndex = priorScenes.length;
+          const stamped: Episode = { ...episode, startLLMIndex };
           const initializedSlots: Scene[] = stamped.scenes.map((plan, i) => ({
             id: AUTHORED_SCENE_COUNT + startLLMIndex + i + 1,
             title: plan.title,
