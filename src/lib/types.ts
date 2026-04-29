@@ -87,8 +87,9 @@ export interface ScenePlan {
   cast: CastMember[]
   /** What happens. The single sentence that anchors Haiku's render. */
   beat: string
-  /** Optional storylet kind: encounter (default), solo, world-event. */
-  kind?: StoryletKind
+  /** Optional storylet kind: encounter (default), solo, world-event.
+   *  Sonnet emits explicit null for omitted optionals — accept it. */
+  kind?: StoryletKind | null
   /** Pre-baked image prompt. The scene route emits this as the
    *  imagePrompt SSE event the moment Haiku starts streaming, so
    *  image-gen begins ~5s earlier than waiting on Haiku's output. */
@@ -107,7 +108,7 @@ export interface Episode {
   premise: string
   /** 3–5 ScenePlans, in order. */
   scenes: ScenePlan[]
-  storySoFar?: string
+  storySoFar?: string | null
   /** Ids of storylet seeds the planner picked from. Persisted across
    *  episodes via StoryArc.firedSeedIds for cross-episode cooldown. */
   seedIds: string[]
