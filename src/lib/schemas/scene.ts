@@ -37,10 +37,21 @@ const shareMomentSchema = z.object({
   blurb: z.string().min(1).max(180),
 })
 
+const castMemberSchema = z.object({
+  role: z.enum(ROLE_VALUES),
+  name: z.string().min(1).max(80),
+  blurb: z.string().max(300).optional(),
+})
+
 /**
  * A Beat = one dialogue exchange + one choice block, returned by
  * /api/generate-scene per call. Many beats accumulate inside one
  * Scene container until the LLM marks isLastBeatOfScene.
+ *
+ * On beat 0 of a non-zero scene index (the "pivot point"), the LLM
+ * MAY override the planned setting/cast/title/role to react to the
+ * prior scene's outcome — see PIVOT AUTHORITY in prompts/scene.ts.
+ * Most beats leave these fields undefined (use the plan).
  */
 export const beatSchema = z
   .object({
@@ -54,6 +65,12 @@ export const beatSchema = z
      *  next-episode-gen on choice click. */
     isLastSceneOfEpisode: z.boolean().nullable().optional(),
     shareMoment: shareMomentSchema.optional(),
+    /** Pivot overrides — only set on beat 0 of new scenes when the
+     *  prior scene's outcome made the planned scene incoherent. */
+    setting: z.string().min(8).max(600).nullable().optional(),
+    cast: z.array(castMemberSchema).min(1).max(6).nullable().optional(),
+    role: z.enum(ROLE_VALUES).nullable().optional(),
+    title: z.string().min(1).max(120).nullable().optional(),
   })
   .refine(
     (s) => s.dialogue.reduce((acc, l) => acc + l.text.length, 0) <= MAX_DIALOGUE_CHARS_PER_BEAT,

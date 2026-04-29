@@ -250,9 +250,16 @@ export async function POST(request: Request) {
     sceneIndexInEpisode +
     1
 
-  const allowedRoles: Role[] = Array.from(
-    new Set<Role>(plan.cast.map((c) => c.role as Role).concat(plan.role)),
-  )
+  // Cast pool widens at beat 0 of scenes >0: scene-gen has authority
+  // to pivot the planned scene if the prior scene's outcome made it
+  // incoherent (e.g. player walked away from the planned cast member).
+  // The episode-level roster is the closed set; the planned scene's
+  // cast is the strong default. Mid-scene beats (beatIndex>0) keep the
+  // tighter cast lock because the scene's already in motion.
+  const isFirstBeatOfNewScene = beatIndex === 0 && sceneIndexInEpisode > 0
+  const allowedRoles: Role[] = isFirstBeatOfNewScene
+    ? Array.from(new Set<Role>(episode.cast.map((c) => c.role as Role).concat(plan.role)))
+    : Array.from(new Set<Role>(plan.cast.map((c) => c.role as Role).concat(plan.role)))
   const primaryRole: Role = plan.role
 
   const promptInput = {
