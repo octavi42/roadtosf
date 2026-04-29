@@ -1,12 +1,15 @@
 // Hits /api/generate-scene with a realistic Episode payload and reads the
-// SSE stream. Episode-architecture rewrite: scene-gen now reads its own
-// pre-fixed ScenePlan from the supplied Episode.
+// SSE stream. Multi-round model: scene-gen renders ONE round per call.
+// Each scene has multiple rounds (planner picks 2-4); rounds share the
+// scene's setting/cast/imagePrompt and branch on prior round choices.
 //
 // Usage:
-//   PORT=3009 node scripts/probe-scene.mjs            # scene 0
-//   PORT=3009 SCENE=2 node scripts/probe-scene.mjs    # scene 2 (with prior choice)
+//   PORT=3009 node scripts/probe-scene.mjs                    # scene 0 round 0
+//   PORT=3009 SCENE=0 ROUND=1 node scripts/probe-scene.mjs    # scene 0 round 1 (with prior choice)
+//   PORT=3009 SCENE=2 ROUND=2 node scripts/probe-scene.mjs    # scene 2 round 2
 
 const SCENE = Number(process.env.SCENE ?? 0)
+const ROUND = Number(process.env.ROUND ?? 0)
 const port = process.env.PORT ?? '3001'
 const url = `http://localhost:${port}/api/generate-scene`
 
@@ -29,6 +32,7 @@ const episode = {
       ],
       beat: 'A founder you barely know corners you at the kitchen island and pitches herself as your missing cofounder.',
       kind: 'encounter',
+      roundCount: 3,
       imagePrompt:
         'interior of a YC co-working space kitchen at night, warm fluorescent overhead, a young woman with a hoodie and laptop leaning across a kitchen island toward the founder',
     },
@@ -45,6 +49,7 @@ const episode = {
       ],
       beat: 'You bump into a competitor\'s CEO at the espresso machine. He greets you by name.',
       kind: 'encounter',
+      roundCount: 3,
       imagePrompt:
         'espresso machine in a back hallway of a co-working space, two men in their late 20s, cinematic two-shot, golden lamplight',
     },
@@ -61,6 +66,7 @@ const episode = {
       ],
       beat: 'A partner emeritus closes her book and asks if you\'ve eaten. The question is a test.',
       kind: 'encounter',
+      roundCount: 3,
       imagePrompt:
         'interior of a co-working common area at midnight, an older woman with reading glasses on a corner couch closing a hardback book, founder approaching, soft warm lighting',
     },
@@ -73,28 +79,30 @@ const body = {
   episode,
   episodeIndex: 0,
   sceneIndexInEpisode: SCENE,
+  roundIndex: ROUND,
+  roundCount: 3,
+  // Pretend prior round was a "Hear her out." choice if ROUND > 0.
+  priorRoundChoice:
+    ROUND === 0
+      ? undefined
+      : {
+          sceneId: 8 + SCENE * 4 + ROUND,
+          choiceLabel: 'Hear her out.',
+          hypeDelta: 0,
+          integrityDelta: 1,
+        },
   storySoFar: '',
   startupName: 'wagr',
   startupDescription: 'a city-guide AI agent for tourists',
   founderPersona: 'anxious first-time founder',
   team: 'solo, no cofounder',
   fundingModel: 'bootstrapping',
-  recentChoices:
-    SCENE === 0
-      ? []
-      : [
-          {
-            sceneId: 8 + SCENE,
-            choiceLabel: 'Hear her out.',
-            hypeDelta: 0,
-            integrityDelta: 1,
-          },
-        ],
+  recentChoices: [],
   currentStats: { hype: 0, integrity: 0 },
   playthroughId: 'probe-scene',
 }
 
-console.log('POST', url, 'scene', SCENE)
+console.log('POST', url, 'scene', SCENE, 'round', ROUND)
 const fs = await import('node:fs')
 let cookieHeader
 try {

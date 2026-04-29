@@ -94,6 +94,11 @@ export interface ScenePlan {
    *  imagePrompt SSE event the moment Haiku starts streaming, so
    *  image-gen begins ~5s earlier than waiting on Haiku's output. */
   imagePrompt: string
+  /** Number of dialogue rounds within this scene. Each round = one
+   *  dialogue exchange + one choice block. Setting + cast + image
+   *  stay locked across all rounds; only dialogue + choices vary,
+   *  branching on the prior round's choice. Default 3. */
+  roundCount?: number
 }
 
 /** One episode = one /api/generate-episode call. */

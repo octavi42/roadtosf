@@ -16,6 +16,7 @@
       ],
       "beat": "A founder you barely know corners you at the kitchen island and pitches herself as your missing cofounder. She has equity terms drafted.",
       "kind": "encounter",
+      "roundCount": 3,
       "imagePrompt": "interior of a YC co-working space kitchen at night, warm fluorescent overhead, a young woman with a hoodie and laptop leaning across a kitchen island toward the founder, two-shot, cinematic, shallow depth"
     },
     {
@@ -31,6 +32,7 @@
       ],
       "beat": "You bump into the competitor's CEO at the espresso machine. He greets you by name and asks how the runway is holding up.",
       "kind": "encounter",
+      "roundCount": 3,
       "imagePrompt": "espresso machine in a back hallway of a co-working space, two men in their late 20s, one in expensive streetwear, one in a t-shirt, cinematic two-shot, golden lamplight"
     },
     {
@@ -46,6 +48,7 @@
       ],
       "beat": "A partner emeritus you didn't know was watching closes her book and asks if you've eaten. The question is a test.",
       "kind": "encounter",
+      "roundCount": 3,
       "imagePrompt": "interior of a co-working space common area at midnight, an older woman with reading glasses on a corner couch closing a hardback book, founder approaching, soft warm lighting"
     },
     {
@@ -61,6 +64,7 @@
       ],
       "beat": "Everyone else has cleared out. Maya is still here. She walks over, asks if you've decided.",
       "kind": "encounter",
+      "roundCount": 3,
       "imagePrompt": "interior mezzanine of an empty co-working space at 2am, one desk lamp on, a woman walking toward a seated founder with a closed laptop on her arm, long shadows"
     }
   ],

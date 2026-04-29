@@ -62,17 +62,26 @@ CHOICE-RESPONSIVENESS (LOAD-BEARING — the whole point):
 - If they fired their cofounder → the next episode is the immediate fallout (the empty desk, the recruiter's call, the standup that doesn't happen).
 - Generic, unrelated themes ("a coffee with a VC", "a tweet went viral") are FAILURES of choice-responsiveness. Reject the easy default.
 
-CAST (multi-role scenes are ALLOWED):
-- Each scene has a primary "role" (one of: vc | cofounder | reporter | hater | mentor) and a "cast" of named characters who could plausibly speak in that scene.
-- Multiple roles can be present and speak in a single scene. A hackathon scene might list cofounder + competitor + mentor in cast. A Thiel-office scene might list vc (Thiel) and the player only.
-- ASSIGN CONCRETE NAMES to cast members. NO placeholder names: do NOT use Sandra, Chad, Victor, Brock, Stranger — those are forbidden defaults that recur across every player.
-- Real public figures are allowed VERBATIM when the seed beat or rolled cameos already named them (Peter Thiel, Sam Altman, Paul Graham, Garry Tan, Marc Andreessen, etc.).
-- Otherwise: invent context-appropriate names that fit the persona (a YC partner over coffee → name them; a competitor's CEO → give them a name; a recruiter's voice on the phone → give them a name).
+CAST AS A FULL SPEAKER ROSTER (LOAD-BEARING):
+- Each scene runs as MULTIPLE ROUNDS of dialogue (2-4 rounds, you pick). Within a scene, the player makes a choice each round; the next round's dialogue branches on it. Rounds share setting + cast + image; only dialogue + choices vary per round.
+- The "cast" array for each scene is the FULL ROSTER of people who can speak across all rounds of that scene. Pre-list:
+    a) the primary character (the scene's main role)
+    b) anyone the player might CALL during the scene (give them a name + role + blurb)
+    c) anyone who might WALK IN or interrupt (same — name, role, blurb)
+    d) anyone implied by the choices the player has on offer
+- If your scene's choices include "Call Priya," then Priya MUST appear in the cast roster with role=cofounder + name="Priya …" + blurb. Otherwise scene-gen can't render her voice and the call collapses to no answer.
+- Each scene has a primary "role" (vc | cofounder | reporter | hater | mentor) for image + voice routing. Multiple roles in the cast roster are explicitly allowed and encouraged when the scene's branches require it.
+- ASSIGN CONCRETE NAMES. NO placeholder names: do NOT use Sandra, Chad, Victor, Brock, Stranger — those are forbidden defaults.
+- Real public figures are allowed VERBATIM when the seed beat or rolled cameos already named them (Peter Thiel, Sam Altman, Paul Graham, Garry Tan, etc.).
 - Each scene's cast carries forward across the episode where it makes sense. If "Maya" is the cofounder candidate in scene 0, she's still Maya in scene 2 — same role + same name.
 
-PRE-FIXED SETTING + IMAGE:
+PRE-FIXED SETTING + IMAGE + ROUNDS:
 - Each scene must commit to a SETTING ("the YC co-working space, 7pm Friday", "Peter Thiel's office at Founders Fund", "Caltrain car, 4:35pm") and an IMAGE PROMPT (≤220 chars, no style words — the renderer prepends those).
 - Setting and imagePrompt are committed at episode-gen time. Scene-gen does NOT change them — Haiku only writes dialogue + choices reading the pre-fixed setting.
+- Each scene also commits to a ROUND COUNT (2-4). Pick based on how much the scene needs to breathe:
+    2 = a quick beat (a single exchange + reaction), e.g. a chance encounter
+    3 = standard (open + escalate + payoff), the default
+    4 = a fuller scene with real branching (a phone call mid-scene, a third character entering, a heated exchange)
 
 SEED POOL:
 - You receive a SEED POOL of 3–6 storylets (see ## SEED POOL below). These are pre-authored beats the engine has gated by player state.
@@ -100,9 +109,10 @@ OUTPUT SHAPE:
       "cast": [
         { "role": same enum, "name": string, "blurb"?: string (voice/personality, ≤220 chars) }
       ],
-      "beat": string (≤400 chars; what happens in this scene),
+      "beat": string (≤400 chars; what happens across all rounds of this scene),
       "kind": "encounter"|"solo"|"world-event" (optional),
-      "imagePrompt": string (≤220 chars; setting + character action + mood + composition. NO style words.)
+      "imagePrompt": string (≤220 chars; setting + character action + mood + composition. NO style words.),
+      "roundCount": 2-4
     }
   ],
   "storySoFar": string (REQUIRED for episodeIndex >= 1; ≤200 words; named-choice prose extending the prior summary with this episode's payoff),

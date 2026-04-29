@@ -18,10 +18,19 @@ export const scenePlanSchema = z.object({
   // 280 → 600). nullable() accepts Sonnet's explicit-null for
   // optional fields.
   setting: z.string().min(8).max(600),
+  /** Full speaker roster for this scene — primary role plus anyone
+   *  the player might call, anyone who might walk in, etc. The
+   *  planner pre-names them all so within-scene branching never
+   *  needs to invent a new character mid-round. */
   cast: z.array(castMemberSchema).min(1).max(6),
   beat: z.string().min(8).max(800),
   kind: z.enum(['encounter', 'solo', 'world-event']).nullable().optional(),
   imagePrompt: z.string().min(10).max(600),
+  /** Number of dialogue rounds in this scene. Each round = one
+   *  dialogue exchange + one choice block. The whole scene shares
+   *  setting + cast + imagePrompt; only dialogue + choices vary
+   *  per round, branching on the player's choices. */
+  roundCount: z.number().int().min(2).max(4).default(3),
 })
 
 export const episodePlanSchema = z.object({
