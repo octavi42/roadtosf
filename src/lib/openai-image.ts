@@ -34,6 +34,11 @@ export interface GenerateSceneImageOptions {
    *  archetype's generic imageStyle so the same character looks the
    *  same across scenes. */
   appearance?: string;
+  /** Cast member's name. When present, included in the image prompt so
+   *  gpt-image-2 can render the recognizable likeness for real public
+   *  figures (Sam Altman, Peter Thiel, etc). For invented NPC names the
+   *  model has no prior and falls back to the appearance description. */
+  name?: string;
 }
 
 export interface GenerateHeroImageOptions {
@@ -72,6 +77,7 @@ export async function generateSceneImage(
     quality = PRESETS.defaultQuality,
     format = PRESETS.defaultFormat,
     appearance,
+    name,
   } = opts;
 
   const archetypeDef = ARCHETYPES[archetype];
@@ -90,9 +96,16 @@ export async function generateSceneImage(
     ? appearance.trim()
     : archetypeDef.imageStyle;
 
+  // Lead the prompt with the cast member's name when supplied, so
+  // gpt-image-2 renders the recognizable likeness for real public
+  // figures rather than a generic "the partner emeritus".
+  const characterIntro = name && name.trim().length > 0
+    ? `Character: ${name.trim()} — ${archetypeDef.roleLabel} (${archetypeDef.title}).`
+    : `Character: ${archetypeDef.roleLabel} (${archetypeDef.title}).`;
+
   const fullPrompt = [
     PRESETS.stylePrefix,
-    `Character: ${archetypeDef.roleLabel} (${archetypeDef.title}). ${characterDescriptor}.`,
+    `${characterIntro} ${characterDescriptor}.`,
     `Scene: ${scenePrompt}`,
     "Match the art style of the reference image exactly.",
   ].join(" ");
