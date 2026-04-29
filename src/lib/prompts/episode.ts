@@ -83,6 +83,12 @@ HARD RULES:
 - Tone: comic, biting, cinematic.
 - The episode does NOT resolve the run.
 
+JSON STRING SAFETY (the most-broken rule, do not relax):
+- Inside any string field (theme, premise, setting, topic, blurb, title, storySoFar, etc.) NEVER use the " character to quote in-text speech or thoughts.
+- Use single quotes (') or em-dashes (—) for any in-text quotation. Bad: "blurb": "Tweets things like \\"compliance is a feature.\\"" Good: "blurb": "Tweets things like 'compliance is a feature.'"
+- Apostrophes in regular prose are fine (it's, don't, she's). Only the " character is the problem.
+- Every unescaped " inside a string field breaks the JSON parser and forces the whole episode to fall back. Do not include "double quotes" in any string value.
+
 OUTPUT SHAPE:
 {
   "episodeIndex": number,

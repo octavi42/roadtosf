@@ -542,21 +542,26 @@ export const useSessionStore = create<SessionState>()(
             shareMoment: beat.shareMoment ?? prior.shareMoment,
           };
           // If this beat is for the scene the player is currently on,
-          // reset their progress so they read the new dialogue lines
-          // (currentLineIndex jumps to the start of the new beat;
-          // showChoices=false; choiceMade clears so they can pick from
-          // the new choice block).
+          // reset their progress so they read the new dialogue lines.
+          // BUT only if streaming-side progress reset hasn't already
+          // fired (= choiceMade is still set). The streamed-first-line
+          // path in appendDialogueLine clears choiceMade the moment
+          // the first dialogueLine SSE event arrives — we don't want
+          // appendBeat to bounce the player back to line 0 after they
+          // have already started reading the streamed beat (this was
+          // the "first text plays twice" bug).
           const playerLLMIndex =
             state.progress.sceneIndex - AUTHORED_SCENE_COUNT;
-          const progress =
-            playerLLMIndex === llmIndex
-              ? {
-                  ...state.progress,
-                  currentLineIndex: lastBeatStart,
-                  showChoices: false,
-                  choiceMade: null,
-                }
-              : state.progress;
+          const shouldResetProgress =
+            playerLLMIndex === llmIndex && state.progress.choiceMade !== null;
+          const progress = shouldResetProgress
+            ? {
+                ...state.progress,
+                currentLineIndex: lastBeatStart,
+                showChoices: false,
+                choiceMade: null,
+              }
+            : state.progress;
           return { arc: { ...state.arc, scenes }, progress };
         }),
 

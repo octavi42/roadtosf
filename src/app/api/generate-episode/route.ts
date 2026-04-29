@@ -348,9 +348,13 @@ export async function POST(request: Request) {
           model: arcModel(),
           systemBlocks,
           userBlocks,
-          // Episode JSON with 3-5 scenes + cast + setting + imagePrompt
-          // each runs ~1.6-2k tokens in practice. 2200 leaves headroom.
-          maxTokens: 2200,
+          // Episode JSON: theme + premise + cast (2-8 named, each with
+          // a 200-300 char blurb) + scenes (3-5, each with setting,
+          // cast subset, imagePrompt, topic, title) + storySoFar.
+          // Real responses can hit 2200-2800 tokens. Bumping to 3200
+          // leaves headroom so the response isn't truncated mid-array
+          // (which yielded "expected , or ]" parse errors).
+          maxTokens: 3200,
           temperature: 0.85,
           signal: request.signal,
         })
