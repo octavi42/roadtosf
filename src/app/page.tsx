@@ -48,13 +48,17 @@ import {
   type Choice as AuthoredChoice,
 } from "@/lib/scenes";
 
+// WORLD voice cold-open. Implicates the player by name without predicting
+// their failure: outcome stays uncertain, the player is the one who'll find
+// out, and the Start CTA ("Show me →") is the player demanding the reveal.
 const WELCOME_LINES = [
-  "You've been thinking about San Francisco for two years.",
-  "Tonight, someone calls.",
-  "Five scenes between you and the rest of your life.",
+  "A few thousand people move to San Francisco every year to start a company.",
+  "Some of them become legends.",
+  "Most become a story other founders tell at dinner.",
+  "Tonight, you find out which.",
 ];
 
-const WELCOME_BACKGROUND = "/intro-v2/01-departure-board.png";
+const WELCOME_BACKGROUND = "/intro-v3/01-vision-board.png";
 
 const END_RUN_CHOICE_ID = "__end_run__";
 
@@ -1609,7 +1613,7 @@ export default function HomePage() {
               letterSpacing: "-0.005em",
             }}
           >
-            Start →
+            Show me →
           </button>
           <button
             type="button"
@@ -1888,7 +1892,7 @@ export default function HomePage() {
               ? (currentScene?.background ?? HOME_BACKGROUND)
               : phase === "generating-episode"
                 ? HOME_BACKGROUND
-                : "/intro-v2/01-departure-board.png"
+                : WELCOME_BACKGROUND
         }
         dialogueSlot={dialogueSlot}
         bottomPanel={bottomPanel}

@@ -2,6 +2,11 @@
 
 import { useEffect, useState } from "react";
 
+import {
+  STATIC_AUDIO_MANIFEST,
+  staticAudioKey,
+} from "@/lib/static-audio-manifest";
+
 interface AlignmentResponse {
   characters: string[];
   characterStartTimesSeconds: number[];
@@ -81,7 +86,46 @@ export function useDialogueAudio({
 
     setStatus("fetching");
 
+    // Check if this (voiceId, text) tuple was pre-generated. If yes, fetch
+    // the static audio + alignment from /public — zero ElevenLabs cost,
+    // sub-50ms latency. Falls through to live TTS only on fetch failure
+    // (stale manifest, file missing, network blip).
+    const staticEntry = STATIC_AUDIO_MANIFEST[staticAudioKey(voiceId, text)];
+
     (async () => {
+      if (staticEntry) {
+        try {
+          const [audioResp, alignResp] = await Promise.all([
+            fetch(staticEntry.audioUrl, { signal: ac.signal }),
+            fetch(staticEntry.alignmentUrl, { signal: ac.signal }),
+          ]);
+          if (!audioResp.ok) throw new Error(`static audio ${audioResp.status}`);
+          if (!alignResp.ok) throw new Error(`static align ${alignResp.status}`);
+          const audioBlob = await audioResp.blob();
+          const alignment = (await alignResp.json()) as AlignmentResponse;
+          if (canceled) return;
+          setAudioUrl(URL.createObjectURL(audioBlob));
+          setWordStartsMs(
+            computeWordStarts(
+              text,
+              alignment.characters,
+              alignment.characterStartTimesSeconds,
+            ),
+          );
+          setStatus("ready");
+          return;
+        } catch (err) {
+          if ((err as Error).name === "AbortError") return;
+          // Static fetch failed — fall through to live TTS instead of
+          // erroring out, so a stale manifest never blocks playback.
+          if (canceled) return;
+          console.warn(
+            "static audio fetch failed; falling back to /api/tts",
+            err,
+          );
+        }
+      }
+
       try {
         const resp = await fetch("/api/tts", {
           method: "POST",
