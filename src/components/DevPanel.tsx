@@ -73,6 +73,8 @@ export default function DevPanel() {
   const captureIntro = useSessionStore((s) => s.captureIntro);
   const reset = useSessionStore((s) => s.reset);
   const wipeAll = useSessionStore((s) => s.wipeAll);
+  const advanceScene = useSessionStore((s) => s.advanceScene);
+  const chooseOption = useSessionStore((s) => s.chooseOption);
   const paywallOpen = useSessionStore((s) => s.paywallOpen);
   const devGrantCredits = useSessionStore((s) => s.devGrantCredits);
   const paywallSatisfied = useSessionStore((s) => s.paywallSatisfied);
@@ -194,6 +196,20 @@ export default function DevPanel() {
       useSessionStore.getState().setCreditsRemaining(6);
     }
     setTick((t) => t + 1);
+  };
+
+  const skipScene = () => {
+    // Record a synthetic "skip" choice so the next episode's planner
+    // sees something in history (otherwise recentChoices is empty and
+    // the prompt's choice-responsiveness rules go quiet). 0/0 deltas
+    // = no stat impact. Then bump sceneIndex; the existing flow takes
+    // over (mid-episode → fire next scene's beat-gen, last scene →
+    // trip end-trigger → episode-gen).
+    if (phase === "scene") {
+      chooseOption("skip", "[dev skip]", 0, 0, false);
+      advanceScene();
+      setTick((t) => t + 1);
+    }
   };
 
   const togglePaywall = () => {
@@ -487,6 +503,15 @@ export default function DevPanel() {
               WIPE SESSION
             </button>
           </div>
+
+          <button
+            onClick={skipScene}
+            disabled={phase !== "scene"}
+            className="w-full text-[10px] text-violet-200/80 hover:text-violet-100 py-1 border border-violet-300/30 rounded transition-colors mb-1 disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Record a [dev skip] choice and advance to next scene — fastest way to fast-forward through a run"
+          >
+            SKIP SCENE →
+          </button>
 
           <button
             onClick={togglePaywall}
