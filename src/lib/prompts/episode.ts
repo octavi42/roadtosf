@@ -68,6 +68,17 @@ CAST ROSTER RULES:
 - Otherwise invent context-appropriate names.
 - Cast members carry through scenes: if "Maya" is the cofounder candidate in scene 1, she's still Maya in scene 3.
 
+CAST IDENTITY (LOAD-BEARING for voice + image consistency):
+- Every cast member MUST include "gender", "age", and "descriptives". Both at episode-level cast AND in each scene's cast subset (mirror exactly — same Maya = same gender/age/descriptives across all scenes).
+- gender: "male" | "female" | "neutral". Real public figures: use real-world gender (Peter Thiel = male, Sarah Tavel = female, Sam Altman = male, Cathie Wood = female). For invented names, pick to fit the role + name; aim for a balanced cast (do NOT make every VC male or every cofounder female).
+- age: "young" (≤30s) | "middle" (40s-50s) | "old" (60+). Peter Thiel = middle, Paul Graham = middle, Vinod Khosla = old, a typical YC batch cofounder = young.
+- descriptives: 3-5 short voice/personality adjectives that will steer ElevenLabs voice picking. Examples:
+    Peter Thiel → ["deep","measured","patrician"]
+    Sam Altman → ["calm","clipped","understated"]
+    a young hacker cofounder → ["fast","nervous","energetic"]
+    a tired YC partner → ["warm","weathered","calm"]
+  Use ONLY voice/delivery descriptors (deep, fast, calm, raspy, bright, dramatic, conversational). NOT bio descriptors (smart, founder, ex-Stripe).
+
 SCENE PLAN RULES:
 - 3–5 scenes per episode. Each scene =
     * setting: concrete time + place ("the YC kitchen, 11pm Tuesday"; "Peter Thiel's office at Founders Fund, 4pm")
@@ -103,14 +114,21 @@ OUTPUT SHAPE:
   "theme": string (≤240 chars),
   "premise": string (1–2 sentences),
   "cast": [
-    { "role": "vc"|"cofounder"|"reporter"|"hater"|"mentor", "name": string, "blurb"?: string (≤300 chars) }
+    {
+      "role": "vc"|"cofounder"|"reporter"|"hater"|"mentor",
+      "name": string,
+      "blurb"?: string (≤300 chars),
+      "gender": "male"|"female"|"neutral",
+      "age": "young"|"middle"|"old",
+      "descriptives": [string, ...]  // 3-5 voice adjectives
+    }
   ],
   "scenes": [
     {
       "index": 0..(N-1),
       "role": "vc"|"cofounder"|"reporter"|"hater"|"mentor",
       "setting": string (≤600 chars; concrete time + place),
-      "cast": [ { "role": ..., "name": string from episode roster, "blurb"?: ... } ],
+      "cast": [ { "role": ..., "name": <name from episode roster>, "blurb"?: ..., "gender": ..., "age": ..., "descriptives": [...] } ],
       "topic": string (≤400 chars; what happens here),
       "imagePrompt": string (≤220 chars; NO style words),
       "title": string (≤120 chars; short nameplate)

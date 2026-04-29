@@ -6,17 +6,26 @@
     {
       "role": "cofounder",
       "name": "Maya",
-      "blurb": "Ex-Stripe engineer, three coffees deep, has a deck about you on her laptop she made on the BART ride over. Wants to be your cofounder."
+      "blurb": "Ex-Stripe engineer, three coffees deep, has a deck about you on her laptop she made on the BART ride over. Wants to be your cofounder.",
+      "gender": "female",
+      "age": "young",
+      "descriptives": ["fast", "nervous", "warm", "clear"]
     },
     {
       "role": "hater",
       "name": "Brandon",
-      "blurb": "CEO of a competing startup with $4M and a year head start. Knows your name. Likes the espresso machine."
+      "blurb": "CEO of a competing startup with $4M and a year head start. Knows your name. Likes the espresso machine.",
+      "gender": "male",
+      "age": "young",
+      "descriptives": ["confident", "smug", "casual"]
     },
     {
       "role": "mentor",
       "name": "Linda",
-      "blurb": "Partner emeritus at YC. Has watched 200 startups fail. Closes her book and asks if you've eaten. The question is a test."
+      "blurb": "Partner emeritus at YC. Has watched 200 startups fail. Closes her book and asks if you've eaten. The question is a test.",
+      "gender": "female",
+      "age": "old",
+      "descriptives": ["calm", "warm", "patient", "weathered"]
     }
   ],
   "scenes": [
@@ -28,7 +37,10 @@
         {
           "role": "cofounder",
           "name": "Maya",
-          "blurb": "Ex-Stripe engineer; opens with an equity-sketch deck on her laptop."
+          "blurb": "Ex-Stripe engineer; opens with an equity-sketch deck on her laptop.",
+          "gender": "female",
+          "age": "young",
+          "descriptives": ["fast", "nervous", "warm", "clear"]
         }
       ],
       "topic": "A founder you barely know corners you at the kitchen island and pitches herself as your cofounder. The conversation can go several ways depending on what you ask her.",
@@ -43,7 +55,10 @@
         {
           "role": "hater",
           "name": "Brandon",
-          "blurb": "Competing CEO. Greets you by name. Asks about runway."
+          "blurb": "Competing CEO. Greets you by name. Asks about runway.",
+          "gender": "male",
+          "age": "young",
+          "descriptives": ["confident", "smug", "casual"]
         }
       ],
       "topic": "You bump into a competitor's CEO at the espresso machine. He probes for weaknesses in casual tone.",
@@ -58,7 +73,10 @@
         {
           "role": "mentor",
           "name": "Linda",
-          "blurb": "Partner emeritus at YC; closes her book as you walk past."
+          "blurb": "Partner emeritus at YC; closes her book as you walk past.",
+          "gender": "female",
+          "age": "old",
+          "descriptives": ["calm", "warm", "patient", "weathered"]
         }
       ],
       "topic": "A partner emeritus closes her book and asks if you've eaten. The question is a test that opens up into real conversation.",

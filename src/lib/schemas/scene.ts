@@ -41,6 +41,10 @@ const castMemberSchema = z.object({
   role: z.enum(ROLE_VALUES),
   name: z.string().min(1).max(80),
   blurb: z.string().max(300).optional(),
+  gender: z.enum(['male', 'female', 'neutral']).default('neutral'),
+  age: z.enum(['young', 'middle', 'old']).default('middle'),
+  descriptives: z.array(z.string().max(40)).max(8).default([]),
+  voiceId: z.string().min(1).max(64).optional(),
 })
 
 /**

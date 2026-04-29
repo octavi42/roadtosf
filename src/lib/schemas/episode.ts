@@ -6,6 +6,15 @@ const castMemberSchema = z.object({
   role: z.enum(ROLE_VALUES),
   name: z.string().min(1).max(80),
   blurb: z.string().max(300).optional(),
+  // Identity fields. The LLM is asked for gender/age/descriptives so
+  // each character can map to a unique ElevenLabs voice. Defaults
+  // catch LLM omissions — `neutral` resolves to half-credit gender
+  // scoring in resolveVoiceId, which is fine as a fallback.
+  gender: z.enum(['male', 'female', 'neutral']).default('neutral'),
+  age: z.enum(['young', 'middle', 'old']).default('middle'),
+  descriptives: z.array(z.string().max(40)).max(8).default([]),
+  // voiceId is server-attached post-parse, not LLM-supplied.
+  voiceId: z.string().min(1).max(64).optional(),
 })
 
 const scenePlanSchema = z.object({

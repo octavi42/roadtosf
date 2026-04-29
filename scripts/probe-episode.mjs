@@ -88,7 +88,10 @@ while (true) {
           console.log('seedIds:', (parsed.episode.seedIds ?? []).join(', '))
           console.log('episode cast:')
           for (const c of parsed.episode.cast ?? []) {
-            console.log(`  ${c.role}: ${c.name}${c.blurb ? ` — ${c.blurb}` : ''}`)
+            const ident = `[${c.gender ?? '?'}/${c.age ?? '?'}]`
+            const desc = (c.descriptives ?? []).join(',')
+            const voice = c.voiceId ? ` voice=${c.voiceId.slice(0, 6)}` : ' voice=MISSING'
+            console.log(`  ${c.role}: ${c.name} ${ident} ${desc}${voice}`)
           }
           console.log('scenes:')
           for (const s of parsed.episode.scenes ?? []) {
