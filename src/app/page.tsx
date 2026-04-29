@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useShallow } from "zustand/react/shallow";
 import { GameShell } from "@/components/GameShell";
@@ -43,6 +43,8 @@ import type {
 import {
   SCENES,
   HOME_BACKGROUND,
+  GROUP1_BACKGROUND,
+  GROUP_BACKGROUNDS,
   type SceneData,
   type DialogueLine as AuthoredDialogueLine,
   type Choice as AuthoredChoice,
@@ -168,6 +170,20 @@ function adaptLLMScene(scene: LLMScene): UnifiedScene {
 // planner picks 5 scenes.
 const END_RUN_VISIBLE_FROM_SCENE_INDEX =
   AUTHORED_SCENE_COUNT + EPISODE_LENGTH_DEFAULT;
+
+// When a scene declares GROUP1_BACKGROUND it's opting into the
+// "first afternoon in SF" pool. Map scene.id deterministically into a
+// shuffled-once list so each scene shows a distinct image within a
+// session, but stays stable across re-renders of that scene.
+function resolveSceneBackground(
+  scene: { id: number; background?: string } | null,
+  shuffledPool: readonly string[],
+): string | undefined {
+  if (!scene?.background) return scene?.background;
+  if (scene.background !== GROUP1_BACKGROUND) return scene.background;
+  if (shuffledPool.length === 0) return scene.background;
+  return shuffledPool[scene.id % shuffledPool.length];
+}
 
 function authoredAsUnified(scene: SceneData): UnifiedScene {
   return {
@@ -422,6 +438,19 @@ export default function HomePage() {
       }
       return next;
     });
+  }, []);
+
+  // Fisher-Yates shuffle of the group-fallback pool, frozen for the
+  // mount. Scenes that declare GROUP1_BACKGROUND get substituted with a
+  // pick from this shuffled list (indexed by scene.id) so a single
+  // playthrough sees four distinct frames instead of the same one.
+  const shuffledGroupBackgrounds = useMemo(() => {
+    const arr = [...GROUP_BACKGROUNDS];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
   }, []);
 
   const currentScene: UnifiedScene | null = (() => {
@@ -1981,7 +2010,8 @@ export default function HomePage() {
           phase === "welcome"
             ? WELCOME_BACKGROUND
             : phase === "scene"
-              ? (currentScene?.background ?? HOME_BACKGROUND)
+              ? (resolveSceneBackground(currentScene, shuffledGroupBackgrounds) ??
+                HOME_BACKGROUND)
               : phase === "generating-episode"
                 ? HOME_BACKGROUND
                 : WELCOME_BACKGROUND
