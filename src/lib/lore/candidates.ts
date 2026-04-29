@@ -1,5 +1,5 @@
 import { mulberry32 } from '@/lib/lore'
-import type { SfEvent, SfPerson, SfStory } from './lore-db'
+import type { LorePeopleRole, SfEvent, SfPerson, SfStory } from './lore-db'
 
 // Stage 1 of the picker (LORE_SYSTEM.md §3.1): pure, deterministic
 // candidate-set construction. No DB, no LLM. Everything in this file is
@@ -73,6 +73,39 @@ const STAT_BIAS_RULES: StatBiasRule[] = [
   // hype ≥ 4 → sam-altman lands as fate (the "altmanned" achievement hook).
   { personId: 'sam-altman', predicate: (s) => s.hype >= 4, boost: 5 },
 ]
+
+// Role-relevance gate. Roles listed here only enter the wildcard pool
+// when at least one of the listed flavor tags is active for this
+// episode. Reporters were polluting every run because the corpus is
+// small (~9 reporters out of ~50 people) so they kept landing as
+// wildcards regardless of theme — Priya Anand showing up in every
+// startup-fundraising episode despite zero press relevance.
+//
+// Attendee-derived candidates (people listed on a selected event)
+// bypass this gate: events themselves are scored by tag overlap, so a
+// reporter at a launch party already passed a relevance filter.
+const ROLE_RELEVANCE_TAGS: Partial<Record<LorePeopleRole, string[]>> = {
+  reporter: [
+    'press',
+    'media',
+    'launch',
+    'announcement',
+    'controversy',
+    'scandal',
+    'leak',
+    'pr',
+    'coverage',
+  ],
+}
+
+function isRoleRelevant(role: LorePeopleRole, flavorSet: Set<string>): boolean {
+  const required = ROLE_RELEVANCE_TAGS[role]
+  if (!required) return true
+  for (const tag of required) {
+    if (flavorSet.has(tag)) return true
+  }
+  return false
+}
 
 // recencyBoost: 0..2, peaks at "tonight" and falls off as the event ages or
 // drifts further out. Curve is intentionally simple — same-day = 2,
@@ -161,8 +194,13 @@ export function pickCandidatePeople(
   }
 
   // 2) Sample N wildcards from the full pool, deterministic per seed.
+  // Apply role-relevance gate: reporters only wildcard when the
+  // episode's flavor tags signal press relevance. Other roles are
+  // ungated.
   const wildcards = sampleN(
-    people.filter((p) => !attendeeIds.has(p.id)),
+    people.filter(
+      (p) => !attendeeIds.has(p.id) && isRoleRelevant(p.role, flavorSet),
+    ),
     WILDCARD_PER_EPISODE,
     `${input.seed}:wildcard`,
   )
