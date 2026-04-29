@@ -30,7 +30,7 @@ import type {
   Scene as LLMScene,
   ShareMoment,
 } from "@/lib/types";
-import { fetchEpisode } from "@/lib/streamEpisode";
+import { fetchEpisode, type FetchEpisodeResult } from "@/lib/streamEpisode";
 import { streamScene } from "@/lib/streamScene";
 import { PaywallRequiredError } from "@/lib/paywall";
 import { rollCameos } from "@/lib/cameos/roll";
@@ -536,6 +536,13 @@ export default function HomePage() {
   const imageGenFiredRef = useRef<Set<number>>(new Set()); // llm indices whose image gen was requested
   const arcPersistedRef = useRef<number>(-1); // last episodeIndex whose plan was PATCHed
   const extractFiredForRef = useRef<string | null>(null); // last startupDescription extracted for
+  // Pre-genned next episode plan, held until the player completes the
+  // current episode. Promise resolves to the plan or null on error
+  // (errors fall through to a fresh fetch when the player crosses).
+  const pendingEpisodeRef = useRef<{
+    episodeIndex: number;
+    promise: Promise<FetchEpisodeResult | null>;
+  } | null>(null);
   // Flips true once extraction has settled (success or failure). Arc-gen is
   // gated on this so Sonnet never receives a half-populated player facts block
   // — the cause of the "Maya in The Uninvited Cofounder" bleed.
@@ -547,6 +554,7 @@ export default function HomePage() {
     imageGenFiredRef.current = new Set();
     arcPersistedRef.current = -1;
     extractFiredForRef.current = null;
+    pendingEpisodeRef.current = null;
     // If the intro arrived with missingQuestions already populated (dev skip,
     // or a hydrated session), treat extraction as resolved — otherwise gen
     // would stall waiting for an extract-facts call that won't be re-issued.
@@ -975,6 +983,55 @@ export default function HomePage() {
   // arc — typically after 3–6 scenes.
   // Safety: also force-end after MAX_SCENES_PER_EPISODE so the LLM
   // can't run an episode forever.
+
+  // Pre-gen: kick off the next episode's planner the moment the
+  // player enters the LAST planned scene of the current episode. The
+  // result is held in pendingEpisodeRef and only activated when the
+  // end-trigger below fires (player crosses past the closer). This
+  // overlaps episode-gen with the player's last-scene play, so the
+  // wait between episodes is mostly hidden.
+  useEffect(() => {
+    if (phase !== "scene") return;
+    const ep = arc?.currentEpisode;
+    if (!ep || !Array.isArray(ep.scenes) || ep.scenes.length === 0) return;
+    const startLLM = ep.startLLMIndex ?? 0;
+    const localIndex = sceneIndex - AUTHORED_SCENE_COUNT - startLLM;
+    if (localIndex !== ep.scenes.length - 1) return;
+
+    const nextEpisode = ep.episodeIndex + 1;
+    if (episodeGenFiredRef.current.has(nextEpisode)) return;
+    episodeGenFiredRef.current.add(nextEpisode);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      EPISODE_GEN_TIMEOUT_MS,
+    );
+    const promise = fetchEpisode(buildEpisodeRequestBody(nextEpisode), {
+      signal: controller.signal,
+    })
+      .catch((err): FetchEpisodeResult | null => {
+        // Silent during pre-gen — the end-trigger will retry fresh
+        // when the player crosses, surfacing paywall etc at the
+        // right narrative moment.
+        console.warn(
+          `pre-gen[${nextEpisode}] failed (will retry on cross)`,
+          err,
+        );
+        episodeGenFiredRef.current.delete(nextEpisode);
+        if (
+          pendingEpisodeRef.current &&
+          pendingEpisodeRef.current.episodeIndex === nextEpisode
+        ) {
+          pendingEpisodeRef.current = null;
+        }
+        return null;
+      })
+      .finally(() => clearTimeout(timeoutId));
+
+    pendingEpisodeRef.current = { episodeIndex: nextEpisode, promise };
+  }, [phase, sceneIndex, arc?.currentEpisode, buildEpisodeRequestBody]);
+
   useEffect(() => {
     if (phase !== "scene") return;
     const ep = arc?.currentEpisode;
@@ -1003,6 +1060,33 @@ export default function HomePage() {
     if (playerLocalIndex <= endSceneLocal) return;
 
     const nextEpisode = ep.episodeIndex + 1;
+
+    // Fast path: pre-gen already kicked off (and possibly already
+    // resolved) when the player entered the last planned scene. Wait
+    // on its promise — if it resolved successfully, activate. If it
+    // resolved to null (pre-gen failure), fall through to a fresh
+    // fetch.
+    const pending = pendingEpisodeRef.current;
+    if (pending && pending.episodeIndex === nextEpisode) {
+      enterGeneratingEpisode();
+      pending.promise
+        .then((data) => {
+          if (data) {
+            episodePlanReady(data.episode);
+            if (typeof data.creditsRemaining === "number") {
+              setCreditsRemaining(data.creditsRemaining);
+            }
+            pendingEpisodeRef.current = null;
+            return;
+          }
+          // Pre-gen failed silently. Clear and let the next render
+          // refire this effect via the fresh-fetch path below.
+          pendingEpisodeRef.current = null;
+          episodeGenFiredRef.current.delete(nextEpisode);
+        });
+      return;
+    }
+
     if (episodeGenFiredRef.current.has(nextEpisode)) return;
     episodeGenFiredRef.current.add(nextEpisode);
 
