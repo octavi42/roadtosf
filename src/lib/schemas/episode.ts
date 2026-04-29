@@ -36,7 +36,9 @@ export const episodePlanSchema = z.object({
   premise: z.string().min(10).max(1200),
   cast: z.array(castMemberSchema).min(2).max(8),
   scenes: z.array(scenePlanSchema).min(3).max(5),
-  storySoFar: z.string().min(20).max(1500).nullable().optional(),
+  // No min — Sonnet emits "" on episode 0 (no prior story to
+  // summarize). Empty / short strings are fine; only the max matters.
+  storySoFar: z.string().max(1500).nullable().optional(),
   seedIds: z.array(z.string()).default([]),
 })
 
