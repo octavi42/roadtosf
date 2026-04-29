@@ -472,8 +472,8 @@ function PaywallForm({ onSatisfied }: PaywallPanelProps) {
         <div className="grid grid-cols-3 gap-3 mt-4 text-[10px] tracking-[0.18em] uppercase">
           <StubField label="Flight" value="RTSF · 001" />
           <StubField
-            label="Credits"
-            value={`${selectedPack.credits} groups`}
+            label="Scenes"
+            value={`${selectedPack.credits} scenes`}
           />
           <StubField
             label="Fare"

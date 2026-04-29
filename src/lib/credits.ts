@@ -301,5 +301,12 @@ export const REASONS = {
   STRIPE_PURCHASE: 'stripe_purchase',
   GROUP_DEBIT: 'group_debit',
   EPISODE_DEBIT: 'episode_debit',
+  SCENE_DEBIT: 'scene_debit',
   DEV_GRANT: CREDIT_REASON_DEV,
 } as const
+
+// Worst-case scenes per LLM episode (EPISODE_LENGTH_MAX in
+// src/lib/session.ts). Episodes are gated on this floor so a player
+// never starts an episode they can't finish — paywall fires between
+// episodes only.
+export const EPISODE_FLOOR = 5

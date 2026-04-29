@@ -1,9 +1,12 @@
 // Pricing per BUSINESS.md. Lives in its own module so client components can
 // import it without dragging in the server-only `stripe` SDK.
 //
-// 1 credit = 1 LLM-generated group of 4 sub-scenes (one Sonnet call per
-// sub-scene, one shared image, four TTS lines). Cost basis ~$0.42/group.
-// Two-SKU shape per BUSINESS.md §"Recommended pricing — UX-optimized".
+// 1 credit = 1 LLM-generated scene. The engine debits one credit on
+// the first beat of each scene; subsequent beats within the same scene
+// are free. Episodes run 3–5 scenes; /api/generate-episode refuses to
+// start an episode unless the balance >= EPISODE_FLOOR (5), so the
+// player never gets stranded mid-narrative — paywall fires between
+// episodes only. Two-SKU shape per BUSINESS.md.
 
 export type PackId = "normal" | "business";
 
@@ -21,8 +24,9 @@ export const PACKS: Record<PackId, Pack> = {
     label: "One-Way Ticket",
     cabin: "Economy",
     priceCents: 500,
-    // 6 credits ≈ 6 groups ≈ ~1 full episode + a head start on the next.
-    // COGS ≈ $2.52, Stripe ≈ $0.45, net ≈ $2.03 (40% margin).
+    // 6 scenes — covers a worst-case 5-scene episode with 1 left
+    // over. The leftover can't start a new episode (EPISODE_FLOOR=5),
+    // so the player gets exactly 1 guaranteed full episode per pack.
     credits: 6,
   },
   business: {
@@ -30,8 +34,10 @@ export const PACKS: Record<PackId, Pack> = {
     label: "Founder Pass",
     cabin: "Business",
     priceCents: 1500,
-    // 20 credits ≈ 4 episodes. COGS ≈ $8.40, Stripe ≈ $0.74,
-    // net ≈ $5.86 (39% margin).
+    // 20 scenes — exactly 4 guaranteed full episodes (4 × 5 worst
+    // case). Shorter episodes leave dead credits the player can't
+    // spend; that's deliberate — the SKU is "4 episodes," not "20
+    // arbitrary scenes."
     credits: 20,
   },
 };

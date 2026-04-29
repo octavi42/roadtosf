@@ -4,34 +4,40 @@ Pricing model, cost structure, and unit economics for the game. Read alongside `
 
 ---
 
-> **April 2026 update — credit-based metering.** The "1 play = 1 full
-> playthrough" math below predates the group-based LLM tail
-> (`GROUP_ARCHITECTURE.md`). The runtime now bills per-group: **1 credit = 1
-> LLM-generated group of 4 sub-scenes** (one shared image, four Sonnet
-> calls, four TTS lines, ≈$0.42 COGS/group). The pack values in
-> `src/lib/packs.ts` are the source of truth (currently $5 → 6 credits, $15
-> → 20 credits) and the playthrough-level math in §"Cost per playthrough"
-> still works as a sanity bound, just with N variable rather than fixed.
-> Re-derive after the first 100 real runs land in `usage_log` per
-> §"What to instrument before re-pricing".
+> **April 2026 update — per-scene metering, episode-guaranteed SKUs.**
+> The runtime bills **per scene**: 1 credit debits on the first beat
+> of each LLM scene; subsequent beats inside the same scene are free.
+> Episodes are 3–5 scenes; `/api/generate-episode` refuses to start an
+> episode unless the balance is at least `EPISODE_FLOOR` (5). That
+> guarantees the player never gets paywalled mid-narrative — the wall
+> fires only between episodes.
+>
+> Customer-facing SKU is **episodes**: $5 = 1 guaranteed full episode,
+> $15 = 4 guaranteed full episodes. Internally credits remain the
+> unit of metering and surface in the UI as "scenes left" (a counter
+> the player watches tick down per scene). The per-playthrough COGS
+> table below still works as a sanity bound; re-derive once
+> `usage_log` has 100+ real episodes.
 
 ---
 
 ## TL;DR
 
-- **Marginal cost: ~$0.62 per playthrough** (Sonnet 4.6 + ElevenLabs Creator + Flux Dev, with archetype portraits pre-cached).
-- **Primary SKU: $5 for 3 plays.** Net ~$3 per pack after Stripe + COGS.
-- **Upsell SKU: $15 for 10 plays.** Shown only after a player finishes their first 3.
+- **Marginal cost: ~$0.12 per scene** (Sonnet 4.6 + ElevenLabs Creator + Flux Dev, archetype portraits pre-cached). A 5-scene episode lands ~$0.60.
+- **Primary SKU: $5 = 1 guaranteed full episode.** 6 scenes credited; 1 floats as a buffer the player can't spend solo (worst-case episode is 5).
+- **Upsell SKU: $15 = 4 guaranteed full episodes.** 20 scenes credited; offered to players who finish episode 1.
 - **BYO API key tier: free.** Power users cost nothing and convert into evangelists.
 - **TTS is 60% of variable cost.** Every char of dialogue trimmed compounds margin.
+- **Paywall fires only between episodes.** The episode-start floor check (`EPISODE_FLOOR=5`) makes the share-card payoff reachable on every paid run.
 
 ---
 
 ## Definitions
 
-- **Playthrough** = one complete game = 1 arc generation + 5 scenes + 1 epilogue + voiced dialogue + scene images. ~10-15 minutes of play.
-- A "pack" of N plays = N independent playthroughs (different startup name, different NPCs, different ending each time).
-- Replay incentive = unlock the 12 hidden achievements; players need ~6-12 playthroughs to collect most of them.
+- **Scene** = the metered unit. One LLM-generated scene container holding 1+ beats. The credit debit fires on the scene's first beat; replays inside the same scene cost nothing.
+- **Episode** = 3–5 scenes that share a setting + cast roster. The customer-facing SKU. `EPISODE_FLOOR=5` is the worst-case scene count we provision against.
+- **Playthrough** = the player's session — onboarding intro + N episodes worth of credits, ending on the share card. Episodes per playthrough = `floor(credits / 5)` (with leftovers stranded so an episode-2 paywall never strands mid-narrative).
+- Replay incentive = unlock the 12 hidden achievements; players need several full playthroughs to collect most of them.
 
 ---
 
@@ -97,21 +103,22 @@ Don't price below $3 — Stripe's $0.30 fixed fee crushes single-dollar transact
 
 ## Recommended pricing — UX-optimized
 
-Two SKUs only. Choice paralysis at the paywall kills conversion harder than wrong pricing does.
+Two SKUs only. Choice paralysis at the paywall kills conversion harder than wrong pricing does. Every SKU = a whole number of guaranteed episodes; never strand a player mid-narrative.
 
-| SKU | Price | Plays | When shown |
-|---|---|---|---|
-| **One-Way Ticket** | $5 | 3 | Default for first-time visitors |
-| **Founder Pass** | $15 | 10 | Upsell, shown only after the first 3 plays are used |
-| **BYO API Key** | Free | Unlimited | Power-user opt-in, framed in-world as "bringing your own capital" |
+| SKU | Price | Episodes | Scenes credited | When shown |
+|---|---|---|---|---|
+| **One-Way Ticket** | $5 | 1 | 6 | Default for first-time visitors |
+| **Founder Pass** | $15 | 4 | 20 | Upsell, shown after the first episode is used |
+| **BYO API Key** | Free | Unlimited | n/a | Power-user opt-in, framed in-world as "bringing your own capital" |
 
 **Why this shape:**
-- 3 plays is enough that a bad first run doesn't feel like a ripoff. Lower than that and refund pressure spikes.
-- $5 is the impulse-buy threshold for a 30-45 minute experience. Higher than that and conversion drops.
-- The 10-pack is for the achievement-hunters; 12 hidden achievements means committed players want ~10 plays. Showing it after the first 3 means it's offered to people who've already felt the pull.
+- 1 full episode for $5 is enough that a bad first run reaches its share card — the only marketing channel that matters for a virality product.
+- $5 is the impulse-buy threshold; higher tanks conversion.
+- Founder Pass at $15 = 4 episodes is the achievement-hunter SKU. 12 hidden achievements means committed players want multiple full episodes; showing it after episode 1 means it's offered to people who've already felt the pull.
 - BYO key keeps technical users on the platform without cannibalizing paid revenue (most users won't have an API key).
+- Customer never sees the word "credit." The UI counter says "scenes left." Internal/external mental models stay one layer.
 
-**Tradeoff:** simpler pricing leaves money on the table from the "would have paid $9 for 3" segment. For a virality product, that's the right tradeoff — conversion > ARPU because each shared ending is also a marketing impression.
+**Tradeoff:** simpler pricing leaves money on the table from the "would have paid $9 for 1 episode" segment. For a virality product, that's the right tradeoff — conversion > ARPU because each shared ending is also a marketing impression.
 
 ---
 

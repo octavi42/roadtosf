@@ -14,6 +14,9 @@ import {
 import type { Beat, DialogueLine, Episode, Role } from '@/lib/types'
 import { getToneSpec } from '@/lib/cameos/tone'
 import type { ToneId, ToneSpec } from '@/lib/cameos/types'
+import { readAnonId } from '@/lib/anon-id'
+import { readSessionEmail } from '@/lib/auth'
+import { debitCredit, InsufficientCreditsError, REASONS } from '@/lib/credits'
 
 const AUTHORED_SCENE_COUNT = 8
 
@@ -249,6 +252,47 @@ export async function POST(request: Request) {
     asInt(body.episodeIndex, episode.episodeIndex) * 8 +
     sceneIndexInEpisode +
     1
+
+  // Per-scene credit debit. We charge once per scene (on the first
+  // beat) — subsequent beats within the same scene are free. The
+  // episode-start floor check in /api/generate-episode guarantees the
+  // balance covers a worst-case 5-scene episode, so a 402 here would
+  // indicate a race or a manually-tampered balance. Debit BEFORE the
+  // LLM call so a busted balance never spends Anthropic tokens.
+  if (beatIndex === 0) {
+    const playthroughIdRaw = asString(body.playthroughId, '') || null
+    const [anonId, email] = await Promise.all([
+      readAnonId(),
+      readSessionEmail(),
+    ])
+    try {
+      await debitCredit(
+        { anonId, email },
+        {
+          reason: REASONS.SCENE_DEBIT,
+          playthroughId: playthroughIdRaw,
+          episodeIndex: episode.episodeIndex,
+          groupIndex: sceneIndexInEpisode,
+        },
+      )
+    } catch (err) {
+      if (err instanceof InsufficientCreditsError) {
+        return NextResponse.json(
+          {
+            error: 'insufficient_credits',
+            paywall: true,
+            creditsRemaining: err.balance,
+          },
+          { status: 402 },
+        )
+      }
+      console.error('generate-scene: debit failed', err)
+      return NextResponse.json(
+        { error: 'credit debit failed' },
+        { status: 500 },
+      )
+    }
+  }
 
   // Cast pool widens at beat 0 of scenes >0: scene-gen has authority
   // to pivot the planned scene if the prior scene's outcome made it
