@@ -15,25 +15,22 @@ import EndingFateCard from "@/components/EndingFateCard";
 import {
   useSessionStore,
   AUTHORED_SCENE_COUNT,
-  EPISODE_LENGTH,
+  EPISODE_LENGTH_DEFAULT,
   POST_QA_SCENE_INDEX,
-  SCENES_PER_GROUP,
 } from "@/lib/session";
 import { ARCHETYPES } from "@/lib/archetypes";
 import { voiceIdForSpeaker, NARRATOR_VOICE_ID } from "@/lib/voices/speaker";
 import type {
-  ArcSkeleton,
   EndingKey,
+  Episode,
   Scene as LLMScene,
-  SceneOutline,
   ShareMoment,
 } from "@/lib/types";
-import { streamArc } from "@/lib/streamArc";
+import { fetchEpisode } from "@/lib/streamEpisode";
 import { streamScene } from "@/lib/streamScene";
 import { PaywallRequiredError } from "@/lib/paywall";
 import { rollCameos } from "@/lib/cameos/roll";
 import { rollTone } from "@/lib/cameos/tone";
-import fallbackArcJson from "@/lib/fallback/arc.json";
 import type {
   IntroData,
   MissingQuestion,
@@ -118,12 +115,20 @@ interface UnifiedScene {
   shareMoment?: ShareMoment;
 }
 
-function formatArchetypeSpeaker(speaker: string): string {
+function formatRoleSpeaker(
+  speaker: string,
+  cast?: Array<{ role: string; name: string }>,
+): string {
   if (speaker === "player") return "You";
   if (speaker === "narrator") return "";
+  // Cast on the active scene plan wins — the LLM may have named this
+  // role per-episode (e.g. "Peter Thiel" for the partner role).
+  const fromCast = cast?.find((c) => c.role === speaker);
+  if (fromCast) return `${fromCast.name} · ${ARCHETYPES[fromCast.role as keyof typeof ARCHETYPES]?.title ?? ""}`.trim();
   const def = ARCHETYPES[speaker as keyof typeof ARCHETYPES];
   if (!def) return speaker;
-  return `${def.name} · ${def.title}`;
+  // No canonical name anymore — fall back to the role label + title.
+  return `${def.roleLabel} · ${def.title}`;
 }
 
 function adaptLLMScene(scene: LLMScene): UnifiedScene {
@@ -134,7 +139,7 @@ function adaptLLMScene(scene: LLMScene): UnifiedScene {
     // placeholder while gpt-image-2 is still in flight.
     background: scene.imageUrl ?? HOME_BACKGROUND,
     dialogue: scene.dialogue.map((d) => ({
-      speaker: formatArchetypeSpeaker(d.speaker),
+      speaker: formatRoleSpeaker(d.speaker, scene.cast),
       text: d.text,
       voiceId: voiceIdForSpeaker(d.speaker),
     })),
@@ -150,8 +155,11 @@ function adaptLLMScene(scene: LLMScene): UnifiedScene {
 }
 
 // Show the "End my run" exit only after the player has finished one full LLM
-// episode. Keeps short runs from ending prematurely.
-const END_RUN_VISIBLE_FROM_SCENE_INDEX = AUTHORED_SCENE_COUNT + EPISODE_LENGTH;
+// episode. Keeps short runs from ending prematurely. Uses the upper-bound
+// episode length so we don't surface "End my run" mid-first-episode if the
+// planner picks 5 scenes.
+const END_RUN_VISIBLE_FROM_SCENE_INDEX =
+  AUTHORED_SCENE_COUNT + EPISODE_LENGTH_DEFAULT;
 
 function authoredAsUnified(scene: SceneData): UnifiedScene {
   return {
@@ -215,55 +223,7 @@ function buildScene4ForExtraction(
   };
 }
 
-const ARC_GEN_TIMEOUT_MS = 45000;
-const SCENE_GEN_TIMEOUT_MS = 30000;
-
-interface SceneGenResponse {
-  scene: LLMScene;
-  source: "llm" | "fallback";
-  // Set on group-leader (sub 0) responses after a successful credit debit.
-  // Sub-1..3 responses include it too as a free balance refresh.
-  creditsRemaining?: number | null;
-}
-
-// Synthesizes a placeholder skeleton from a single arriving scene outline so
-// the `generating-arc` effect can fire group 0's leader scene-gen while the
-// rest of the arc is still streaming. The scene prompt filters out outlines
-// whose beat === "__pending" so the partial only leaks scene 0's beat into
-// that first call. Replaced by the full skeleton on the stream's `done`
-// event.
-const PARTIAL_BEAT_MARKER = "__pending";
-const PARTIAL_PREMISE = "Pending — outline streaming.";
-
-function makePartialArcSkeleton(
-  episodeIndex: number,
-  firstOutline: SceneOutline,
-): ArcSkeleton {
-  return {
-    episodeIndex,
-    premise: PARTIAL_PREMISE,
-    scenes: [
-      firstOutline,
-      ...Array.from({ length: 4 }, (_, i) => ({
-        index: i + 1,
-        archetype: "cofounder" as const,
-        beat: PARTIAL_BEAT_MARKER,
-      })),
-    ],
-  };
-}
-
-function isPartialArcSkeleton(skeleton: ArcSkeleton): boolean {
-  return skeleton.scenes.some((s) => s.beat === PARTIAL_BEAT_MARKER);
-}
-
-// Static fallback skeleton used when streamArc rejects after a partial was
-// already emitted. Without this, a 45s client timeout (or any other stream
-// failure mid-stream) would strand the run with __pending placeholders for
-// scenes 1-4, breaking the rest of the episode.
-function makeFallbackArcSkeleton(episodeIndex: number): ArcSkeleton {
-  return { ...(fallbackArcJson as ArcSkeleton), episodeIndex };
-}
+const EPISODE_GEN_TIMEOUT_MS = 45000;
 
 async function postWithTimeout<T>(
   url: string,
@@ -320,11 +280,11 @@ export default function HomePage() {
     captureIntro,
     factsExtracted,
     paywallSatisfied,
-    arcSkeletonReady,
+    episodePlanReady,
     dynamicSceneReady,
     sceneImageReady,
-    enterGeneratingArc,
-    exitGeneratingArc,
+    enterGeneratingEpisode,
+    exitGeneratingEpisode,
     endRun,
     setEpilogue,
     advanceLine,
@@ -342,11 +302,11 @@ export default function HomePage() {
       captureIntro: s.captureIntro,
       factsExtracted: s.factsExtracted,
       paywallSatisfied: s.paywallSatisfied,
-      arcSkeletonReady: s.arcSkeletonReady,
+      episodePlanReady: s.episodePlanReady,
       dynamicSceneReady: s.dynamicSceneReady,
       sceneImageReady: s.sceneImageReady,
-      enterGeneratingArc: s.enterGeneratingArc,
-      exitGeneratingArc: s.exitGeneratingArc,
+      enterGeneratingEpisode: s.enterGeneratingEpisode,
+      exitGeneratingEpisode: s.exitGeneratingEpisode,
       endRun: s.endRun,
       setEpilogue: s.setEpilogue,
       advanceLine: s.advanceLine,
@@ -360,7 +320,6 @@ export default function HomePage() {
     })),
   );
   const setRunFate = useSessionStore((s) => s.setRunFate);
-  const replaceOutline = useSessionStore((s) => s.replaceOutline);
   const setSceneImagePrompt = useSessionStore((s) => s.setSceneImagePrompt);
   const appendDialogueLine = useSessionStore((s) => s.appendDialogueLine);
   // Read sessionEmail directly off the store so any code path that flips
@@ -513,32 +472,27 @@ export default function HomePage() {
     }
   }, [showChoices]);
 
-  // Helpers for arc-call construction --------------------------------------
-  const buildArcRequestBody = useCallback(
+  // Helpers for episode-call construction.
+  // The episode planner's load-bearing input is `lastChoice` — the
+  // single most-recent decision the player made. The new episode is a
+  // direct consequence of it.
+  const buildEpisodeRequestBody = useCallback(
     (episodeIndex: number) => {
-      // For episode 0: send all authored choices.
-      // For episode 1+: send only the most recent episode's choices; older
-      // context lives in the rolling storySoFar on `arc`.
-      const recentChoices =
-        episodeIndex === 0
-          ? history
-              .filter((h) => h.sceneId <= AUTHORED_SCENE_COUNT)
-              .map((h) => ({
-                sceneId: h.sceneId,
-                choiceLabel: h.choiceLabel,
-                hypeDelta: h.hypeDelta,
-                integrityDelta: h.integrityDelta,
-              }))
-          : history.slice(-EPISODE_LENGTH).map((h) => ({
-              sceneId: h.sceneId,
-              choiceLabel: h.choiceLabel,
-              hypeDelta: h.hypeDelta,
-              integrityDelta: h.integrityDelta,
-            }));
+      const recentChoices = history.slice(-8).map((h) => ({
+        sceneId: h.sceneId,
+        choiceLabel: h.choiceLabel,
+        hypeDelta: h.hypeDelta,
+        integrityDelta: h.integrityDelta,
+      }));
+      const lastChoice =
+        recentChoices.length > 0
+          ? recentChoices[recentChoices.length - 1]
+          : undefined;
 
       return {
         episodeIndex,
         priorStorySoFar: arc?.storySoFar,
+        lastChoice,
         startupName: arc?.startupName ?? intro.startupName ?? "the startup",
         startupDescription: intro.startupDescription ?? "",
         founderPersona: arc?.founderPersona ?? intro.selfDescription ?? "",
@@ -553,37 +507,31 @@ export default function HomePage() {
         seed: playthroughId ?? `local-${Date.now()}`,
         rolledCameos: arc?.rolledCameos,
         tone: arc?.tone,
-        // Storylet engine state — server reads this to apply cooldowns
-        // + cross-episode flag gates. Empty default lets episode 0
-        // start clean.
-        storyletState: arc?.storyletState ?? { fired: [], flags: {} },
+        firedSeedIds: arc?.firedSeedIds ?? [],
+        playthroughId,
       };
     },
     [arc, intro, history, hype, integrity, playthroughId],
   );
 
-  // Reset all per-run refs when playthroughId changes (new run)
-  const arcGenFiredRef = useRef<Set<number>>(new Set()); // episodes already requested
+  // Per-run refs — reset on new playthrough.
+  const episodeGenFiredRef = useRef<Set<number>>(new Set()); // episodes already requested
   const sceneGenFiredRef = useRef<Set<number>>(new Set()); // global llm indices already requested
   const imageGenFiredRef = useRef<Set<number>>(new Set()); // llm indices whose image gen was requested
-  const arcPersistedRef = useRef<number>(-1); // last episodeIndex whose skeleton was PATCHed
+  const arcPersistedRef = useRef<number>(-1); // last episodeIndex whose plan was PATCHed
   const extractFiredForRef = useRef<string | null>(null); // last startupDescription extracted for
-  // Tracks which episode's first scene-gen has been fired. Episode 0 only;
-  // regen path uses its own dedup via sceneGenFiredRef.
-  const firstSceneFiredRef = useRef<number | null>(null);
   // Flips true once extraction has settled (success or failure). Arc-gen is
   // gated on this so Sonnet never receives a half-populated player facts block
   // — the cause of the "Maya in The Uninvited Cofounder" bleed.
   const [extractionResolved, setExtractionResolved] = useState(false);
   useEffect(() => {
-    arcGenFiredRef.current = new Set();
+    episodeGenFiredRef.current = new Set();
     sceneGenFiredRef.current = new Set();
     imageGenFiredRef.current = new Set();
     arcPersistedRef.current = -1;
     extractFiredForRef.current = null;
-    firstSceneFiredRef.current = null;
     // If the intro arrived with missingQuestions already populated (dev skip,
-    // or a hydrated session), treat extraction as resolved — otherwise arc-gen
+    // or a hydrated session), treat extraction as resolved — otherwise gen
     // would stall waiting for an extract-facts call that won't be re-issued.
     const presetMissing =
       useSessionStore.getState().intro.missingQuestions !== undefined;
@@ -685,334 +633,121 @@ export default function HomePage() {
   ]);
 
   // Episode 0 generation: fire as soon as the player has cleared the QA
-  // scene (sceneIndex 3 — see session.ts authored layout). At that point
-  // every player-facts field Sonnet needs (team, fundingModel, stage,
-  // targetCustomer, concern) is captured, so arc-gen can run while the
-  // player walks through scenes 4–7. ~12s arc-gen now overlaps with ~30s
-  // of authored scene play instead of just the last two beats.
-  // Gated on extraction having resolved — otherwise Sonnet receives an
-  // undefined team and falls back to inventing a cofounder (the Maya bleed).
-  // Safety bypass: if the player jumped straight here via the dev panel and
-  // never submitted scene 2, extraction will never fire — fall back to firing
-  // arc-gen anyway so the run isn't soft-locked.
+  // scene (sceneIndex 3). At that point every player-facts field the
+  // planner needs is captured, so episode-gen can run while the player
+  // walks through scenes 4–7.
+  // Gated on extraction having resolved — otherwise the planner receives
+  // an undefined team and the prompt fights with default text.
   useEffect(() => {
     if (phase !== "scene") return;
     if (sceneIndex < POST_QA_SCENE_INDEX) return;
-    if (arc?.arcSkeleton?.episodeIndex === 0) return;
-    if (arcGenFiredRef.current.has(0)) return;
+    if (arc?.currentEpisode?.episodeIndex === 0) return;
+    if (episodeGenFiredRef.current.has(0)) return;
     const noPitchSubmitted = !intro.startupDescription?.trim();
     if (!extractionResolved && !noPitchSubmitted) return;
-    // Wait for the fate roll to commit so the first arc-gen call carries
-    // rolledCameos + tone. The roll effect above runs synchronously the
-    // tick before this one is satisfied — the next render gates through.
     if (!arc?.rolledCameos || !arc?.tone) return;
-    arcGenFiredRef.current.add(0);
+    episodeGenFiredRef.current.add(0);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), ARC_GEN_TIMEOUT_MS);
-    let partialEmitted = false;
-    streamArc(buildArcRequestBody(0), {
-      signal: controller.signal,
-      onScene: (outline) => {
-        // Fire scene-gen for group 0's leader the moment scene[0] beat
-        // arrives — the rest of the arc finishes streaming in parallel.
-        if (outline.index !== 0) return;
-        arcSkeletonReady(makePartialArcSkeleton(0, outline));
-        partialEmitted = true;
-      },
-    })
-      .then((data) =>
-        arcSkeletonReady(data.skeleton, { storyletState: data.storyletState }),
-      )
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      EPISODE_GEN_TIMEOUT_MS,
+    );
+    fetchEpisode(buildEpisodeRequestBody(0), { signal: controller.signal })
+      .then((data) => {
+        episodePlanReady(data.episode);
+        if (typeof data.creditsRemaining === "number") {
+          setCreditsRemaining(data.creditsRemaining);
+        }
+      })
       .catch((err) => {
-        console.error("generate-arc[0] failed", err);
-        // If a partial was emitted before the stream errored (timeout,
-        // disconnect, etc.), replace it with the static fallback so the
-        // run doesn't get stuck with __pending placeholders for scenes 1-4.
-        if (partialEmitted) arcSkeletonReady(makeFallbackArcSkeleton(0));
+        if (err instanceof PaywallRequiredError) {
+          episodeGenFiredRef.current.delete(0);
+          setCreditsRemaining(err.balance);
+          creditsExhausted();
+          return;
+        }
+        console.error("generate-episode[0] failed", err);
+        // Allow a retry on the next render — the loader stays up.
+        episodeGenFiredRef.current.delete(0);
       })
       .finally(() => clearTimeout(timeoutId));
   }, [
     phase,
     sceneIndex,
-    arc?.arcSkeleton,
+    arc?.currentEpisode,
     arc?.rolledCameos,
     arc?.tone,
     extractionResolved,
     intro.startupDescription,
-    buildArcRequestBody,
-    arcSkeletonReady,
-  ]);
-
-  // Episode 0's first scene-gen: fires as soon as the partial/full arc
-  // skeleton lands, regardless of phase. This way the scene-gen latency
-  // (~5–7s) hides behind the remaining authored scenes 6–8 instead of
-  // queuing up at the cinematic boundary.
-  // Defer when the player has 0 credits AND we're not yet at the
-  // cinematic — otherwise the 402-driven paywall would interrupt free
-  // authored play. With 0 credits we wait until phase enters
-  // 'generating-arc' so paywall pops at the same moment as before.
-  // Cinematic exit is handled by the separate effect below; the
-  // exitGeneratingArc() calls in .then/.catch are safe no-ops when the
-  // player isn't in that phase yet.
-  useEffect(() => {
-    const skeleton = arc?.arcSkeleton;
-    if (!skeleton) return;
-    const epi = skeleton.episodeIndex;
-    if (epi !== 0) return; // regen path uses its own effect below
-    if (firstSceneFiredRef.current === epi) return;
-    const globalLLMIndex = epi * EPISODE_LENGTH; // first scene of this episode
-    // Skip when the scene is already populated (rehydrated session).
-    // Without this, refresh re-fires generate-scene and dynamicSceneReady
-    // overwrites the dialogue mid-play.
-    const stored = arc?.scenes[globalLLMIndex];
-    if (stored && stored.dialogue.length > 0) return;
-    const inCinematic = phase === "generating-arc";
-    if (!inCinematic && creditsRemaining < 1) return;
-    firstSceneFiredRef.current = epi;
-
-    streamScene(
-      {
-        llmIndex: globalLLMIndex,
-        episodeIndex: epi,
-        llmIndexInEpisode: 0,
-        arcSkeleton: skeleton,
-        storySoFar: arc?.storySoFar,
-        startupName: arc?.startupName,
-        startupDescription: intro.startupDescription ?? "",
-        founderPersona: arc?.founderPersona,
-        stage: arc?.stage,
-        team: intro.team,
-        fundingModel: intro.fundingModel,
-        targetCustomer: intro.targetCustomer,
-        concern: intro.concern,
-        flavorTags: arc?.flavorTags,
-        recentChoices: history.slice(-EPISODE_LENGTH).map((h) => ({
-          sceneId: h.sceneId,
-          choiceLabel: h.choiceLabel,
-          hypeDelta: h.hypeDelta,
-          integrityDelta: h.integrityDelta,
-        })),
-        currentStats: { hype, integrity },
-        playthroughId,
-        tone: arc?.tone,
-      },
-      {
-        onImagePrompt: (imagePrompt) =>
-          setSceneImagePrompt(globalLLMIndex, imagePrompt),
-        onDialogueLine: (line) => appendDialogueLine(globalLLMIndex, line),
-      },
-    )
-      .then((data) => {
-        sceneGenFiredRef.current.add(globalLLMIndex);
-        dynamicSceneReady(globalLLMIndex, data.scene);
-        if (typeof data.creditsRemaining === "number") {
-          setCreditsRemaining(data.creditsRemaining);
-        }
-        // No-op when not yet in 'generating-arc' phase. The cinematic-exit
-        // effect picks it up when the player reaches the cinematic.
-        exitGeneratingArc();
-      })
-      .catch((err) => {
-        if (err instanceof PaywallRequiredError) {
-          // Reset the dedup ref so this effect re-fires the call once the
-          // user pays and creditsRemaining changes — otherwise the
-          // generating-arc loader would hang forever after the modal
-          // closes.
-          firstSceneFiredRef.current = null;
-          setCreditsRemaining(err.balance);
-          creditsExhausted();
-          return;
-        }
-        console.error("generate-scene[first] failed", err);
-        // Allow a retry when phase enters the cinematic (or any rerender).
-        firstSceneFiredRef.current = null;
-        exitGeneratingArc();
-      });
-  }, [
-    phase,
-    arc,
-    intro.startupDescription,
-    history,
-    hype,
-    integrity,
-    dynamicSceneReady,
-    exitGeneratingArc,
-    playthroughId,
+    buildEpisodeRequestBody,
+    episodePlanReady,
     setCreditsRemaining,
     creditsExhausted,
-    creditsRemaining,
   ]);
 
-  // Cinematic exit: when the player reaches the 'generating-arc' loader,
-  // bail out the moment the first LLM scene of the current episode is
-  // already populated. With the early-fire effect above, scene-gen often
-  // completes during the authored tail — by the time the player crosses
-  // into the cinematic, dialogue is already there and the loader can skip
-  // straight to the LLM tail.
+  // Per-scene generation. One scene at a time, fired the moment the
+  // player advances into a not-yet-rendered scene of the current
+  // episode. No more group-batch parallel fan-out — episodes have
+  // variable length and each scene reads its own pre-fixed plan.
   useEffect(() => {
-    if (phase !== "generating-arc") return;
-    const skeleton = arc?.arcSkeleton;
-    if (!skeleton) return;
-    const firstIdx = skeleton.episodeIndex * EPISODE_LENGTH;
-    const stored = arc?.scenes[firstIdx];
-    if (stored && stored.dialogue.length > 0) {
-      exitGeneratingArc();
-    }
-  }, [phase, arc, exitGeneratingArc]);
+    if (phase !== "scene" && phase !== "generating-episode") return;
+    const ep = arc?.currentEpisode;
+    if (!ep) return;
+    const startLLM = ep.startLLMIndex ?? 0;
 
-  // CHOICE-RESPONSIVE STORYLET RE-SELECTION
-  //
-  // After each group's last sub-scene's choice, fire /api/storylet/next
-  // to re-pick the upcoming group's storylet given the player's
-  // accumulated stats + flags. The re-pick is a pure server-side
-  // selector call (no LLM, no credits) that returns a new SceneOutline,
-  // which we splice into the arc skeleton via replaceOutline. The
-  // existing scene-gen batch effect (below) then renders the new beat
-  // when the player arrives at the upcoming group.
-  //
-  // Trigger: player has reached sub 3 of group N-1 (groupIdx = N >= 1
-  // and current sceneIndex >= sub3 of N-1). Sub 3 means all 4 choices
-  // in group N-1 have been made (or at minimum the player is reading
-  // sub 3's dialogue with one choice left — close enough to base the
-  // pick on, and gives ~10-15s of buffer for scene-gen on group N).
-  // Group 0 is NOT re-picked — arc-gen already chose it at episode
-  // start with the correct initial state.
-  const outlineRefreshedRef = useRef<Set<string>>(new Set());
-  // Reset on new playthrough so a fresh run can re-pick its own outlines.
-  useEffect(() => {
-    outlineRefreshedRef.current = new Set();
-  }, [playthroughId]);
-  useEffect(() => {
-    if (phase !== "scene") return;
-    if (sceneIndex < AUTHORED_SCENE_COUNT) return;
-    const skeleton = arc?.arcSkeleton;
-    if (!skeleton) return;
-    const epi = skeleton.episodeIndex;
-    const firedThisEpisode = (arc?.storyletState?.fired ?? []).filter(
-      (f) => f.firedAtEpisode === epi,
-    );
-    for (let groupIdx = 1; groupIdx < skeleton.scenes.length; groupIdx++) {
-      const key = `${epi}-${groupIdx}`;
-      if (outlineRefreshedRef.current.has(key)) continue;
-      // Trigger: player reached sub 3 of group N-1.
-      const sub3OfPriorGroup =
-        AUTHORED_SCENE_COUNT +
-        epi * EPISODE_LENGTH +
-        (groupIdx - 1) * SCENES_PER_GROUP +
-        3;
-      if (sceneIndex < sub3OfPriorGroup) continue;
-      // Lock first so concurrent renders don't double-fire.
-      outlineRefreshedRef.current.add(key);
-      // Already-picked = the storylets that fired in groups 0..groupIdx-1.
-      // The fired array (filtered to this episode) is in pick order, so
-      // the first `groupIdx` entries correspond to scenes 0..groupIdx-1.
-      const alreadyPickedIds = firedThisEpisode
-        .slice(0, groupIdx)
-        .map((f) => f.id);
-
-      fetch("/api/storylet/next", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          episodeIndex: epi,
-          currentStats: { hype, integrity },
-          team: intro.team,
-          fundingModel: intro.fundingModel,
-          flavorTags: arc?.flavorTags ?? intro.flavorTags,
-          rolledCameos: arc?.rolledCameos,
-          tone: arc?.tone,
-          seed: playthroughId ?? `local-${Date.now()}`,
-          storyletState: arc?.storyletState ?? { fired: [], flags: {} },
-          alreadyPickedIds,
-        }),
-      })
-        .then((r) => {
-          if (!r.ok) throw new Error(`storylet/next ${r.status}`);
-          return r.json() as Promise<{
-            outline: { archetype: string; beat: string; kind?: string };
-            storyletId: string;
-            storyletState: typeof arc.storyletState;
-          }>;
-        })
-        .then((data) => {
-          replaceOutline(
-            groupIdx,
-            {
-              index: groupIdx,
-              archetype: data.outline.archetype as SceneOutline["archetype"],
-              beat: data.outline.beat,
-              kind: data.outline.kind as SceneOutline["kind"],
-            },
-            data.storyletState ?? { fired: [], flags: {} },
-          );
-        })
-        .catch((err) => {
-          // Fail-soft: leave the pre-picked outline in place. Worst
-          // case the next group plays the original arc-gen storylet
-          // (current behavior pre-this-PR).
-          outlineRefreshedRef.current.delete(key);
-          console.warn(
-            `storylet/next[ep=${epi} group=${groupIdx}] failed`,
-            err,
-          );
-        });
-    }
-  }, [
-    phase,
-    sceneIndex,
-    arc,
-    hype,
-    integrity,
-    intro.team,
-    intro.fundingModel,
-    intro.flavorTags,
-    playthroughId,
-    replaceOutline,
-  ]);
-
-  // Group-batch scene-text generation. Each archetype group fires as a
-  // single burst of 4 parallel calls when its trigger condition is met:
-  //   - Group 0 batch fires the moment player enters the LLM tail (sub 0 may
-  //     have already been fired by the generating-arc effect; sceneGenFiredRef
-  //     dedups).
-  //   - Group N (N>=1) batch fires when player reaches sub 1 of group N-1
-  //     (the midpoint of the prior group). At ~15s per sub-scene, the player
-  //     has 3 sub-scenes worth of buffer (~45s) before they hit group N's
-  //     leader — comfortably enough for ~5s scene-gen + ~25s image-gen.
-  // No more "fire after every choice" pattern: a group is generated as a
-  // unit, then the player plays through all 4 sub-scenes uninterrupted by
-  // network activity for that group.
-  useEffect(() => {
-    if (phase !== "scene") return;
-    if (sceneIndex < AUTHORED_SCENE_COUNT) return;
-    const skeleton = arc?.arcSkeleton;
-    if (!skeleton) return;
-    const epi = skeleton.episodeIndex;
-
-    const fireSceneGen = (globalLLMIndex: number, inEpi: number) => {
+    // Pre-fire the first scene of the current episode the moment the
+    // plan lands (so its dialogue can stream in while the player walks
+    // through the cinematic loader).
+    const fireScene = (sceneIndexInEpisode: number) => {
+      const globalLLMIndex = startLLM + sceneIndexInEpisode;
       if (sceneGenFiredRef.current.has(globalLLMIndex)) return;
       const stored = arc?.scenes[globalLLMIndex];
       if (stored && stored.dialogue.length > 0) return;
+      const plan = ep.scenes[sceneIndexInEpisode];
+      if (!plan) return;
       sceneGenFiredRef.current.add(globalLLMIndex);
+
+      // Image-gen: pre-fire from the plan's imagePrompt right away
+      // (no waiting on Haiku). The plan committed to it.
+      if (!imageGenFiredRef.current.has(globalLLMIndex)) {
+        imageGenFiredRef.current.add(globalLLMIndex);
+        fetch("/api/generate-image", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            mode: "scene",
+            scenePrompt: plan.imagePrompt,
+            archetype: plan.role,
+            quality: "low",
+          }),
+        })
+          .then((r) =>
+            r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)),
+          )
+          .then((data: { url?: string }) => {
+            if (data.url) sceneImageReady(globalLLMIndex, data.url);
+          })
+          .catch((err) => {
+            imageGenFiredRef.current.delete(globalLLMIndex);
+            console.error(`[image-gen] failed scene=${globalLLMIndex}`, err);
+          });
+      }
 
       streamScene(
         {
-          llmIndex: globalLLMIndex,
-          episodeIndex: epi,
-          llmIndexInEpisode: inEpi,
-          arcSkeleton: skeleton,
+          episode: ep,
+          episodeIndex: ep.episodeIndex,
+          sceneIndexInEpisode,
           storySoFar: arc?.storySoFar,
           startupName: arc?.startupName,
           startupDescription: intro.startupDescription ?? "",
           founderPersona: arc?.founderPersona,
-          stage: arc?.stage,
           team: intro.team,
           fundingModel: intro.fundingModel,
           targetCustomer: intro.targetCustomer,
           concern: intro.concern,
-          flavorTags: arc?.flavorTags,
-          recentChoices: history.slice(-EPISODE_LENGTH).map((h) => ({
+          recentChoices: history.slice(-8).map((h) => ({
             sceneId: h.sceneId,
             choiceLabel: h.choiceLabel,
             hypeDelta: h.hypeDelta,
@@ -1025,14 +760,15 @@ export default function HomePage() {
         {
           onImagePrompt: (imagePrompt) =>
             setSceneImagePrompt(globalLLMIndex, imagePrompt),
-          onDialogueLine: (line) => appendDialogueLine(globalLLMIndex, line),
+          onDialogueLine: (line) =>
+            appendDialogueLine(globalLLMIndex, line),
         },
       )
         .then((data) => {
           dynamicSceneReady(globalLLMIndex, data.scene);
-          if (typeof data.creditsRemaining === "number") {
-            setCreditsRemaining(data.creditsRemaining);
-          }
+          // Episode-architecture: the cinematic loader can exit the
+          // moment the first scene of a new episode has dialogue.
+          exitGeneratingEpisode();
         })
         .catch((err) => {
           sceneGenFiredRef.current.delete(globalLLMIndex);
@@ -1045,51 +781,17 @@ export default function HomePage() {
         });
     };
 
-    for (let groupIdx = 0; groupIdx < skeleton.scenes.length; groupIdx++) {
-      // Trigger condition for this group's batch.
-      let triggered = false;
-      if (groupIdx === 0) {
-        // Group 0 batch: triggered the moment we're in the LLM tail.
-        triggered = true;
-      } else {
-        // Group N (N>=1): wait until the player has reached sub 3 of
-        // group N-1. The re-pick effect (above) targets the same
-        // boundary; by the time the player has cleared sub 2's choice
-        // the re-picked outline has settled into the skeleton, and
-        // scene-gen now fires against the choice-responsive beat —
-        // not the stale arc-gen pre-pick. Tradeoff: ~15s of buffer
-        // for scene-gen+image-gen instead of the prior ~45s. Scene-
-        // gen fits comfortably; image-gen may lag into the group's
-        // first sub-scene (placeholder shows for a beat), which is
-        // an acceptable cost for actual choice-responsiveness.
-        const priorGroupSub3Index =
-          AUTHORED_SCENE_COUNT +
-          epi * EPISODE_LENGTH +
-          (groupIdx - 1) * SCENES_PER_GROUP +
-          3;
-        triggered = sceneIndex >= priorGroupSub3Index;
-      }
-      if (!triggered) continue;
-
-      // Credit gate: each new group needs 1 credit. The server is
-      // authoritative (debit happens inside /api/generate-scene for sub 0),
-      // but we pre-check the client-side mirror to skip the wasted sub-1..3
-      // calls that would otherwise fire in parallel and burn $0.30 of
-      // Anthropic + image cost per group with no debit. If the check passes
-      // but the server still 402s (rare race), the .catch handler above
-      // routes us to the paywall.
-      const sub0LLMIndex = epi * EPISODE_LENGTH + groupIdx * SCENES_PER_GROUP;
-      const alreadyFired = sceneGenFiredRef.current.has(sub0LLMIndex);
-      if (!alreadyFired && creditsRemaining < 1) {
-        creditsExhausted();
-        break;
-      }
-
-      // Fire all 4 sub-scenes of this group in parallel. sceneGenFiredRef
-      // dedups across renders so each sub fires exactly once.
-      for (let sub = 0; sub < SCENES_PER_GROUP; sub++) {
-        const inEpi = groupIdx * SCENES_PER_GROUP + sub;
-        fireSceneGen(epi * EPISODE_LENGTH + inEpi, inEpi);
+    // Always fire scene 0 of the current episode (idempotent on
+    // sceneGenFiredRef). And fire whichever scene the player is
+    // currently on (so refresh-rehydrate or dev-jump keeps content
+    // flowing).
+    fireScene(0);
+    if (phase === "scene" && sceneIndex >= AUTHORED_SCENE_COUNT) {
+      const inEp = sceneIndex - AUTHORED_SCENE_COUNT - startLLM;
+      if (inEp >= 0 && inEp < ep.scenes.length) {
+        fireScene(inEp);
+        // And the next one, so it's ready when the player advances.
+        if (inEp + 1 < ep.scenes.length) fireScene(inEp + 1);
       }
     }
   }, [
@@ -1105,27 +807,37 @@ export default function HomePage() {
     hype,
     integrity,
     dynamicSceneReady,
+    exitGeneratingEpisode,
     playthroughId,
-    creditsRemaining,
+    sceneImageReady,
+    setSceneImagePrompt,
+    appendDialogueLine,
     setCreditsRemaining,
     creditsExhausted,
   ]);
 
-  // Arc persistence: each time a new episode skeleton lands, PATCH the
-  // playthrough so we have the arc on the server (for replay, share cards,
-  // analytics). One write per episode; per-scene data already lives in
-  // scene_events. Base64 imageUrls are stripped — they're a runtime concern
-  // and would otherwise inflate the row by ~100KB per scene.
+  // Cinematic exit: as soon as the first scene of a freshly-planned
+  // episode has dialogue, drop out of the loader. The scene-gen effect
+  // also calls exitGeneratingEpisode in its .then; this effect is the
+  // backstop for rehydrate / dev-jump paths.
+  useEffect(() => {
+    if (phase !== "generating-episode") return;
+    const ep = arc?.currentEpisode;
+    if (!ep) return;
+    const startLLM = ep.startLLMIndex ?? 0;
+    const stored = arc?.scenes[startLLM];
+    if (stored && stored.dialogue.length > 0) {
+      exitGeneratingEpisode();
+    }
+  }, [phase, arc, exitGeneratingEpisode]);
+
+  // Episode persistence: PATCH the playthrough each time a new episode
+  // plan lands. Strips imageUrls (runtime-only).
   useEffect(() => {
     if (!playthroughId) return;
-    if (!arc) return;
-    const skeleton = arc.arcSkeleton;
-    if (!skeleton) return;
-    // Skip the streaming-partial skeleton — wait for the full one so we
-    // don't PATCH placeholder beats into the playthrough row.
-    if (isPartialArcSkeleton(skeleton)) return;
-    if (arcPersistedRef.current === skeleton.episodeIndex) return;
-    arcPersistedRef.current = skeleton.episodeIndex;
+    if (!arc?.currentEpisode) return;
+    if (arcPersistedRef.current === arc.currentEpisode.episodeIndex) return;
+    arcPersistedRef.current = arc.currentEpisode.episodeIndex;
 
     const arcForWire = {
       ...arc,
@@ -1139,212 +851,78 @@ export default function HomePage() {
     }).catch((err) => console.error("persistArc failed", err));
   }, [playthroughId, arc]);
 
-  // Image generation watcher (group-aware): one image per archetype group.
-  //   - Sub-scene 0 of each group fires gpt-image-2 with that scene's
-  //     imagePrompt + archetype.
-  //   - Sub-scenes 1–3 of the same group never call image gen — they copy
-  //     the leader's imageUrl as soon as it arrives. The dedicated effect
-  //     below fans the leader's imageUrl out to its followers.
-  // Failures are silent — the placeholder background stays in place.
-  useEffect(() => {
-    const scenes = arc?.scenes;
-    if (!scenes) return;
-    scenes.forEach((scene, idx) => {
-      if (!scene || scene.dialogue.length === 0) return;
-      if (scene.imageUrl) return;
-      if (!scene.imagePrompt) return;
-      // Only the leader (sub-scene 0) of an archetype group fires image gen.
-      // SCENES_PER_GROUP sub-scenes per group, all sharing one image.
-      if (idx % SCENES_PER_GROUP !== 0) return;
-      if (imageGenFiredRef.current.has(idx)) return;
-      imageGenFiredRef.current.add(idx);
-
-      const groupIdx = idx / SCENES_PER_GROUP;
-      const t0 = performance.now();
-      console.log(
-        `[image-gen] fire group=${groupIdx} llmIdx=${idx} archetype=${scene.archetype}`,
-      );
-
-      fetch("/api/generate-image", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          mode: "scene",
-          scenePrompt: scene.imagePrompt,
-          archetype: scene.archetype,
-          // "low" lands in ~15s vs ~60s at "medium" — required to beat the
-          // player to the scene. Hero/share image stays "high".
-          quality: "low",
-        }),
-      })
-        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-        .then((data: { url?: string }) => {
-          const dt = ((performance.now() - t0) / 1000).toFixed(1);
-          if (data.url) {
-            console.log(`[image-gen] done group=${groupIdx} in ${dt}s`);
-            sceneImageReady(idx, data.url);
-          } else {
-            console.warn(`[image-gen] empty response group=${groupIdx} after ${dt}s`);
-          }
-        })
-        .catch((err) => {
-          // Allow a retry on the next scene-state change.
-          imageGenFiredRef.current.delete(idx);
-          console.error(`[image-gen] FAILED group=${groupIdx} llmIdx=${idx}`, err);
-        });
-    });
-  }, [arc?.scenes, sceneImageReady]);
-
-  // Image fan-out: when a group's leader scene gets its imageUrl, copy it to
-  // any sibling sub-scenes that already have text. Runs whenever scenes
-  // change, so a follower that arrives later than its leader picks up the
-  // imageUrl on the next render.
-  useEffect(() => {
-    const scenes = arc?.scenes;
-    if (!scenes) return;
-    scenes.forEach((scene, idx) => {
-      if (!scene || scene.dialogue.length === 0) return;
-      if (scene.imageUrl) return;
-      const subSceneIndex = idx % SCENES_PER_GROUP;
-      if (subSceneIndex === 0) return; // leader; image-gen path handles this
-      const leaderIdx = idx - subSceneIndex;
-      const leader = scenes[leaderIdx];
-      if (leader?.imageUrl) sceneImageReady(idx, leader.imageUrl);
-    });
-  }, [arc?.scenes, sceneImageReady]);
-
-  // Episode regeneration: when the current LLM scene is the SECOND-TO-LAST of
-  // its episode, kick off generation of the next episode's skeleton in the
-  // background. By the time the player advances past the last scene, the new
-  // skeleton (and its first scene) should be ready.
+  // End-of-episode trigger: when the player makes a choice on the LAST
+  // scene of the current episode, kick off the NEXT episode's planner.
+  // The lastChoice in the request body IS that choice — the planner uses
+  // it as the dominant input for the new episode's theme.
   useEffect(() => {
     if (phase !== "scene") return;
-    if (sceneIndex < AUTHORED_SCENE_COUNT) return;
-    const skeleton = arc?.arcSkeleton;
-    if (!skeleton) return;
-    const llmIndex = sceneIndex - AUTHORED_SCENE_COUNT;
-    const inEpisode = llmIndex - skeleton.episodeIndex * EPISODE_LENGTH;
-    // Trigger the regen at the second-to-last scene of the episode (gives the
-    // Sonnet call ~one full scene of latency cover).
-    if (inEpisode !== EPISODE_LENGTH - 2) return;
+    const ep = arc?.currentEpisode;
+    if (!ep) return;
+    const startLLM = ep.startLLMIndex ?? 0;
+    const lastSceneIndexInEpisode = ep.scenes.length - 1;
+    const lastSceneGlobalIndex =
+      AUTHORED_SCENE_COUNT + startLLM + lastSceneIndexInEpisode;
+    // Fire when the player has advanced PAST the last scene's choice
+    // (sceneIndex moved past that scene). Use sceneIndex > last to
+    // detect post-choice; choiceMade !== null on the last scene also
+    // signals it. We use sceneIndex > last to keep the trigger clean.
+    if (sceneIndex <= lastSceneGlobalIndex) {
+      // Mid-episode: nothing to do here. Belt-and-braces: also kick the
+      // next episode if the player has made the last choice but
+      // sceneIndex hasn't advanced (we fire on sceneIndex change in
+      // advanceScene, so this is rare).
+      return;
+    }
+    const nextEpisode = ep.episodeIndex + 1;
+    if (episodeGenFiredRef.current.has(nextEpisode)) return;
+    episodeGenFiredRef.current.add(nextEpisode);
 
-    const nextEpisode = skeleton.episodeIndex + 1;
-    if (arcGenFiredRef.current.has(nextEpisode)) return;
-    arcGenFiredRef.current.add(nextEpisode);
-
+    enterGeneratingEpisode();
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), ARC_GEN_TIMEOUT_MS);
-    let partialEmitted = false;
-    streamArc(buildArcRequestBody(nextEpisode), {
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      EPISODE_GEN_TIMEOUT_MS,
+    );
+    fetchEpisode(buildEpisodeRequestBody(nextEpisode), {
       signal: controller.signal,
-      onScene: (outline) => {
-        if (outline.index !== 0) return;
-        arcSkeletonReady(makePartialArcSkeleton(nextEpisode, outline));
-        partialEmitted = true;
-      },
     })
-      .then((data) =>
-        arcSkeletonReady(data.skeleton, { storyletState: data.storyletState }),
-      )
-      .catch((err) => {
-        console.error(`generate-arc[${nextEpisode}] failed`, err);
-        if (partialEmitted) {
-          arcSkeletonReady(makeFallbackArcSkeleton(nextEpisode));
-        }
-      })
-      .finally(() => clearTimeout(timeoutId));
-  }, [phase, sceneIndex, arc?.arcSkeleton, buildArcRequestBody, arcSkeletonReady]);
-
-  // After regen: when the new skeleton lands AND we're still in 'scene' phase
-  // at the last scene of the prior episode, fire the first scene of the new
-  // episode so it's ready when the player advances.
-  useEffect(() => {
-    if (phase !== "scene") return;
-    if (sceneIndex < AUTHORED_SCENE_COUNT) return;
-    const skeleton = arc?.arcSkeleton;
-    if (!skeleton) return;
-    const epi = skeleton.episodeIndex;
-    if (epi === 0) return; // episode-0 first-scene is fired by generating-arc effect
-    const firstSceneOfNewEpisode = epi * EPISODE_LENGTH;
-    if (sceneGenFiredRef.current.has(firstSceneOfNewEpisode)) return;
-    const stored = arc?.scenes[firstSceneOfNewEpisode];
-    if (stored && stored.dialogue.length > 0) return;
-    sceneGenFiredRef.current.add(firstSceneOfNewEpisode);
-
-    streamScene(
-      {
-        llmIndex: firstSceneOfNewEpisode,
-        episodeIndex: epi,
-        llmIndexInEpisode: 0,
-        arcSkeleton: skeleton,
-        storySoFar: arc?.storySoFar,
-        startupName: arc?.startupName,
-        startupDescription: intro.startupDescription ?? "",
-        founderPersona: arc?.founderPersona,
-        stage: arc?.stage,
-        team: intro.team,
-        fundingModel: intro.fundingModel,
-        targetCustomer: intro.targetCustomer,
-        concern: intro.concern,
-        flavorTags: arc?.flavorTags,
-        recentChoices: history.slice(-EPISODE_LENGTH).map((h) => ({
-          sceneId: h.sceneId,
-          choiceLabel: h.choiceLabel,
-          hypeDelta: h.hypeDelta,
-          integrityDelta: h.integrityDelta,
-        })),
-        currentStats: { hype, integrity },
-        playthroughId,
-        tone: arc?.tone,
-      },
-      {
-        onImagePrompt: (imagePrompt) =>
-          setSceneImagePrompt(firstSceneOfNewEpisode, imagePrompt),
-        onDialogueLine: (line) =>
-          appendDialogueLine(firstSceneOfNewEpisode, line),
-      },
-    )
       .then((data) => {
-        dynamicSceneReady(firstSceneOfNewEpisode, data.scene);
+        episodePlanReady(data.episode);
         if (typeof data.creditsRemaining === "number") {
           setCreditsRemaining(data.creditsRemaining);
         }
       })
       .catch((err) => {
-        sceneGenFiredRef.current.delete(firstSceneOfNewEpisode);
+        episodeGenFiredRef.current.delete(nextEpisode);
         if (err instanceof PaywallRequiredError) {
           setCreditsRemaining(err.balance);
           creditsExhausted();
           return;
         }
-        console.error(
-          `generate-scene[${firstSceneOfNewEpisode}] failed`,
-          err,
-        );
-      });
+        console.error(`generate-episode[${nextEpisode}] failed`, err);
+      })
+      .finally(() => clearTimeout(timeoutId));
   }, [
     phase,
     sceneIndex,
-    arc,
-    intro.startupDescription,
-    history,
-    hype,
-    integrity,
-    dynamicSceneReady,
-    playthroughId,
+    arc?.currentEpisode,
+    buildEpisodeRequestBody,
+    enterGeneratingEpisode,
+    episodePlanReady,
     setCreditsRemaining,
     creditsExhausted,
-    creditsRemaining,
   ]);
 
-  // Safety: if the player jumps directly to generating-arc via dev panel and
-  // there's no skeleton yet, kick the same effect that would normally fire.
+  // Safety: if the player jumps directly to generating-episode via dev
+  // panel and there's no plan yet, just enter the loader phase (the
+  // episode-0 effect above handles the actual fetch).
   useEffect(() => {
-    if (phase !== "generating-arc") return;
-    if (!arc?.arcSkeleton) {
-      enterGeneratingArc();
+    if (phase !== "generating-episode") return;
+    if (!arc?.currentEpisode) {
+      enterGeneratingEpisode();
     }
-  }, [phase, arc?.arcSkeleton, enterGeneratingArc]);
+  }, [phase, arc?.currentEpisode, enterGeneratingEpisode]);
 
   // Generate epilogue + finalize playthrough at ending.
   const finalizedRef = useRef(false);
@@ -1854,7 +1432,7 @@ export default function HomePage() {
       case "welcome":
         return null;
 
-      case "generating-arc":
+      case "generating-episode":
         return (
           <div
             className="comic-outline animate-bounce-in rounded-2xl p-8 max-w-md w-full text-center flex flex-col gap-4"
@@ -2033,7 +1611,7 @@ export default function HomePage() {
             ? WELCOME_BACKGROUND
             : phase === "scene"
               ? (currentScene?.background ?? HOME_BACKGROUND)
-              : phase === "generating-arc"
+              : phase === "generating-episode"
                 ? HOME_BACKGROUND
                 : "/intro-v2/01-departure-board.png"
         }
