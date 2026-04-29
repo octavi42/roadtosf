@@ -107,7 +107,12 @@ export interface ScenePlan {
 
 /** A single Beat = one dialogue exchange + one choice block. Returned
  *  by /api/generate-scene per call. Beats accumulate inside a Scene
- *  container until the LLM marks isLastBeatOfScene. */
+ *  container until the LLM marks isLastBeatOfScene.
+ *
+ *  Pivot overrides (setting/cast/role/title) are emitted on beat 0 of
+ *  scenes after scene 0 when the prior scene's outcome made the planned
+ *  scene incoherent. Most beats leave them undefined and the client
+ *  uses the plan's values. */
 export interface Beat {
   dialogue: DialogueLine[]
   choices: Choice[]
@@ -120,6 +125,14 @@ export interface Beat {
    *  episode-gen. */
   isLastSceneOfEpisode?: boolean | null
   shareMoment?: ShareMoment
+  /** Pivot override — re-defines this scene's setting. */
+  setting?: string | null
+  /** Pivot override — re-defines this scene's cast subset. */
+  cast?: CastMember[] | null
+  /** Pivot override — re-defines this scene's primary role. */
+  role?: Role | null
+  /** Pivot override — re-defines this scene's nameplate title. */
+  title?: string | null
 }
 
 // ── EPISODE ARCHITECTURE ─────────────────────────────────────────────

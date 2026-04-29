@@ -75,7 +75,15 @@ SCENE PLAN RULES:
     * topic: 1 sentence on what this scene is about ("the player is brainstorming with the team late at night and getting a chance encounter with a wandering judge")
     * imagePrompt: ≤220 chars; setting + character action + mood + composition. NO style words.
     * title: short nameplate string for the UI ("The Kitchen Argument", "Thiel's Office", "Demo Day Walk-Out")
-- Scenes should flow into each other narratively. Player choices made INSIDE scene N influence the dialogue of scene N+1, but scene N+1's setting/cast are committed by you up front.
+
+NARRATIVE FLOW BETWEEN SCENES (LOAD-BEARING):
+- Each scene is a CONSEQUENCE of the previous scene's likely outcome. NOT a disconnected next-cast-member encounter.
+- Scene 2's setting + cast must be a credible place the player ENDS UP after scene 1's likely choices, NOT a location-jump that requires teleportation.
+- Bad example: scene 1 is "Sam Altman tells you to call Priya." Scene 2 is "Reid Hoffman in his Greylock office." This is disconnected — the player just committed to calling Priya; how did they end up at Greylock?
+- Good example: scene 1 is "Sam Altman tells you to call Priya." Scene 2 is "Priya picks up — phone call from the player's car / her apartment / a quiet table somewhere." Scene 3 is "Priya and the player walking together toward the next thing." THE EPISODE FLOWS.
+- Cast members carrying through scenes is a feature: if Priya is in scene 1, she can show up in scene 2, scene 3, scene 4 (in different settings). It builds continuity.
+- One way to think about it: design scenes as ACTS in a single 30-minute story. Act 1 sets up; act 2 deepens; act 3 escalates; act 4 resolves. Not four disconnected vignettes.
+- Anchor each subsequent scene's setting and cast to a specific OUTCOME from the prior scene that's likely or implied. The renderer can pivot if the player's actual choice diverges, but your default plan should be coherent.
 
 HARD RULES:
 - Output a single JSON object only. No markdown fences. Start with "{" and end with "}".
