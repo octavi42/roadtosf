@@ -60,6 +60,22 @@ export const CANDIDATE_CAPS = {
 // composable with the regular event-attendee path.
 const WILDCARD_PER_EPISODE = 3
 
+// Of the wildcard slots, how many are reserved for NPCs (anonymous
+// builder/operator/scout personas tagged "npc" in the seed). The
+// remainder go to the real-person pool. The split is "prefer", not
+// "require" — if either side runs short, the shortfall pulls from the
+// other side so the wildcard count stays at WILDCARD_PER_EPISODE.
+//
+// Why: most real cameos shouldn't be celebrities. A typical SF founder
+// run should feel populated by anonymous YC batch-mates, not a parade
+// of A-listers.
+const NPC_WILDCARD_SLOTS = 2
+const NPC_TAG = 'npc'
+
+function isNpc(person: SfPerson): boolean {
+  return person.tags.some((t) => t.toLowerCase() === NPC_TAG)
+}
+
 // Stat-bias rules (LORE_SYSTEM.md §3.1, "Hard stat-bias rules live here").
 // Each rule fires deterministically on player state and adds a person to
 // the candidate pool with a flat score boost. Rules live as data, not
@@ -193,17 +209,40 @@ export function pickCandidatePeople(
     for (const id of e.event.knownAttendees) attendeeIds.add(id)
   }
 
-  // 2) Sample N wildcards from the full pool, deterministic per seed.
-  // Apply role-relevance gate: reporters only wildcard when the
-  // episode's flavor tags signal press relevance. Other roles are
-  // ungated.
-  const wildcards = sampleN(
-    people.filter(
-      (p) => !attendeeIds.has(p.id) && isRoleRelevant(p.role, flavorSet),
-    ),
-    WILDCARD_PER_EPISODE,
-    `${input.seed}:wildcard`,
+  // 2) Sample wildcards. The pool is partitioned into NPC vs real
+  // people — NPC_WILDCARD_SLOTS go to NPC-tagged seeds, the rest to
+  // real public figures. Reporters are still gated on press flavor
+  // (role-relevance gate); attendee-derived candidates bypass.
+  // Shortfalls cross-fill so total wildcards = WILDCARD_PER_EPISODE.
+  const eligible = people.filter(
+    (p) => !attendeeIds.has(p.id) && isRoleRelevant(p.role, flavorSet),
   )
+  const npcPool = eligible.filter(isNpc)
+  const realPool = eligible.filter((p) => !isNpc(p))
+
+  const realWildcardSlots = WILDCARD_PER_EPISODE - NPC_WILDCARD_SLOTS
+  const npcSample = sampleN(
+    npcPool,
+    NPC_WILDCARD_SLOTS,
+    `${input.seed}:wildcard:npc`,
+  )
+  const realSample = sampleN(
+    realPool,
+    realWildcardSlots,
+    `${input.seed}:wildcard:real`,
+  )
+
+  const usedIds = new Set([...npcSample, ...realSample].map((p) => p.id))
+  const shortfall = WILDCARD_PER_EPISODE - npcSample.length - realSample.length
+  const topUp =
+    shortfall > 0
+      ? sampleN(
+          eligible.filter((p) => !usedIds.has(p.id)),
+          shortfall,
+          `${input.seed}:wildcard:topup`,
+        )
+      : []
+  const wildcards = [...npcSample, ...realSample, ...topUp]
 
   const candidateIds = new Set<string>([...attendeeIds, ...wildcards.map((p) => p.id)])
   const scored: ScoredPerson[] = []
