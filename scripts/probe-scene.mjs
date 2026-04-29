@@ -1,89 +1,100 @@
-// Hits /api/generate-scene with a realistic payload and reads the SSE stream.
-// Logs server-side errors hit the dev server console (see /tmp/dev-server.log).
+// Hits /api/generate-scene with a realistic Episode payload and reads the
+// SSE stream. Episode-architecture rewrite: scene-gen now reads its own
+// pre-fixed ScenePlan from the supplied Episode.
 //
 // Usage:
-//   PORT=3009 node scripts/probe-scene.mjs           # sub 0
-//   PORT=3009 SUB=1 node scripts/probe-scene.mjs     # sub 1 (with prior choice)
+//   PORT=3009 node scripts/probe-scene.mjs            # scene 0
+//   PORT=3009 SCENE=2 node scripts/probe-scene.mjs    # scene 2 (with prior choice)
 
-const SUB = Number(process.env.SUB ?? 0)
+const SCENE = Number(process.env.SCENE ?? 0)
 const port = process.env.PORT ?? '3001'
 const url = `http://localhost:${port}/api/generate-scene`
 
-const arcSkeleton = {
+const episode = {
   episodeIndex: 0,
+  theme: 'First night at the YC co-working space',
   premise:
-    'A solo founder bootstrapping a city-guide AI agent over their first 24 hours in SF',
+    'A solo founder bootstrapping a city-guide AI agent crashes the YC space their first night in SF; three people they don\'t know yet are already there.',
   scenes: [
     {
       index: 0,
-      archetype: 'reporter',
-      beat:
-        'A TechCrunch reporter slides into your DMs at the Mission cafe with a screenshot from a stranger and asks for comment.',
-      summary: 'Reporter at a cafe with a screenshot, wants comment in 30 minutes.',
+      role: 'cofounder',
+      setting: 'YC co-working space, kitchen island, 11pm Tuesday',
+      cast: [
+        {
+          role: 'cofounder',
+          name: 'Maya',
+          blurb: 'Ex-Stripe engineer, three coffees deep, has equity terms drafted.',
+        },
+      ],
+      beat: 'A founder you barely know corners you at the kitchen island and pitches herself as your missing cofounder.',
       kind: 'encounter',
+      imagePrompt:
+        'interior of a YC co-working space kitchen at night, warm fluorescent overhead, a young woman with a hoodie and laptop leaning across a kitchen island toward the founder',
     },
     {
       index: 1,
-      archetype: 'vc',
-      beat: 'A Sand Hill partner offers $3M for 15% over a contrarian dinner.',
-      summary: 'VC offers term sheet at Sand Hill bar.',
+      role: 'hater',
+      setting: 'YC space espresso machine, ten minutes later',
+      cast: [
+        {
+          role: 'hater',
+          name: 'Brandon',
+          blurb: 'CEO of a competing startup with $4M and a year head start.',
+        },
+      ],
+      beat: 'You bump into a competitor\'s CEO at the espresso machine. He greets you by name.',
       kind: 'encounter',
+      imagePrompt:
+        'espresso machine in a back hallway of a co-working space, two men in their late 20s, cinematic two-shot, golden lamplight',
     },
     {
       index: 2,
-      archetype: 'hater',
-      beat: 'A competing CEO sub-tweets you and the dunk goes viral by lunch.',
-      summary: 'Twitter dunk from a competing CEO.',
+      role: 'mentor',
+      setting: 'corner couch in the same YC space, midnight',
+      cast: [
+        {
+          role: 'mentor',
+          name: 'Linda',
+          blurb: 'Partner emeritus at YC. Has watched 200 startups fail.',
+        },
+      ],
+      beat: 'A partner emeritus closes her book and asks if you\'ve eaten. The question is a test.',
       kind: 'encounter',
-    },
-    {
-      index: 3,
-      archetype: 'cofounder',
-      beat: 'Your kitchen, 7am. The cold-brew is half-drunk and an old YC batchmate has emailed about cofounding.',
-      summary: 'Solo at the kitchen counter re-reading a cofounder email.',
-      kind: 'solo',
-    },
-    {
-      index: 4,
-      archetype: 'mentor',
-      beat: 'Paul Graham emails a four-line response with a link to one of his old essays.',
-      summary: 'PG essay-link reply, gnomic, exactly the wrong (right) thing.',
-      kind: 'encounter',
+      imagePrompt:
+        'interior of a co-working common area at midnight, an older woman with reading glasses on a corner couch closing a hardback book, founder approaching, soft warm lighting',
     },
   ],
+  seedIds: ['cofounder_pitch_generic', 'hater_generic_dunk', 'mentor_generic_advice'],
+  startLLMIndex: 0,
 }
 
 const body = {
-  llmIndex: SUB,
-  llmIndexInEpisode: SUB,
+  episode,
   episodeIndex: 0,
-  arcSkeleton,
+  sceneIndexInEpisode: SCENE,
   storySoFar: '',
   startupName: 'wagr',
   startupDescription: 'a city-guide AI agent for tourists',
   founderPersona: 'anxious first-time founder',
-  stage: 'pre-launch',
   team: 'solo, no cofounder',
   fundingModel: 'bootstrapping',
-  flavorTags: [],
   recentChoices:
-    SUB === 0
+    SCENE === 0
       ? []
       : [
           {
-            sceneId: 8 + SUB,
-            choiceLabel: 'Trade for a better angle.',
-            hypeDelta: 1,
-            integrityDelta: -1,
+            sceneId: 8 + SCENE,
+            choiceLabel: 'Hear her out.',
+            hypeDelta: 0,
+            integrityDelta: 1,
           },
         ],
   currentStats: { hype: 0, integrity: 0 },
   playthroughId: 'probe-scene',
 }
 
-console.log('POST', url, 'sub', SUB)
-// Reuse the cookie jar set by `curl -c /tmp/probe-cookies.txt` against
-// /api/dev/grant-credits so the probe identity has credits to debit.
+console.log('POST', url, 'scene', SCENE)
 const fs = await import('node:fs')
 let cookieHeader
 try {
@@ -131,9 +142,10 @@ while (true) {
         console.log(`\n=== ${eventName} ===`)
         if (parsed.scene) {
           console.log('source:', parsed.source)
-          console.log('archetype:', parsed.scene.archetype)
+          console.log('role:', parsed.scene.role)
           console.log('title:', parsed.scene.title)
           console.log('imagePrompt:', parsed.scene.imagePrompt?.slice(0, 80))
+          console.log('cast:', parsed.scene.cast?.map((c) => `${c.role}:${c.name}`).join(' | '))
           console.log('dialogue:')
           for (const d of parsed.scene.dialogue ?? []) {
             console.log(`  [${d.speaker}] ${d.text}`)

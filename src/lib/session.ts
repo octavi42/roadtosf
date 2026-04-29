@@ -1,51 +1,49 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type {
-  ArcSkeleton,
   DialogueLine,
   EndingKey,
+  Episode,
   Scene,
-  SceneOutline,
   StoryArc,
 } from "./types";
 import type { RolledCameo, ToneId } from "./cameos/types";
-import type { StoryletState } from "./storylets/types";
 
 // Phase no longer includes "paywall" — the paywall is now an overlay
 // (paywallOpen: boolean) that floats on top of whatever phase the player
-// is in. Driven by /api/generate-scene 402 responses, not by scene index,
-// so a returning user with credits walks straight from scene 2 to scene 3
-// and a new user only meets the paywall when the LLM tail can't fund a
-// group it's about to generate.
+// is in. Driven by /api/generate-episode 402 responses (1 credit / episode),
+// so a returning user with credits walks straight from episode N-1 to N
+// and a new user only meets the paywall when the planner can't fund a
+// new episode.
 export type Phase =
   | "welcome"
   | "scene"
-  | "generating-arc"
+  | "generating-episode"
   | "ending";
 
 /**
  * Authored scenes (src/lib/scenes.ts) cover indices 0..AUTHORED_SCENE_COUNT-1:
  *   0–2 pre-paywall (FaceTime with Jordan)
  *   3   post-paywall Q&A (the car ride)
- *   4–7 Group 1: "exploring SF" — narrator-led, one shared pre-gen image
- * After that, the LLM tail runs *unbounded* — generated 20 scenes at a time
- * (one episode = 5 archetype groups × 4 sub-scenes each, sharing one image
- * per group). Run ends when the player picks "End my run" or via reset.
+ *   4–7 cinematic interlude — narrator-led, one shared pre-gen image
+ * After that, the LLM tail runs *unbounded* — episodes of 3–5 scenes,
+ * one Sonnet-planned episode at a time. Run ends when the player picks
+ * "End my run" or via reset.
  */
 export const AUTHORED_SCENE_COUNT = 8;
 /**
  * First sceneIndex at which all QA-driven player facts (team, fundingModel,
- * stage, targetCustomer, concern) are guaranteed captured. Arc-gen and
- * scene-gen must not fire before this — Sonnet would otherwise see a
- * half-populated facts block and invent contradictions (the Maya bleed).
+ * stage, targetCustomer, concern) are guaranteed captured. Episode-gen
+ * must not fire before this — Sonnet would otherwise see a half-populated
+ * facts block and invent contradictions.
  * QA lives at sceneIndex 3, so 4 is the first scene safe for LLM kickoff.
  */
 export const POST_QA_SCENE_INDEX = 4;
-/** Sub-scenes per archetype encounter; one image per group of this size. */
-export const SCENES_PER_GROUP = 4;
-/** Archetype outlines per arc skeleton (one per group within an episode). */
-export const GROUPS_PER_EPISODE = 5;
-export const EPISODE_LENGTH = SCENES_PER_GROUP * GROUPS_PER_EPISODE; // 20
+/** Min/max scenes per episode. The planner picks; we expect 3–5. */
+export const EPISODE_LENGTH_MIN = 3;
+export const EPISODE_LENGTH_MAX = 5;
+/** Soft estimate used by UI bookkeeping that needs an upper bound. */
+export const EPISODE_LENGTH_DEFAULT = EPISODE_LENGTH_MAX;
 
 export type MissingQuestionField =
   | "team"
@@ -148,7 +146,7 @@ interface SessionState {
   setPaywallOpen: (open: boolean) => void;
   decrementCredits: (n?: number) => void;
   /**
-   * Called when /api/generate-scene returns 402 (server-side debit found
+   * Called when /api/generate-episode returns 402 (server-side debit found
    * an empty balance). Opens the paywall overlay and zeroes the local
    * mirror so the widget reflects the depleted state behind the modal.
    */
@@ -162,22 +160,14 @@ interface SessionState {
   }) => void;
   paywallSatisfied: (creditsGranted?: number) => void;
   arcReady: (arc: StoryArc) => void;
-  arcSkeletonReady: (
-    skeleton: ArcSkeleton,
-    fate?: { storyletState?: StoryletState },
-  ) => void;
   /**
-   * Replace one scene outline + storylet state in the current arc
-   * skeleton. Used by the choice-responsive re-selection flow: when
-   * the player completes a group's last sub-scene, /api/storylet/next
-   * picks the next storylet given updated stats/flags, and this
-   * action surgically updates only the upcoming group's outline
-   * (not the others). Preserves the rest of the skeleton.
+   * Episode planner produced a new Episode (theme + 3–5 scene plans
+   * with cast / setting / imagePrompt). Replaces any prior currentEpisode
+   * and resets the per-episode share-moment cap.
    */
-  replaceOutline: (
-    groupIndex: number,
-    outline: SceneOutline,
-    storyletState: StoryletState,
+  episodePlanReady: (
+    episode: Episode,
+    fate?: { firedSeedIds?: string[] },
   ) => void;
   /**
    * Sets the per-run "fate" — rolled cameos + tone — once after intro
@@ -205,8 +195,8 @@ interface SessionState {
    */
   appendDialogueLine: (llmIndex: number, line: DialogueLine) => void;
   setEpilogue: (epilogue: string) => void;
-  enterGeneratingArc: () => void;
-  exitGeneratingArc: () => void;
+  enterGeneratingEpisode: () => void;
+  exitGeneratingEpisode: () => void;
   endRun: () => void;
   devSetPhase: (phase: Phase, sceneIndex?: number) => void;
   advanceLine: (totalLines: number) => void;
@@ -351,8 +341,6 @@ export const useSessionStore = create<SessionState>()(
 
       setRunFate: ({ rolledCameos, tone }) =>
         set((state) => {
-          // Idempotent: never overwrite once set, so re-renders / strict-mode
-          // double-fires don't reroll the seed mid-run.
           if (state.arc?.rolledCameos && state.arc?.tone) return state;
           if (state.arc) {
             return {
@@ -363,15 +351,13 @@ export const useSessionStore = create<SessionState>()(
               },
             };
           }
-          // No arc yet (rolling fires after intro extraction, before
-          // arc-skeleton lands). Create a minimal stub; arcSkeletonReady's
-          // merge branch will pick up these fields when the skeleton arrives.
           return {
             arc: {
               startupName: state.intro.startupName ?? "the startup",
               founderPersona: state.intro.selfDescription ?? "",
               stage: state.intro.stage,
               flavorTags: state.intro.flavorTags,
+              episodeIndex: 0,
               scenes: [],
               stats: {
                 firedCofounder: false,
@@ -385,18 +371,18 @@ export const useSessionStore = create<SessionState>()(
           };
         }),
 
-      arcSkeletonReady: (skeleton, fate) =>
+      episodePlanReady: (episode, fate) =>
         set((state) => {
-          // Episode 0+: replace current skeleton; episodes 1+ also update the
-          // rolling storySoFar that the next scene calls will reference.
-          const nextStorySoFar = skeleton.storySoFar ?? state.arc?.storySoFar;
-          // Storylet engine state: the server returns the updated state
-          // alongside the skeleton (cooldowns + flags carried forward).
-          // Falls back to the prior arc's state when the SSE done event
-          // didn't include it (legacy fallback path).
-          const nextStoryletState =
-            fate?.storyletState ?? state.arc?.storyletState;
-          // New episode → reset the per-episode share-moment cap.
+          const nextStorySoFar = episode.storySoFar ?? state.arc?.storySoFar;
+          const priorFired = state.arc?.firedSeedIds ?? [];
+          const nextFired = fate?.firedSeedIds
+            ? Array.from(new Set([...priorFired, ...fate.firedSeedIds]))
+            : Array.from(new Set([...priorFired, ...episode.seedIds]));
+          // The new episode's scene 0 will live at the current end of
+          // arc.scenes. Capture that offset so per-scene gen can compute
+          // sceneIndexInEpisode = globalLLMIndex - startLLMIndex.
+          const startLLMIndex = state.arc?.scenes.length ?? 0;
+          const stamped: Episode = { ...episode, startLLMIndex };
           if (!state.arc) {
             return {
               shareMomentFiredInEpisode: null,
@@ -405,7 +391,8 @@ export const useSessionStore = create<SessionState>()(
                 founderPersona: state.intro.selfDescription ?? "",
                 stage: state.intro.stage,
                 flavorTags: state.intro.flavorTags,
-                arcSkeleton: skeleton,
+                episodeIndex: episode.episodeIndex,
+                currentEpisode: stamped,
                 scenes: [],
                 storySoFar: nextStorySoFar,
                 stats: {
@@ -414,7 +401,7 @@ export const useSessionStore = create<SessionState>()(
                   leakedToPress: false,
                   playedSafeDemoDay: false,
                 },
-                storyletState: nextStoryletState,
+                firedSeedIds: nextFired,
               },
             };
           }
@@ -422,32 +409,10 @@ export const useSessionStore = create<SessionState>()(
             shareMomentFiredInEpisode: null,
             arc: {
               ...state.arc,
-              arcSkeleton: skeleton,
+              episodeIndex: episode.episodeIndex,
+              currentEpisode: stamped,
               storySoFar: nextStorySoFar,
-              storyletState: nextStoryletState,
-            },
-          };
-        }),
-
-      replaceOutline: (groupIndex, outline, storyletState) =>
-        set((state) => {
-          // No arc / no skeleton means there's nothing to replace —
-          // ignore. (This shouldn't happen in practice; the route is
-          // gated on arc state in the caller.)
-          if (!state.arc?.arcSkeleton) return state;
-          const scenes = [...state.arc.arcSkeleton.scenes];
-          // Find by .index (preferred) and fall back to array position.
-          // Outlines are emitted with `index: 0..4`; preserving that
-          // index in the replacement keeps downstream readers happy.
-          const targetPos = scenes.findIndex((s) => s.index === groupIndex);
-          const pos = targetPos >= 0 ? targetPos : groupIndex;
-          if (pos < 0 || pos >= scenes.length) return state;
-          scenes[pos] = { ...outline, index: groupIndex };
-          return {
-            arc: {
-              ...state.arc,
-              arcSkeleton: { ...state.arc.arcSkeleton, scenes },
-              storyletState,
+              firedSeedIds: nextFired,
             },
           };
         }),
@@ -460,7 +425,7 @@ export const useSessionStore = create<SessionState>()(
             scenes.push({
               id: 0,
               title: "",
-              archetype: "cofounder",
+              role: "cofounder",
               imagePrompt: "",
               dialogue: [],
               choices: [],
@@ -468,7 +433,6 @@ export const useSessionStore = create<SessionState>()(
               timeoutChoiceId: "a",
             });
           }
-          // Preserve any imageUrl that landed before the scene text did.
           const prior = scenes[llmIndex];
           scenes[llmIndex] = prior?.imageUrl
             ? { ...scene, imageUrl: prior.imageUrl }
@@ -484,7 +448,7 @@ export const useSessionStore = create<SessionState>()(
             scenes.push({
               id: 0,
               title: "",
-              archetype: "cofounder",
+              role: "cofounder",
               imagePrompt: "",
               dialogue: [],
               choices: [],
@@ -493,9 +457,6 @@ export const useSessionStore = create<SessionState>()(
             });
           }
           const prior = scenes[llmIndex]!;
-          // Don't downgrade — once a real scene with imagePrompt exists,
-          // skip. Streams sometimes deliver imagePrompt twice in racy
-          // re-renders; this keeps the first stable.
           if (prior.imagePrompt && prior.imagePrompt.length > 0) return state;
           scenes[llmIndex] = { ...prior, imagePrompt };
           return { arc: { ...state.arc, scenes } };
@@ -509,7 +470,7 @@ export const useSessionStore = create<SessionState>()(
             scenes.push({
               id: 0,
               title: "",
-              archetype: "cofounder",
+              role: "cofounder",
               imagePrompt: "",
               dialogue: [],
               choices: [],
@@ -530,7 +491,7 @@ export const useSessionStore = create<SessionState>()(
             scenes.push({
               id: 0,
               title: "",
-              archetype: "cofounder",
+              role: "cofounder",
               imagePrompt: "",
               dialogue: [],
               choices: [],
@@ -548,18 +509,15 @@ export const useSessionStore = create<SessionState>()(
           return { ending: { ...state.ending, epilogue } };
         }),
 
-      enterGeneratingArc: () =>
+      enterGeneratingEpisode: () =>
         set((state) => {
-          if (state.phase === "generating-arc") return state;
-          return { phase: "generating-arc" };
+          if (state.phase === "generating-episode") return state;
+          return { phase: "generating-episode" };
         }),
 
-      exitGeneratingArc: () =>
+      exitGeneratingEpisode: () =>
         set((state) => {
-          if (state.phase !== "generating-arc") return state;
-          // First exit lands at the start of the *current* episode's first
-          // scene. For episode 0 that's authored-scene-count; for later
-          // episodes the player is already past it, so we stay where we are.
+          if (state.phase !== "generating-episode") return state;
           const llmCount = state.arc?.scenes.length ?? 0;
           const targetIndex =
             llmCount === 0
@@ -637,11 +595,11 @@ export const useSessionStore = create<SessionState>()(
             choiceMade: null,
           };
           // No more scene-2 paywall gate — the paywall is now driven by
-          // /api/generate-scene 402s only. A new user walks free through
+          // /api/generate-episode 402s only. A new user walks free through
           // scenes 0–7 (authored) and hits the paywall the first time the
-          // LLM tail can't fund a group it's about to generate.
+          // planner can't fund a new episode.
           if (currentIndex === AUTHORED_SCENE_COUNT - 1) {
-            return { phase: "generating-arc", progress: nextProgress };
+            return { phase: "generating-episode", progress: nextProgress };
           }
           return { progress: nextProgress };
         }),
@@ -673,7 +631,7 @@ export const useSessionStore = create<SessionState>()(
               ending: undefined,
             };
           }
-          if (phase === "generating-arc") {
+          if (phase === "generating-episode") {
             return {
               phase,
               progress: {
@@ -729,6 +687,33 @@ export const useSessionStore = create<SessionState>()(
     }),
     {
       name: "roadtosf-session",
+      // Bump on architectural breaks. v2 = new Episode/ScenePlan types
+      // (Apr 2026 episode-architecture rewrite); persisted v1 state with
+      // ArcSkeleton/SceneOutline shapes is incompatible with the new
+      // readers, so the migrate handler below wipes it.
+      version: 2,
+      migrate: (persisted, fromVersion) => {
+        if (fromVersion < 2) {
+          // Hard reset for in-progress runs from the pre-episode era.
+          // Preserve only player identity + payment state.
+          const p = (persisted ?? {}) as Partial<SessionState>;
+          return {
+            phase: "welcome",
+            intro: INITIAL_INTRO,
+            arc: undefined,
+            progress: INITIAL_PROGRESS,
+            history: [],
+            stats: { hype: 0, integrity: 0 },
+            ending: undefined,
+            playthroughId: undefined,
+            paid: p.paid ?? false,
+            creditsRemaining: p.creditsRemaining ?? 0,
+            paywallOpen: false,
+            shareMomentFiredInEpisode: null,
+          } as Partial<SessionState>;
+        }
+        return persisted as Partial<SessionState>;
+      },
       storage: createJSONStorage(() =>
         typeof window === "undefined" ? undefined! : sessionStorage,
       ),
@@ -736,9 +721,6 @@ export const useSessionStore = create<SessionState>()(
       partialize: (state) => ({
         phase: state.phase,
         intro: state.intro,
-        // imageUrls are now short Vercel Blob URLs (a few hundred bytes), so
-        // they fit in sessionStorage and survive rehydrate without re-firing
-        // image-gen.
         arc: state.arc,
         progress: state.progress,
         history: state.history,
