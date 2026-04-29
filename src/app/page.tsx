@@ -682,7 +682,12 @@ export default function HomePage() {
   // Gated on extraction having resolved — otherwise the planner receives
   // an undefined team and the prompt fights with default text.
   useEffect(() => {
-    if (phase !== "scene") return;
+    // Allow both "scene" (legacy: episode-gen kicked off mid-walk) and
+    // "generating-episode" (post-AUTHORED_SCENE_COUNT=4: phase flips
+    // immediately after Q&A and the lobby is the only thing in front of
+    // episode 0). Without the second branch, the lobby renders forever
+    // because nothing ever calls fetchEpisode(0).
+    if (phase !== "scene" && phase !== "generating-episode") return;
     if (sceneIndex < POST_QA_SCENE_INDEX) return;
     if (arc?.currentEpisode?.episodeIndex === 0) return;
     if (episodeGenFiredRef.current.has(0)) return;
