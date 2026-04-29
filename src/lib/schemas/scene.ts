@@ -45,6 +45,7 @@ const castMemberSchema = z.object({
   age: z.enum(['young', 'middle', 'old']).default('middle'),
   descriptives: z.array(z.string().max(40)).max(8).default([]),
   voiceId: z.string().min(1).max(64).optional(),
+  appearance: z.string().max(400).default(''),
 })
 
 /**

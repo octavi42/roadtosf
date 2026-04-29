@@ -50,6 +50,7 @@ export function assignVoicesToEpisode(plan: ParsedEpisodePlan): ParsedEpisodePla
           gender: canonical.gender,
           age: canonical.age,
           descriptives: canonical.descriptives,
+          appearance: canonical.appearance,
         }
       }
       // Scene introduces a name not in the episode roster — rare;

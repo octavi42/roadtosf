@@ -48,6 +48,11 @@ export interface CastMember {
   age?: CastAge
   descriptives?: string[]
   voiceId?: string
+  /** Visual identity for image-gen — short physical description
+   *  (clothing, hair, build, signature features). LLM-supplied at
+   *  episode-gen time. Mirrored onto every scene this cast member
+   *  appears in so the same character looks the same across scenes. */
+  appearance?: string
 }
 
 /** A Scene is a CONTAINER the player stays inside through many beats.
