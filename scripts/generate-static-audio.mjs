@@ -70,22 +70,6 @@ const LINES = [
   { voiceId: J, text: "Who's paying for the next 90 days?" },
   { voiceId: J, text: "What's the thing you don't say to investors?" },
 
-  // ---- Scene 5 — "The First Stranger" (2 narrator lines) ----
-  { voiceId: N, text: "You haven't been alone ninety seconds when a man with a clipboard locks eyes." },
-  { voiceId: N, text: "\"Founder?\" he asks, like it's a yes-or-no question that means three different things." },
-
-  // ---- Scene 6 — "The Recognition" (2 narrator lines) ----
-  { voiceId: N, text: "Half a block ahead, a guy stops to take a phone call. Allbirds, soft hoodie, voice an octave too low for the volume." },
-  { voiceId: N, text: "You've seen his face on Twitter. He hasn't seen you yet." },
-
-  // ---- Scene 7 — "The Next Table" (2 narrator lines) ----
-  { voiceId: N, text: "You take a window seat. The table next to you is two laptops, two espressos, and one founder being interviewed." },
-  { voiceId: N, text: "The interviewer asks how big the market is. The founder does the thing with their hands." },
-
-  // ---- Scene 8 — "The First Signal" (2 narrator lines) ----
-  { voiceId: N, text: "Your phone lights up. Three messages, not from anyone you know." },
-  { voiceId: N, text: "One is a Hacker News link. Someone in your space launched something this morning." },
-
   // ---- Narrator lobby (between authored scenes and first generated episode) ----
   // Keep in sync with NARRATOR_LOBBY_OPENER in src/components/NarratorLobby.tsx
   // and the off-topic fallback line.
