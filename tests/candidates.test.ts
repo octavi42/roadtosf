@@ -366,6 +366,76 @@ describe('role-relevance gate — reporter wildcards', () => {
   })
 })
 
+// ── NPC wildcard bias ───────────────────────────────────────────────
+
+describe('NPC bias on wildcards', () => {
+  // Build a pool with both NPC-tagged and non-NPC people; no event
+  // attendees, so all candidates come from the wildcard sampler.
+  function makePool(npcCount: number, realCount: number): SfPerson[] {
+    const npcs = Array.from({ length: npcCount }, (_, i) =>
+      makePerson({
+        id: `npc-${i}`,
+        displayName: `NPC ${i}`,
+        role: 'cofounder',
+        tags: ['ai', 'engineering', 'npc'],
+        achievementHook: null,
+      }),
+    )
+    const reals = Array.from({ length: realCount }, (_, i) =>
+      makePerson({
+        id: `real-${i}`,
+        displayName: `Real ${i}`,
+        role: 'mentor',
+        tags: ['mentor', 'yc'],
+        achievementHook: null,
+      }),
+    )
+    return [...npcs, ...reals]
+  }
+
+  function pickWildcards(pool: SfPerson[]): ScoredPerson[] {
+    const events = [makeEvent({ id: 'e1', knownAttendees: [], tags: ['ai'] })]
+    const candidateEvents = pickCandidateEvents(
+      events,
+      {
+        flavorTags: ['ai'],
+        stats: { hype: 0, integrity: 0 },
+        alreadyEncountered: {},
+        seed: 'pt',
+        now: REFERENCE_NOW,
+      },
+      REFERENCE_NOW.getTime(),
+    )
+    return pickCandidatePeople(pool, candidateEvents, {
+      flavorTags: ['ai'],
+      stats: { hype: 0, integrity: 0 },
+      alreadyEncountered: {},
+      seed: 'pt',
+      now: REFERENCE_NOW,
+    })
+  }
+
+  it('reserves 2 of 3 wildcard slots for NPCs when both pools are healthy', () => {
+    const out = pickWildcards(makePool(10, 10))
+    const npcCount = out.filter((s) => s.person.id.startsWith('npc-')).length
+    const realCount = out.filter((s) => s.person.id.startsWith('real-')).length
+    expect(npcCount).toBe(2)
+    expect(realCount).toBe(1)
+  })
+
+  it('falls back to real-only wildcards when no NPCs are available', () => {
+    const out = pickWildcards(makePool(0, 10))
+    const realCount = out.filter((s) => s.person.id.startsWith('real-')).length
+    expect(realCount).toBe(3)
+  })
+
+  it('falls back to NPC-only wildcards when no real people are available', () => {
+    const out = pickWildcards(makePool(10, 0))
+    const npcCount = out.filter((s) => s.person.id.startsWith('npc-')).length
+    expect(npcCount).toBe(3)
+  })
+})
+
 // ── Determinism ─────────────────────────────────────────────────────
 
 describe('mulberry32 determinism', () => {
