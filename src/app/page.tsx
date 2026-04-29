@@ -842,42 +842,72 @@ export default function HomePage() {
     }
   }, [phase, sceneIndex, arc, history, fireBeat]);
 
-  // Image-gen: fire ALL scenes' images in parallel as soon as the
-  // episode plan lands. By the time the player walks through scene
-  // 1's beats, scene 2/3/4's images are already loaded.
+  // Image-gen: SEQUENTIAL. Image 1 generates first, lands on
+  // arc.scenes[startLLM]; then image 2 starts, lands on
+  // arc.scenes[startLLM+1]; etc. One in-flight call at a time per
+  // episode.
+  // Why sequential: (1) lower concurrent load on the image API,
+  // (2) the player walks scenes in order so image N+1 doesn't need
+  // to be ready before scene N is consumed (~30-60s of dialogue
+  // per scene comfortably covers ~30s/image gen).
+  // The "imageQueueTick" counter bumps on every fetch-completion so
+  // the effect re-runs and picks the next un-fired slot regardless
+  // of whether sceneImageReady fired (success) or didn't (error).
+  const imageQueueRef = useRef<{ inFlight: boolean }>({ inFlight: false });
+  const [imageQueueTick, setImageQueueTick] = useState(0);
   useEffect(() => {
     if (!arc?.currentEpisode) return;
     const ep = arc.currentEpisode;
     if (!Array.isArray(ep.scenes)) return;
     const startLLM = ep.startLLMIndex ?? 0;
-    ep.scenes.forEach((plan, i) => {
+    if (imageQueueRef.current.inFlight) return;
+
+    // Find the next un-fired slot in episode order.
+    let nextIndex = -1;
+    for (let i = 0; i < ep.scenes.length; i++) {
       const slot = startLLM + i;
-      if (imageGenFiredRef.current.has(slot)) return;
-      const stored = arc?.scenes[slot];
-      if (stored?.imageUrl) return;
-      imageGenFiredRef.current.add(slot);
-      fetch("/api/generate-image", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          mode: "scene",
-          scenePrompt: plan.imagePrompt,
-          archetype: plan.role,
-          quality: "low",
-        }),
+      if (imageGenFiredRef.current.has(slot)) continue;
+      if (arc?.scenes[slot]?.imageUrl) {
+        imageGenFiredRef.current.add(slot);
+        continue;
+      }
+      nextIndex = i;
+      break;
+    }
+    if (nextIndex < 0) return;
+
+    const slot = startLLM + nextIndex;
+    const plan = ep.scenes[nextIndex];
+    imageGenFiredRef.current.add(slot);
+    imageQueueRef.current.inFlight = true;
+
+    fetch("/api/generate-image", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        mode: "scene",
+        scenePrompt: plan.imagePrompt,
+        archetype: plan.role,
+        quality: "low",
+      }),
+    })
+      .then((r) =>
+        r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)),
+      )
+      .then((data: { url?: string }) => {
+        if (data.url) sceneImageReady(slot, data.url);
       })
-        .then((r) =>
-          r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)),
-        )
-        .then((data: { url?: string }) => {
-          if (data.url) sceneImageReady(slot, data.url);
-        })
-        .catch((err) => {
-          imageGenFiredRef.current.delete(slot);
-          console.error(`[image-gen] failed slot=${slot}`, err);
-        });
-    });
-  }, [arc?.currentEpisode, arc?.scenes, sceneImageReady]);
+      .catch((err) => {
+        imageGenFiredRef.current.delete(slot);
+        console.error(`[image-gen] failed slot=${slot}`, err);
+      })
+      .finally(() => {
+        imageQueueRef.current.inFlight = false;
+        // Bump the tick so this effect re-runs and picks the next
+        // un-fired slot regardless of whether arc.scenes changed.
+        setImageQueueTick((n) => n + 1);
+      });
+  }, [arc?.currentEpisode, arc?.scenes, sceneImageReady, imageQueueTick]);
 
   // Cinematic exit: as soon as the first scene of a freshly-planned
   // episode has dialogue, drop out of the loader.
