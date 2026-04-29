@@ -242,14 +242,21 @@ ${
 The prior choice contains "${namedInChoice.name}" — a member of the EPISODE ROSTER. The player's choice was: "${input.priorBeatChoice?.choiceLabel}".
 
 This means the player is now interacting with ${namedInChoice.name} — NOT the planned cast. You MUST pivot:
-- "role" output → "${namedInChoice.role}"
-- "cast" output → [{ "role": "${namedInChoice.role}", "name": "${namedInChoice.name}", "blurb": ${JSON.stringify(namedInChoice.blurb ?? '')} }]
-- "setting" output → invent a setting that fits how the player reached ${namedInChoice.name} (a phone call from the player's car, ${namedInChoice.name}'s apartment, a meeting they pulled together on the way, etc.)
-- "title" output → reflect the new scene (e.g. "On the phone with ${namedInChoice.name}", "${namedInChoice.name}'s apartment")
+- Output the pivot fields EXACTLY in this shape (note "cast" is an ARRAY OF OBJECTS — not an array of strings, not an object map):
+  "role": "${namedInChoice.role}",
+  "cast": [
+    { "role": "${namedInChoice.role}", "name": "${namedInChoice.name}", "blurb": ${JSON.stringify(namedInChoice.blurb ?? '')} }
+  ],
+  "setting": (invent a setting that fits how the player reached ${namedInChoice.name} — a phone call from the player's car, ${namedInChoice.name}'s apartment, a meeting they pulled together on the way),
+  "title": (reflect the new scene — e.g. "On the phone with ${namedInChoice.name}", "${namedInChoice.name}'s apartment"),
 - The first dialogue line is ${priorChoiceText.startsWith('call') ? `the call connecting ([narrator] You hit dial. Two rings. Then ${namedInChoice.name} picks up.)` : `the player arriving / ${namedInChoice.name} opening the door / etc.`}
-- The second dialogue line is ${namedInChoice.name} speaking with role="${namedInChoice.role}"
+- The second dialogue line is ${namedInChoice.name} speaking with speaker="${namedInChoice.role}"
 
-Do NOT render the planned scene. Do NOT use the planned cast. The roster member named in the prior choice is the actual scene.
+DO NOT emit cast as ["${namedInChoice.role}"] (array of strings — wrong).
+DO NOT emit cast as {"${namedInChoice.role}": "${namedInChoice.name}"} (object map — wrong).
+DO emit cast as [{ "role": "${namedInChoice.role}", "name": "${namedInChoice.name}" }] (array of objects — correct).
+
+Do NOT render the planned scene. Do NOT use the planned cast.
 
 `
     : ''
