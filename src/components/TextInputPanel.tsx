@@ -2,6 +2,8 @@
 
 import { useRef, useState, useCallback, KeyboardEvent, ChangeEvent } from "react"
 
+import { useScribe, CommitStrategy } from "@elevenlabs/react"
+
 interface TextInputPanelProps {
   placeholder?: string
   onSubmit: (text: string) => void
@@ -16,10 +18,47 @@ export default function TextInputPanel({
   maxLength = 280,
 }: TextInputPanelProps) {
   const [value, setValue] = useState("")
-  // UI-only: when true the textarea is locked and we display a "listening" state.
-  // Wire-up to actual speech-to-text happens later — clicking just toggles this flag.
   const [isListening, setIsListening] = useState(false)
+  const [voiceError, setVoiceError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Snapshot of `value` at the moment the player started recording.
+  // Committed segments concatenate onto this snapshot. The live partial
+  // transcript is overlaid on top while the player keeps speaking, so
+  // `value` mutates each frame the model issues a new partial.
+  const baseValueRef = useRef("")
+
+  const handlePartial = useCallback((data: { text: string }) => {
+    const partial = data.text.trim()
+    const base = baseValueRef.current
+    const next = base ? `${base.trimEnd()} ${partial}` : partial
+    setValue(next.slice(0, maxLength))
+  }, [maxLength])
+
+  const handleCommitted = useCallback((data: { text: string }) => {
+    const segment = data.text.trim()
+    if (!segment) return
+    const base = baseValueRef.current
+    baseValueRef.current = base
+      ? `${base.trimEnd()} ${segment}`
+      : segment
+    setValue(baseValueRef.current.slice(0, maxLength))
+  }, [maxLength])
+
+  const handleScribeError = useCallback((err: Error | Event) => {
+    const message = err instanceof Error ? err.message : "voice error"
+    setVoiceError(message)
+    setIsListening(false)
+  }, [])
+
+  const { partialTranscript, connect, disconnect, commit } = useScribe({
+    onPartialTranscript: handlePartial,
+    onCommittedTranscript: handleCommitted,
+    onError: handleScribeError,
+    onAuthError: (data) => handleScribeError(new Error(data.error)),
+    onTranscriberError: (data) => handleScribeError(new Error(data.error)),
+    onDisconnect: () => setIsListening(false),
+  })
 
   const LINE_HEIGHT = 24
   const MIN_ROWS = 1
@@ -45,6 +84,7 @@ export default function TextInputPanel({
     if (!trimmed || disabled) return
     onSubmit(trimmed)
     setValue("")
+    baseValueRef.current = ""
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto"
     }
@@ -57,6 +97,49 @@ export default function TextInputPanel({
     }
   }
 
+  const startListening = useCallback(async () => {
+    setVoiceError(null)
+    try {
+      const tokenRes = await fetch("/api/scribe-token", { method: "POST" })
+      if (!tokenRes.ok) {
+        throw new Error(`token http ${tokenRes.status}`)
+      }
+      const body = (await tokenRes.json()) as { token?: string; error?: string }
+      if (!body.token) {
+        throw new Error(body.error ?? "no token returned")
+      }
+      // Anchor incoming committed segments onto whatever the player has
+      // already typed.
+      baseValueRef.current = value
+      await connect({
+        token: body.token,
+        modelId: "scribe_v2_realtime",
+        commitStrategy: CommitStrategy.MANUAL,
+        microphone: {
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      })
+      setIsListening(true)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "voice start failed"
+      setVoiceError(message)
+      setIsListening(false)
+    }
+  }, [connect, value])
+
+  const stopListening = useCallback(() => {
+    try {
+      commit()
+    } catch {
+      // commit() throws if the connection already closed — fine to ignore.
+    }
+    disconnect()
+    setIsListening(false)
+  }, [commit, disconnect])
+
+  const onVoiceClick = isListening ? stopListening : startListening
+
   const used = value.length
   const pct = used / maxLength
 
@@ -68,6 +151,13 @@ export default function TextInputPanel({
       : "text-[var(--color-ink)]/50"
 
   const textareaDisabled = disabled || isListening
+  const displayValue =
+    isListening && partialTranscript
+      ? `${baseValueRef.current ? baseValueRef.current.trimEnd() + " " : ""}${partialTranscript}`.slice(
+          0,
+          maxLength,
+        )
+      : value
 
   return (
     <div
@@ -76,7 +166,7 @@ export default function TextInputPanel({
     >
       <textarea
         ref={textareaRef}
-        value={value}
+        value={displayValue}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
         disabled={textareaDisabled}
@@ -93,7 +183,7 @@ export default function TextInputPanel({
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
-            onClick={() => setIsListening((v) => !v)}
+            onClick={onVoiceClick}
             disabled={disabled}
             aria-label={isListening ? "Stop voice input" : "Start voice input"}
             aria-pressed={isListening}
@@ -120,12 +210,21 @@ export default function TextInputPanel({
             <span>{isListening ? "Listening…" : "Voice"}</span>
           </button>
 
-          {!isListening && (
+          {!isListening && !voiceError && (
             <span
               className="font-pixel text-[var(--color-ink)]/50 text-sm select-none truncate"
               style={{ letterSpacing: "0.05em" }}
             >
               ↵ send · ⇧↵ newline
+            </span>
+          )}
+
+          {voiceError && (
+            <span
+              className="font-sans text-[var(--color-cable)] text-xs select-none truncate"
+              role="alert"
+            >
+              {voiceError}
             </span>
           )}
         </div>
