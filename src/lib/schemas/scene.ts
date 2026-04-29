@@ -7,7 +7,6 @@ const SPEAKER_VALUES = [...ROLE_VALUES, 'player', 'narrator'] as const
 const ROLE_SET = new Set<string>(ROLE_VALUES)
 const SPEAKER_SET = new Set<string>(SPEAKER_VALUES)
 
-/** Per-line cap in schema / coercion. */
 export const MAX_DIALOGUE_LINE_CHARS = 320
 
 const dialogueLineSchema = z.object({
@@ -31,45 +30,44 @@ const choiceSchema = z.object({
   }),
 })
 
-export const MAX_DIALOGUE_CHARS_PER_SCENE = 800
+export const MAX_DIALOGUE_CHARS_PER_BEAT = 800
 
 const shareMomentSchema = z.object({
   title: z.string().min(1).max(60),
   blurb: z.string().min(1).max(180),
 })
 
-const castMemberSchema = z.object({
-  role: z.enum(ROLE_VALUES),
-  name: z.string().min(1).max(80),
-  blurb: z.string().max(300).optional(),
-})
-
-export const sceneSchema = z
+/**
+ * A Beat = one dialogue exchange + one choice block, returned by
+ * /api/generate-scene per call. Many beats accumulate inside one
+ * Scene container until the LLM marks isLastBeatOfScene.
+ */
+export const beatSchema = z
   .object({
-    id: z.number().int().min(1).max(9999),
-    title: z.string().min(1).max(120),
-    role: z.enum(ROLE_VALUES),
-    /** Concrete setting Haiku invented for THIS scene. */
-    setting: z.string().min(8).max(600).nullable().optional(),
-    /** Subset of episode cast appearing in THIS scene. Picked by
-     *  Haiku based on the prior choice. */
-    cast: z.array(castMemberSchema).max(6).optional(),
-    /** True on the scene that closes the episode arc. Triggers next
-     *  /api/generate-episode call client-side. */
-    isLastSceneOfEpisode: z.boolean().nullable().optional(),
-    imagePrompt: z.string().min(10).max(600),
     dialogue: z.array(dialogueLineSchema).min(2).max(6),
     choices: z.array(choiceSchema).min(2).max(3),
     timeoutSeconds: z.number().int().min(8).max(60).default(15),
     timeoutChoiceId: z.string().min(1).max(2),
+    /** Set true when this beat closes the scene's arc. */
+    isLastBeatOfScene: z.boolean().default(false),
+    /** Set true when this is the LAST scene's last beat — triggers
+     *  next-episode-gen on choice click. */
+    isLastSceneOfEpisode: z.boolean().nullable().optional(),
     shareMoment: shareMomentSchema.optional(),
   })
   .refine(
-    (s) => s.dialogue.reduce((acc, l) => acc + l.text.length, 0) <= MAX_DIALOGUE_CHARS_PER_SCENE,
-    { message: `dialogue total must be ≤${MAX_DIALOGUE_CHARS_PER_SCENE} chars (TTS budget)` },
+    (s) => s.dialogue.reduce((acc, l) => acc + l.text.length, 0) <= MAX_DIALOGUE_CHARS_PER_BEAT,
+    { message: `dialogue total must be ≤${MAX_DIALOGUE_CHARS_PER_BEAT} chars (TTS budget)` },
   )
 
-export type ParsedScene = z.infer<typeof sceneSchema>
+export type ParsedBeat = z.infer<typeof beatSchema>
+
+// Back-compat aliases — many callsites import `sceneSchema` /
+// `MAX_DIALOGUE_CHARS_PER_SCENE`. Kept as re-exports so the rewrite
+// doesn't ripple.
+export const sceneSchema = beatSchema
+export const MAX_DIALOGUE_CHARS_PER_SCENE = MAX_DIALOGUE_CHARS_PER_BEAT
+export type ParsedScene = ParsedBeat
 
 export function clampDelta(n: number): number {
   if (!Number.isFinite(n)) return 0
@@ -79,8 +77,6 @@ export function clampDelta(n: number): number {
 }
 
 const MAX_CHOICE_CONSEQUENCE = 160
-const MAX_IMAGE_PROMPT = 500
-const MAX_TITLE = 120
 const TIMEOUT_MIN = 8
 const TIMEOUT_MAX = 60
 
@@ -141,9 +137,6 @@ function normalizeDialogueSpeaker(raw: unknown, defaultRole: Role): string {
   const t = raw.trim()
   const lower = t.toLowerCase()
   if (SPEAKER_SET.has(lower)) return lower
-  // Multi-role scenes allow any role from the cast — but if the model
-  // emits a free-form display string, we can't reverse-map without the
-  // cast. Fall back to the scene's primary role.
   if (t.includes(',') || t.length > 24) return defaultRole
   if (lower.includes('narrator')) return 'narrator'
   if (lower.includes('player') || lower === 'founder' || lower === 'you')
@@ -151,37 +144,15 @@ function normalizeDialogueSpeaker(raw: unknown, defaultRole: Role): string {
   return defaultRole
 }
 
-export interface CoerceSceneOptions {
-  /** Primary role from the scene plan. Used as the fallback when the
-   *  model emits an unrecognized speaker — multi-role scenes still
-   *  honor cofounder/vc/etc. speakers as long as they're in the
-   *  ROLE_SET. */
+export interface CoerceBeatOptions {
   primaryRole: Role
-  /** Cast roles allowed to speak in this scene. Speakers outside this
-   *  set + player + narrator get clamped to the primary role. */
   allowedRoles?: ReadonlyArray<Role>
 }
 
-export function coerceRawSceneJson(data: unknown, opts: CoerceSceneOptions): unknown {
+export function coerceRawBeatJson(data: unknown, opts: CoerceBeatOptions): unknown {
   if (!data || typeof data !== 'object') return data
   const o = data as Record<string, unknown>
   const out: Record<string, unknown> = { ...o }
-
-  const primaryRole: Role = opts.primaryRole
-  // Schema field is `role` now; accept either `role` (new) or
-  // `archetype` (legacy LLM emissions) and pin to the primary role.
-  if (typeof out.role === 'string') {
-    const r = out.role.trim().toLowerCase()
-    if (ROLE_SET.has(r)) out.role = r
-    else out.role = primaryRole
-  } else if (typeof out.archetype === 'string') {
-    const r = out.archetype.trim().toLowerCase()
-    if (ROLE_SET.has(r)) out.role = r
-    else out.role = primaryRole
-    delete out.archetype
-  } else {
-    out.role = primaryRole
-  }
 
   if (typeof out.timeoutSeconds === 'number' && Number.isFinite(out.timeoutSeconds)) {
     const n = Math.round(out.timeoutSeconds)
@@ -191,14 +162,6 @@ export function coerceRawSceneJson(data: unknown, opts: CoerceSceneOptions): unk
     if (!Number.isNaN(n)) {
       out.timeoutSeconds = Math.min(TIMEOUT_MAX, Math.max(TIMEOUT_MIN, n))
     }
-  }
-
-  if (typeof out.title === 'string' && out.title.length > MAX_TITLE) {
-    out.title = out.title.slice(0, MAX_TITLE).trimEnd()
-  }
-
-  if (typeof out.imagePrompt === 'string' && out.imagePrompt.length > MAX_IMAGE_PROMPT) {
-    out.imagePrompt = out.imagePrompt.slice(0, MAX_IMAGE_PROMPT).trimEnd()
   }
 
   if (Array.isArray(out.choices)) {
@@ -235,19 +198,25 @@ export function coerceRawSceneJson(data: unknown, opts: CoerceSceneOptions): unk
       out.dialogue.filter((d) => d && typeof d === 'object') as Array<Record<string, unknown>>
     ).map((d) => ({
       ...d,
-      speaker: normalizeDialogueSpeaker(d.speaker, primaryRole),
+      speaker: normalizeDialogueSpeaker(d.speaker, opts.primaryRole),
     }))
-    out.dialogue = fitDialogueToBudget(lines, MAX_DIALOGUE_CHARS_PER_SCENE, MAX_DIALOGUE_LINE_CHARS)
+    out.dialogue = fitDialogueToBudget(lines, MAX_DIALOGUE_CHARS_PER_BEAT, MAX_DIALOGUE_LINE_CHARS)
+  }
+
+  // Schema's isLastBeatOfScene defaults to false; coerce non-boolean
+  // emissions accordingly.
+  if (out.isLastBeatOfScene !== undefined && typeof out.isLastBeatOfScene !== 'boolean') {
+    out.isLastBeatOfScene =
+      out.isLastBeatOfScene === 'true' || out.isLastBeatOfScene === 1
   }
 
   return out
 }
 
-export function sanitizeScene(s: ParsedScene, opts: { allowedRoles?: ReadonlyArray<Role> } = {}): ParsedScene {
-  const dialogue = s.dialogue.filter((d) => d.text.trim().length > 0)
-  // Cast lock: if allowedRoles is supplied (cast from the ScenePlan),
-  // limit speakers to those + player + narrator. If unsupplied, allow
-  // any role + player + narrator (multi-role scenes are the default).
+export const coerceRawSceneJson = coerceRawBeatJson
+
+export function sanitizeBeat(b: ParsedBeat, opts: { allowedRoles?: ReadonlyArray<Role> } = {}): ParsedBeat {
+  const dialogue = b.dialogue.filter((d) => d.text.trim().length > 0)
   const allowed: ReadonlySet<string> = opts.allowedRoles
     ? new Set(['player', 'narrator', ...opts.allowedRoles])
     : SPEAKER_SET
@@ -255,12 +224,14 @@ export function sanitizeScene(s: ParsedScene, opts: { allowedRoles?: ReadonlyArr
     allowed.has(d.speaker) ? d : { ...d, speaker: 'narrator' as const },
   )
   return {
-    ...s,
-    dialogue: clamped.length > 0 ? clamped : s.dialogue,
-    choices: s.choices.map((c) => ({
+    ...b,
+    dialogue: clamped.length > 0 ? clamped : b.dialogue,
+    choices: b.choices.map((c) => ({
       ...c,
       hype: clampDelta(c.hype),
       integrity: clampDelta(c.integrity),
     })),
   }
 }
+
+export const sanitizeScene = sanitizeBeat

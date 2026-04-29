@@ -8,24 +8,33 @@ const castMemberSchema = z.object({
   blurb: z.string().max(300).optional(),
 })
 
+const scenePlanSchema = z.object({
+  index: z.number().int().min(0).max(20),
+  role: z.enum(ROLE_VALUES),
+  setting: z.string().min(8).max(600),
+  cast: z.array(castMemberSchema).min(1).max(6),
+  topic: z.string().min(8).max(400),
+  imagePrompt: z.string().min(10).max(600),
+  title: z.string().min(1).max(120),
+})
+
 /**
- * Episode skeleton. Lightweight — theme, premise, cast roster, and a
- * loose arc. Scenes are NOT pre-planned; they are invented by Haiku
- * scene-by-scene at scene-gen time. The skeleton just commits to the
- * episode-level container (who could appear, what kind of arc).
+ * Episode skeleton: theme + premise + episode-level cast roster +
+ * 3–5 pre-planned scenes (setting / cast subset / imagePrompt / topic
+ * / title locked per scene). Images for all scenes are generated in
+ * parallel by the client when this skeleton lands. Each scene plays
+ * as a stream of beats (dialogue + choices) inside one container —
+ * see /api/generate-scene for the per-beat shape.
  */
 export const episodePlanSchema = z.object({
   episodeIndex: z.number().int().min(0).max(50).default(0),
   theme: z.string().min(4).max(240),
   premise: z.string().min(10).max(1200),
-  /** Full speaker roster for the episode — anyone who might appear
-   *  in any scene. Scene-gen MUST pick from this list. */
   cast: z.array(castMemberSchema).min(2).max(8),
-  /** Loose arc bullets (3–5). Hints for the scene-gen prompt — NOT
-   *  per-scene plans. Each scene is generated on the fly. */
-  arcBullets: z.array(z.string().min(8).max(400)).min(3).max(8),
+  scenes: z.array(scenePlanSchema).min(3).max(5),
   storySoFar: z.string().min(20).max(1500).nullable().optional(),
   seedIds: z.array(z.string()).default([]),
 })
 
 export type ParsedEpisodePlan = z.infer<typeof episodePlanSchema>
+export type ParsedScenePlan = z.infer<typeof scenePlanSchema>

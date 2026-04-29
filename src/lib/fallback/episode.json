@@ -11,7 +11,7 @@
     {
       "role": "hater",
       "name": "Brandon",
-      "blurb": "CEO of a competing startup with $4M and a year head start. Knows your name. Likes the espresso machine. Will ask about your runway."
+      "blurb": "CEO of a competing startup with $4M and a year head start. Knows your name. Likes the espresso machine."
     },
     {
       "role": "mentor",
@@ -19,12 +19,52 @@
       "blurb": "Partner emeritus at YC. Has watched 200 startups fail. Closes her book and asks if you've eaten. The question is a test."
     }
   ],
-  "arcBullets": [
-    "the player might get cornered at the kitchen island by a stranger pitching themselves as cofounder",
-    "a competitor's CEO might appear at the espresso machine and probe for weaknesses",
-    "an older mentor figure could close her book and offer one terse piece of advice",
-    "the player might choose to leave the building entirely — Folsom Street, late, alone with the deck",
-    "an unexpected text could land mid-arc and pull the player away"
+  "scenes": [
+    {
+      "index": 0,
+      "role": "cofounder",
+      "setting": "the YC co-working space, kitchen island, 11pm Tuesday",
+      "cast": [
+        {
+          "role": "cofounder",
+          "name": "Maya",
+          "blurb": "Ex-Stripe engineer; opens with an equity-sketch deck on her laptop."
+        }
+      ],
+      "topic": "A founder you barely know corners you at the kitchen island and pitches herself as your cofounder. The conversation can go several ways depending on what you ask her.",
+      "imagePrompt": "interior of a YC co-working space kitchen at night, warm fluorescent overhead, a young woman with a hoodie and laptop leaning across a kitchen island toward the founder",
+      "title": "The Kitchen Pitch"
+    },
+    {
+      "index": 1,
+      "role": "hater",
+      "setting": "the espresso machine in the back hallway, ten minutes later",
+      "cast": [
+        {
+          "role": "hater",
+          "name": "Brandon",
+          "blurb": "Competing CEO. Greets you by name. Asks about runway."
+        }
+      ],
+      "topic": "You bump into a competitor's CEO at the espresso machine. He probes for weaknesses in casual tone.",
+      "imagePrompt": "espresso machine in a back hallway of a co-working space, two people in their late 20s, cinematic two-shot, golden lamplight",
+      "title": "Espresso With The Enemy"
+    },
+    {
+      "index": 2,
+      "role": "mentor",
+      "setting": "a corner couch in the same YC space, midnight",
+      "cast": [
+        {
+          "role": "mentor",
+          "name": "Linda",
+          "blurb": "Partner emeritus at YC; closes her book as you walk past."
+        }
+      ],
+      "topic": "A partner emeritus closes her book and asks if you've eaten. The question is a test that opens up into real conversation.",
+      "imagePrompt": "interior of a co-working space common area at midnight, an older woman with reading glasses on a corner couch closing a hardback book, founder approaching, soft warm lighting",
+      "title": "The Question About Dinner"
+    }
   ],
   "seedIds": ["cofounder_pitch_generic", "hater_generic_dunk", "mentor_generic_advice"]
 }

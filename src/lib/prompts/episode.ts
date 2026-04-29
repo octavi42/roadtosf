@@ -17,8 +17,7 @@ export interface PriorChoiceSummary {
 export interface BuildEpisodePromptInput {
   episodeIndex: number
   priorStorySoFar?: string
-  /** The single most-recent player choice from the prior episode's
-   *  final scene. The new episode MUST be a direct consequence. */
+  /** The single most-recent player choice from the prior episode. */
   lastChoice?: PriorChoiceSummary
   startupName: string
   startupDescription: string
@@ -36,63 +35,75 @@ export interface BuildEpisodePromptInput {
   siliconManiaItems?: SMItem[]
   rolledCameos?: RolledCameo[]
   tone?: ToneSpec
-  /** Storylet candidate pool — the planner may draw on these for
-   *  beat ideas in arcBullets. */
   seedPool: Storylet[]
   firedSeedIds: string[]
 }
 
-const SYSTEM_RULES = `You are the EPISODE SKELETON engine for "Road to SF", a satirical comic-book founder game running in ENDLESS MODE. You produce ONE LIGHTWEIGHT skeleton per episode.
+const SYSTEM_RULES = `You are the EPISODE PLANNER for "Road to SF", a satirical comic-book founder game. You produce ONE episode at a time.
 
 WHAT AN EPISODE IS:
-- A coherent block of scenes that share ONE theme: "hackathon weekend", "Peter Thiel's office", "demo day prep", "cofounder departure crisis".
-- Scenes inside the episode are NOT pre-planned by you. They are invented ON THE FLY by a downstream renderer reading your skeleton + the player's choices, scene by scene as the player plays.
-- Your job is to set up the CONTAINER: the theme, the cast roster (everyone who could appear), and a rough arc of beats the renderer may draw from.
+- A coherent block of 3–5 SCENES that share a theme: "hackathon weekend", "Peter Thiel's office", "demo day prep", "cofounder departure crisis".
+- Each SCENE is a single LOCATION + a SUBSET of named characters from the episode's cast roster + a topic / what happens there.
+- Inside each scene the player will play through MULTIPLE BEATS (dialogue + choice cycles). The image, location, and cast STAY PUT for the whole scene; only dialogue + choices change as the player makes choices.
+- Your job is to lock down the CONTAINERS: theme, episode-level cast roster, and 3–5 scene plans (setting / cast subset / imagePrompt / topic / title each).
 
 WHAT YOU PRODUCE:
-- theme: the location + situation in one short phrase
+- theme: the episode's location + situation in one short phrase
 - premise: 1–2 sentence through-line
-- cast: the FULL speaker roster for this episode — every named character who might appear in any scene. Pre-name them all so the renderer can introduce them naturally without inventing new people.
-- arcBullets: 3–5 SHORT bullet points sketching directions the episode might go. NOT scene-by-scene plans. Hints, not script. Examples: "the player might call X for help"; "Y might walk in unannounced"; "things could escalate to a public dunk"; "an unexpected text from Z could land mid-arc". Each bullet ≤ 200 chars.
-- storySoFar (episodes 1+): ≤200 words extending the prior summary with this episode's intended payoff.
-- seedIds: ids of storylet seeds you DREW ON for ideas (from the SEED POOL). The renderer uses these for cooldown.
+- cast: 2–8 named characters total — the FULL roster for the whole episode. Every named character a downstream renderer might need MUST appear here.
+- scenes[3–5]: each scene plan has setting / cast (subset) / imagePrompt / topic / title. The player walks through these scenes in order; each scene is a container for many beats of dialogue.
+- storySoFar (episodes 1+): ≤200 words extending the prior summary.
+- seedIds: storylet seed ids you drew on for ideas (used for cooldown).
 
 CHOICE-RESPONSIVENESS (LOAD-BEARING):
 - If a PRIOR-EPISODE LAST CHOICE block appears below, this episode is a DIRECT CONSEQUENCE of that choice.
-- "Commit to the hackathon" → this episode IS the hackathon weekend. Cast includes teammates, judges, possibly a wandering VC. arcBullets sketch the hackathon's possible trajectories.
-- "Take Thiel's offer" → this episode happens AT Thiel's office. Cast: Peter Thiel + maybe an associate. arcBullets are signing-the-term-sheet moments.
-- "Fire my cofounder" → this episode is the immediate aftermath. Cast: the fired cofounder + a recruiter + a remaining team member.
-- Generic themes that ignore the prior choice are wrong.
+- "Commit to the hackathon" → this episode IS the hackathon weekend. Scene 1 = main floor with the team. Scene 2 = pitching the jury. Scene 3 = a quiet corner with a mentor. Scene 4 = the awards.
+- "Take Thiel's offer" → this episode is at Thiel's office. Scenes are: the meeting, the contract, the walk-out, the call back home.
+- "Fire my cofounder" → immediate aftermath. Scenes: the empty desk, the recruiter call, the standup, the late-night doubt.
 
 CAST ROSTER RULES:
-- 2–8 named characters. Each has role (vc | cofounder | reporter | hater | mentor) + name + blurb.
+- 2–8 named characters at episode level. Each scene's "cast" field is a SUBSET of these names — never names not in the episode roster.
 - ASSIGN CONCRETE NAMES. NO placeholder names: do NOT use Sandra, Chad, Victor, Brock, Stranger.
-- Real public figures verbatim ONLY when the prior choice / seed / rolled cameo named them (Peter Thiel, Sam Altman, Paul Graham, Garry Tan, etc.).
+- Real public figures verbatim ONLY when prior choice / seed / rolled cameo named them (Peter Thiel, Sam Altman, Paul Graham, Garry Tan).
 - Otherwise invent context-appropriate names.
-- Pre-list everyone the renderer might need: the primary character of the episode, anyone the player might call (give them a name + blurb), anyone who might walk in unannounced. The renderer CANNOT invent new cast members on the fly — your roster is the closed set.
+- Cast members carry through scenes: if "Maya" is the cofounder candidate in scene 1, she's still Maya in scene 3.
 
-ARC BULLETS RULES:
-- 3–5 bullets, each ≤200 chars, each a POSSIBLE beat or direction.
-- They are NOT a scene order. They are a menu the renderer may pick from / interpolate between based on what the player does.
-- Bullets should hint at the episode's range: a peak moment, a downside, an unexpected entrance, a quieter reflective beat.
+SCENE PLAN RULES:
+- 3–5 scenes per episode. Each scene =
+    * setting: concrete time + place ("the YC kitchen, 11pm Tuesday"; "Peter Thiel's office at Founders Fund, 4pm")
+    * cast: 1–4 characters from the episode roster (a 1-character intimate scene is fine; a 4-character "everyone's at the hackathon" scene is fine)
+    * topic: 1 sentence on what this scene is about ("the player is brainstorming with the team late at night and getting a chance encounter with a wandering judge")
+    * imagePrompt: ≤220 chars; setting + character action + mood + composition. NO style words.
+    * title: short nameplate string for the UI ("The Kitchen Argument", "Thiel's Office", "Demo Day Walk-Out")
+- Scenes should flow into each other narratively. Player choices made INSIDE scene N influence the dialogue of scene N+1, but scene N+1's setting/cast are committed by you up front.
 
 HARD RULES:
-- Output a single JSON object only. Start with "{" and end with "}". No markdown fences.
-- Numbers must be valid JSON (1 not +1).
+- Output a single JSON object only. No markdown fences. Start with "{" and end with "}".
+- Numbers must be valid JSON.
 - Tone: comic, biting, cinematic.
 - The episode does NOT resolve the run.
 
 OUTPUT SHAPE:
 {
   "episodeIndex": number,
-  "theme": string (4–240 chars; the location + situation in one short phrase),
-  "premise": string (1–2 sentences; the through-line),
+  "theme": string (≤240 chars),
+  "premise": string (1–2 sentences),
   "cast": [
-    { "role": "vc"|"cofounder"|"reporter"|"hater"|"mentor", "name": string, "blurb"?: string (voice/personality, ≤300 chars) }
+    { "role": "vc"|"cofounder"|"reporter"|"hater"|"mentor", "name": string, "blurb"?: string (≤300 chars) }
   ],
-  "arcBullets": [string],   // 3–5 short directions the episode may go (≤200 chars each); NOT scene plans
+  "scenes": [
+    {
+      "index": 0..(N-1),
+      "role": "vc"|"cofounder"|"reporter"|"hater"|"mentor",
+      "setting": string (≤600 chars; concrete time + place),
+      "cast": [ { "role": ..., "name": string from episode roster, "blurb"?: ... } ],
+      "topic": string (≤400 chars; what happens here),
+      "imagePrompt": string (≤220 chars; NO style words),
+      "title": string (≤120 chars; short nameplate)
+    }
+  ],
   "storySoFar": string (REQUIRED for episodeIndex ≥ 1; ≤200 words),
-  "seedIds": [string]        // ids of storylet seeds you drew on; renderer uses for cooldown
+  "seedIds": [string]
 }`
 
 function formatRolledCameos(items: RolledCameo[]): string {
@@ -148,7 +159,7 @@ function formatLoreBundle(input: BuildEpisodePromptInput): string {
   lines.push('## ROLE GLOSSARY')
   lines.push(formatRoleGlossary())
 
-  lines.push('\n## SF FLAVOR (use sparingly — for cast + arc bullets)')
+  lines.push('\n## SF FLAVOR (use sparingly)')
   const seenPlaces = new Set<string>()
   const seenJokes = new Set<string>()
   const seenZ = new Set<string>()
@@ -184,7 +195,7 @@ function formatLoreBundle(input: BuildEpisodePromptInput): string {
 function formatLastChoiceCallout(c?: PriorChoiceSummary): string {
   if (!c) {
     return `## EPISODE THEME DIRECTIVE
-This is the OPENING episode after the player's authored intro. Pick a theme that fits the player's startup, persona, and stage — a credible "first day on the ground in SF" beat. Default candidates: a hackathon weekend, a YC co-working space morning, a first investor meeting, a cofounder pitch over coffee.`
+This is the OPENING episode after the player's authored intro. Pick a theme that fits the player's startup, persona, and stage. Default candidates: a hackathon weekend, a YC co-working space night, a first investor meeting.`
   }
   const hypeStr = `${c.hypeDelta >= 0 ? '+' : ''}${c.hypeDelta}`
   const integStr = `${c.integrityDelta >= 0 ? '+' : ''}${c.integrityDelta}`
@@ -192,14 +203,7 @@ This is the OPENING episode after the player's authored intro. Pick a theme that
 At the end of the prior episode, the player chose: "${c.choiceLabel}"
 Effect: hype ${hypeStr}, integrity ${integStr}.
 
-THIS EPISODE IS A DIRECT CONSEQUENCE of that choice. Pick a theme that *is* the consequence:
-- "Commit to the hackathon" → THIS EPISODE *IS* the hackathon weekend. Cast includes teammates + judges. arcBullets sketch the weekend's possible peaks.
-- "Take Thiel's offer" → THIS EPISODE happens AT Thiel's office. Cast: Peter Thiel + an associate maybe.
-- "Fire my cofounder" → THIS EPISODE is the immediate aftermath: the empty desk, the recruiter, the standup that doesn't happen.
-- "Submit to YC" → THIS EPISODE is the YC interview day.
-- "Walk away" → THIS EPISODE is what the player does NEXT — the bench at Dolores Park, the call to a friend, the pivot.
-
-Generic themes that ignore the prior choice are wrong. The theme NAMES the consequence.`
+THIS EPISODE IS A DIRECT CONSEQUENCE. Pick a theme that *is* the consequence — the location and cast the choice took the player to.`
 }
 
 export function buildEpisodePromptParts(input: BuildEpisodePromptInput) {
@@ -225,7 +229,7 @@ ${
   input.siliconManiaItems && input.siliconManiaItems.length > 0
     ? `
 ## REAL SF TECH NEWS — THIS WEEK
-You MUST name at least one of the people/companies below verbatim, in either the theme or one cast member. Real names override the "no fabricated names" rule for these specific items only.
+You MUST name at least one of the people/companies below verbatim. Real names override the "no fabricated names" rule for these specific items only.
 <items>
 ${formatSiliconManiaItems(input.siliconManiaItems)}
 </items>
@@ -235,7 +239,7 @@ ${formatSiliconManiaItems(input.siliconManiaItems)}
   input.rolledCameos && input.rolledCameos.length > 0
     ? `
 ## ROLLED CAMEOS (this player's fate)
-SF figures the city has decided to put in this player's path. Place AT LEAST ONE by name in this episode's cast. Real names verbatim.
+SF figures the city has decided to put in this player's path. Place AT LEAST ONE by name in the episode's cast.
 <cameos>
 ${formatRolledCameos(input.rolledCameos)}
 </cameos>
@@ -245,7 +249,7 @@ ${formatRolledCameos(input.rolledCameos)}
 ## EPISODE
 episodeIndex: ${input.episodeIndex}
 
-## SEED POOL (for inspiration on possible beats — populate arcBullets / cast hints from these)
+## SEED POOL (for inspiration on possible beats / cast)
 Already-used seeds you should NOT lean on again: ${input.firedSeedIds.length === 0 ? '(none)' : input.firedSeedIds.join(', ')}
 ${formatSeedPool(input.seedPool)}
 
@@ -256,15 +260,14 @@ ${input.priorStorySoFar ?? '(this is the opening episode)'}
 ${formatRecentChoices(input.recentChoices)}
 
 ## TASK
-Plan ONE EPISODE SKELETON. Output:
-- theme (consequence of the prior choice; see directive above)
-- premise (1–2 sentences)
-- cast (2–8 named characters with role + name + blurb — the closed set the renderer can draw from for the whole episode)
-- arcBullets (3–5 short directions the episode may go — NOT scene plans, just hints for the renderer)
+Plan the episode skeleton:
+- theme + premise (consequence of prior choice; see directive above)
+- cast (2–8 named characters — episode-level roster)
+- scenes[3–5] (each: setting + cast subset + imagePrompt + topic + title; locked at episode-gen, NOT mutable mid-episode)
 - storySoFar (episodes ≥1)
-- seedIds (the storylet seed ids you drew on for ideas)
+- seedIds
 
-The renderer will invent each scene's setting + dialogue + choices + imagePrompt fresh from this skeleton + the player's choices. Do not pre-plan scenes.
+The renderer will play each scene as a stream of beats (dialogue + choices generated on the fly per choice click). Your job is the CONTAINER: the locations, the cast, the rough trajectory.
 
 Output the JSON object now.`
 

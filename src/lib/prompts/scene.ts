@@ -1,6 +1,6 @@
 import { ROLES } from '../archetypes'
-import type { Episode, Role } from '../types'
-import { MAX_DIALOGUE_CHARS_PER_SCENE } from '../schemas/scene'
+import type { DialogueLine, Episode, Role, ScenePlan } from '../types'
+import { MAX_DIALOGUE_CHARS_PER_BEAT } from '../schemas/scene'
 import type { ToneSpec } from '../cameos/types'
 
 export interface PriorChoiceSummary {
@@ -10,21 +10,24 @@ export interface PriorChoiceSummary {
   integrityDelta: number
 }
 
-export interface BuildScenePromptInput {
-  /** Currently-playing episode skeleton — theme + cast roster +
-   *  arcBullets. Provides container; does NOT pre-plan scenes. */
+export interface BuildBeatPromptInput {
+  /** Episode skeleton (theme, cast roster, scenes[]). */
   episode: Episode
-  /** Index of THIS scene within the episode (0-based). */
+  /** Index of THIS scene within episode.scenes. */
   sceneIndexInEpisode: number
-  /** Total scenes the player has seen so far in this episode (for
-   *  prompt context — "this is your 4th scene of the episode"). */
-  totalScenesInEpisodeSoFar: number
-  /** The single most-recent choice the player made — usually the
-   *  prior scene's pick. The load-bearing input for choice-driven
-   *  scene flow: this scene is a direct consequence of it. */
-  lastChoice?: PriorChoiceSummary
-  /** 1-based id within the full playthrough. */
+  /** Index of THIS beat within the scene's beat sequence (0 = opening). */
+  beatIndex: number
+  /** Dialogue accumulated from prior beats of THIS scene (NOT prior
+   *  scenes). Empty for beat 0. The LLM uses this to continue the
+   *  conversation naturally. */
+  priorBeatsDialogue: DialogueLine[]
+  /** The choice the player made on the prior beat of THIS scene
+   *  (undefined for beat 0). The load-bearing input for in-scene
+   *  branching: this beat is a direct consequence of that choice. */
+  priorBeatChoice?: PriorChoiceSummary
+  /** 1-based id within the playthrough. */
   sceneId: number
+  /** Cross-episode rolling memory. */
   storySoFar?: string
   startupName: string
   founderPersona: string
@@ -32,81 +35,76 @@ export interface BuildScenePromptInput {
   fundingModel?: string
   targetCustomer?: string
   concern?: string
+  /** Cross-scene recent history (across episodes). */
   recentChoices: PriorChoiceSummary[]
   currentStats: { hype: number; integrity: number }
   tone?: ToneSpec
+  /** Is this the LAST scene of the current episode? Influences
+   *  whether the LLM may set isLastSceneOfEpisode. */
+  isFinalSceneOfEpisode: boolean
 }
 
-const SCENE_SYSTEM_RULES = `You are the per-scene engine for "Road to SF", a satirical comic-book founder game running in ENDLESS MODE. You produce ONE SCENE at a time, fresh — setting, cast subset, dialogue, choices, imagePrompt all generated on the fly from the episode skeleton + the player's prior choice.
+const BEAT_SYSTEM_RULES = `You are the per-BEAT engine for "Road to SF". A SCENE is a container the player stays inside through MULTIPLE BEATS. Each beat = one dialogue exchange + one choice block. Setting, cast, and image stay locked across all beats of the scene; ONLY dialogue and choices change as the player makes choices.
 
-WHAT A SCENE IS:
-- ONE moment within the episode. A single dialogue exchange leading to one decision point.
-- 2–4 dialogue lines, then 2–3 choice options for the player.
-- The setting is whatever fits THIS moment (the same room, a new room, a phone call, an alleyway — whatever the prior choice took the player to).
-- The scene ends when the player picks a choice; the next scene begins (or, if you mark this scene as the episode's last, a new episode begins).
+Your job: generate ONE BEAT, given the scene plan + the dialogue from prior beats of this same scene + the player's last choice.
+
+WHAT A BEAT IS:
+- 2–4 dialogue lines that continue (or open) the scene's conversation
+- 2–3 choices the player picks from to drive the next beat (or close the scene)
+- A flag — isLastBeatOfScene — set TRUE when this beat closes the scene's arc, FALSE while there's more to play
 
 CHOICE-RESPONSIVENESS (LOAD-BEARING):
-- The player's PRIOR CHOICE is the dominant input. THIS SCENE is the direct consequence.
-- "Call Priya" → THIS SCENE is the phone call (Priya's voice, her room, her tone). NOT a continuation of where the player was.
-- "Walk out" → THIS SCENE is the player on the street / in the parking lot / wherever they walked TO.
-- "Pitch Garry" → THIS SCENE is the pitch (Garry's reactions, the snack table he was at, the player's words landing or not).
-- "Stay quiet" → THIS SCENE is the silence playing out (the other character filling it, or the room shifting).
+- The PRIOR BEAT CHOICE (when present) is the dominant input.
+- "Call Priya" → THIS beat's dialogue IS the call (Priya speaking, on the phone, the player listening).
+- "Walk to Rin" → THIS beat IS at Rin's desk (her words, her work).
+- "Stay quiet" → THIS beat IS the silence playing out — the other character filling it, the room shifting.
+- Do NOT re-litigate the choice. Render the consequence in motion.
 
-CAST CONTRACT (LOAD-BEARING):
-- The episode skeleton has a CAST ROSTER (a closed set of named characters). You may use ONLY these names.
-- Pick a subset who appear in THIS scene based on the prior choice. Most scenes have 1 named character; some have 2.
-- Do NOT invent new named characters. If the player's choice triggers an interaction with someone NOT in the roster, render via narration only ("a barista sets the cup down") — no speaker line for them.
-- The "cast" output array on this scene MUST be the subset who actually speak in THIS scene's dialogue.
+OPENING vs CONTINUATION:
+- Beat 0 (the scene's opener): establish the setting in motion. Drop the player into the room. End on a choice that the next beat will react to.
+- Beat 1+: continue the scene. The setting and cast remain. Pick up where the prior beat ended; render the consequence of the player's choice.
 
-SETTING CONTRACT:
-- You invent the setting fresh per scene. It MUST follow from the prior choice + the episode's theme.
-- Setting goes in the "setting" output field (≤280 chars; concrete time + place).
-- Examples: "the YC kitchen at 11pm Tuesday, half-eaten sourdough loaf on the island", "Priya's apartment in the Mission, Saturday morning, espresso machine still hissing", "Caltrain southbound, 4:30pm Friday, half-empty car".
+WHEN TO END A SCENE (isLastBeatOfScene):
+- Set TRUE on the beat where the scene's arc CLOSES. Typical scenes have 2–4 beats. Some go longer if the conversation has more to give.
+- Examples of natural scene-ending moments: a door closes, a phone call ends, a character walks away, the player makes a clean exit, a moment of silence after a crucial line.
+- Do NOT set TRUE arbitrarily — the scene should feel finished, not cut short.
+- Scene 0 of an episode usually has 2–4 beats. Later scenes may be shorter (1–2 beats) if they're transition moments.
 
-EPISODE END (the most important new field):
-- You decide when the episode arc closes. Set "isLastSceneOfEpisode": true on the scene where the episode's arc resolves: a choice has been finalized, a scene has paid off, and the player is at a natural transition point.
-- The next scene-gen call after a true flag fires the next /api/generate-episode (a new theme, new cast). Set this judiciously — typically after 3–6 scenes per episode.
-- Default to false unless the moment genuinely closes the arc.
+WHEN TO END THE EPISODE (isLastSceneOfEpisode):
+- This flag is RESERVED for the LAST scene of the episode (signaled in the prompt below).
+- On non-final scenes, ALWAYS set isLastSceneOfEpisode = false.
+- On the LAST scene, set TRUE only on the beat that ALSO has isLastBeatOfScene = true (so the very last beat of the very last scene closes both).
+
+CAST CONTRACT:
+- Use ONLY the names in this scene's cast subset (listed in the prompt). Don't invent new named characters.
+- The episode roster is also available in the prompt for context, but THIS SCENE's cast is the closed set of speakers.
+- New people exist via narration only ("a barista glances over") — they don't get speaker lines.
 
 HARD RULES:
 - Output a single JSON object only. No markdown fences. Start with "{" and end with "}".
 - Numbers must be valid JSON.
-- "role" is the PRIMARY role of THIS scene's main character (one of: vc | cofounder | reporter | hater | mentor). Used for image + voice routing.
-- Dialogue speakers: "player", "narrator", or any role key whose CAST name appears in this scene's cast subset.
-- Total dialogue ≤${MAX_DIALOGUE_CHARS_PER_SCENE} chars per scene.
-- Each line ≤160 chars; non-empty.
-- 2–4 dialogue lines.
-- JSON STRING SAFETY: inside any "text" field, NEVER use the " character. Use single quotes (') or em-dashes. Bad: "text": "He said \\"sure\\"."  Good: "text": "He said 'sure'."  Every unescaped " breaks the parser.
-- Each line is ONE speaker's utterance. Don't merge narration + speech.
-- Choice labels: 2–3 per scene, ≤8 words, action-flavored.
-- Stat deltas per choice: hype + integrity ∈ {-2, -1, 0, +1, +2}. Most should be ±1; reserve ±2 for genuinely consequential moments.
-- imagePrompt ≤220 chars: setting + character action + mood + composition. NEVER style words ("comic", "cel-shaded", "illustration") — the renderer prepends those. Match what's actually happening in the scene's setting.
+- Speakers: "player", "narrator", or any role key in the scene's cast.
+- Total beat dialogue ≤${MAX_DIALOGUE_CHARS_PER_BEAT} chars.
+- Each line ≤160 chars.
+- 2–4 lines per beat.
+- JSON STRING SAFETY: NEVER use the " character inside a "text" field. Use single quotes (') or em-dashes. Bad: "text": "He said \\"sure\\"."  Good: "text": "He said 'sure'."  Every unescaped " breaks the parser.
+- Each line is ONE speaker's utterance.
+- Choice labels: 2–3 per beat, ≤8 words, action-flavored.
+- Stat deltas: hype + integrity ∈ {-2, -1, 0, +1, +2}. Most should be ±1; reserve ±2 for genuinely consequential choices (typically the scene's last beat).
 - timeoutSeconds: integer 8–60.
 - DO NOT resolve the run.
 
-ANTI-CLICHÉ OPENERS:
-- Don't open with "your phone buzzes/vibrates/lights up", "a Slack ping", "your inbox refreshes", "Twitter mentions explode". These LLM-default openers recur across players.
-- Open with a place, an action, or in-progress dialogue.
-
-SHARE MOMENT (OPTIONAL — default OMIT):
-- Only when this scene is genuinely brag-worthy (a famous cameo arrived; the player made a contrarian/bold call; |stat| ≥ 4; stat reversal).
-- At most one per ~5 scenes. When in doubt, OMIT.
+ANTI-CLICHÉ:
+- Don't open with "your phone buzzes/vibrates", "a Slack ping", "your inbox refreshes". Open with action, place, or in-progress dialogue.
 
 OUTPUT SHAPE:
 {
-  "id": number,
-  "title": string,
-  "role": "vc"|"cofounder"|"reporter"|"hater"|"mentor",
-  "setting": string (≤280 chars; concrete time + place — invented for THIS scene),
-  "cast": [
-    { "role": role-key, "name": string (must come from episode cast roster), "blurb"?: string }
-  ],
-  "isLastSceneOfEpisode": boolean (true → triggers next episode after this scene),
-  "imagePrompt": string,
   "dialogue": [{ "speaker": role-key | "player" | "narrator", "text": string }],
   "choices": [{ "id": "a"|"b"|"c", "label": string, "consequence": string, "hype": number, "integrity": number }],
   "timeoutSeconds": number,
   "timeoutChoiceId": "a"|"b"|"c",
+  "isLastBeatOfScene": boolean,
+  "isLastSceneOfEpisode": boolean (false on non-final scenes; true ONLY on the final scene's final beat),
   "shareMoment"?: { "title": string, "blurb": string }
 }`
 
@@ -120,39 +118,52 @@ function formatRecentChoices(choices: PriorChoiceSummary[]): string {
     .join('\n')
 }
 
-function formatLastChoiceCallout(c?: PriorChoiceSummary): string | null {
+function formatPriorBeatChoice(c?: PriorChoiceSummary): string | null {
   if (!c) return null
   const hypeStr = `${c.hypeDelta >= 0 ? '+' : ''}${c.hypeDelta}`
   const integStr = `${c.integrityDelta >= 0 ? '+' : ''}${c.integrityDelta}`
-  return `## PRIOR CHOICE — THE PLAYER ALREADY DID THIS
-The player chose: "${c.choiceLabel}"
+  return `## PRIOR BEAT CHOICE — THE PLAYER ALREADY DID THIS
+The player just chose: "${c.choiceLabel}"
 Effect: hype ${hypeStr}, integrity ${integStr}.
 
-PAST TENSE. This scene is the IMMEDIATE consequence of that choice.
-- Choice was "Call Priya" → this scene IS the phone call (Priya speaking, the player listening, the player's room or wherever they took the call).
-- Choice was "Walk over to Rin" → this scene IS the moment at Rin's desk (her face, her words, her work).
-- Choice was "Walk out" → this scene IS outside (the cold, the silence, the call the player didn't make).
-- Choice was a refusal / silence → this scene IS the consequence playing out (the room shifting, the other character moving on).
-
-Do NOT re-litigate the choice or have the player decide again. Render the consequence in motion.`
+PAST TENSE. This beat is the IMMEDIATE consequence. Render the doing or the consequence — not the deciding.`
 }
 
-function formatEpisodeCast(ep: Episode): string {
+function formatPriorBeatsDialogue(lines: DialogueLine[]): string {
+  if (lines.length === 0) return '(this is the opening beat — no prior dialogue in this scene yet)'
+  return lines.map((l) => `[${l.speaker}] ${l.text}`).join('\n')
+}
+
+function formatScenePlan(plan: ScenePlan): string {
+  const cast = plan.cast
+    .map((c) => `- ${c.role}: ${c.name}${c.blurb ? ` — ${c.blurb}` : ''}`)
+    .join('\n')
+  return `Index: ${plan.index}
+Title: ${plan.title}
+Setting: ${plan.setting}
+Topic: ${plan.topic}
+Image (already committed): ${plan.imagePrompt}
+Cast for this scene (closed set — these are the only allowed named speakers):
+${cast}`
+}
+
+function formatEpisodeRoster(ep: Episode): string {
   return ep.cast
     .map((c) => `- ${c.role}: ${c.name}${c.blurb ? ` — ${c.blurb}` : ''}`)
     .join('\n')
 }
 
-function formatArcBullets(ep: Episode): string {
-  if (!ep.arcBullets || ep.arcBullets.length === 0) return '(none)'
-  return ep.arcBullets.map((b) => `- ${b}`).join('\n')
-}
+export function buildBeatPromptParts(input: BuildBeatPromptInput) {
+  const { episode, sceneIndexInEpisode, beatIndex } = input
+  const plan = episode.scenes[sceneIndexInEpisode]
+  if (!plan) {
+    throw new Error(
+      `No ScenePlan at index ${sceneIndexInEpisode} of episode ${episode.episodeIndex}`,
+    )
+  }
+  const role = ROLES[plan.role]
 
-export function buildScenePromptParts(input: BuildScenePromptInput) {
-  const { episode, sceneIndexInEpisode, totalScenesInEpisodeSoFar } = input
-
-  // Cached block: stable across all scene calls in the same episode.
-  const cachedContext = `## ROLE GLOSSARY (voice/personality flavor only — names come from the cast roster below)
+  const cachedContext = `## ROLE GLOSSARY (voice/personality flavor only — names come from the cast)
 ${(['vc', 'cofounder', 'reporter', 'hater', 'mentor'] as Role[])
   .map((r) => {
     const def = ROLES[r]
@@ -160,56 +171,73 @@ ${(['vc', 'cofounder', 'reporter', 'hater', 'mentor'] as Role[])
   })
   .join('\n')}
 
-## EPISODE SKELETON (the closed container for ALL scenes in this episode)
+## EPISODE
 Theme: ${episode.theme}
 Premise: ${episode.premise}
 
-## EPISODE CAST ROSTER (closed set — you may NOT introduce a named character outside this list)
-${formatEpisodeCast(episode)}
+## EPISODE CAST ROSTER (full set — for context)
+${formatEpisodeRoster(episode)}
 
-## ARC BULLETS (loose hints; NOT scene-by-scene plans — pick from / interpolate between based on prior choice)
-${formatArcBullets(episode)}
-
-## STORY SO FAR (compressed, covers everything before this episode)
+## STORY SO FAR (compressed, prior episodes)
 ${input.storySoFar ?? '(this is the opening episode — no prior summary)'}
 
 ## PLAYER STATE
 Startup: ${input.startupName}
 Founder vibe: ${input.founderPersona || '(unstated)'}
 
-## PLAYER FACTS (HONOR THESE — never invent contradictions)
+## PLAYER FACTS (HONOR THESE)
 Team: ${input.team || '(unstated; treat as solo)'}
 Funding: ${input.fundingModel || '(unstated)'}
 Target customer: ${input.targetCustomer || '(unstated)'}
-Current concern: ${input.concern || '(unstated)'}`
+Current concern: ${input.concern || '(unstated)'}
 
-  const lastChoiceBlock = formatLastChoiceCallout(input.lastChoice)
-  const isFirstScene = sceneIndexInEpisode === 0
+## ROLE INFO FOR THIS SCENE'S PRIMARY ROLE
+${plan.role}: ${role.roleLabel} — ${role.title}. ${role.personality}`
 
-  const liveBlock = `${input.tone ? `${input.tone.oneLiner}\n\n` : ''}${lastChoiceBlock ? `${lastChoiceBlock}\n\n` : ''}## RECENT CHOICES (last few; for tone — the PRIOR CHOICE block above is the load-bearing one)
+  const lastChoiceBlock = formatPriorBeatChoice(input.priorBeatChoice)
+  const isFirstBeat = beatIndex === 0
+
+  const liveBlock = `${input.tone ? `${input.tone.oneLiner}\n\n` : ''}${lastChoiceBlock ? `${lastChoiceBlock}\n\n` : ''}## SCENE PLAN (PRE-FIXED — render dialogue THAT FITS, do not change setting or cast)
+${formatScenePlan(plan)}
+
+## PRIOR BEATS DIALOGUE (this scene only; previous beats the player has already played through)
+${formatPriorBeatsDialogue(input.priorBeatsDialogue)}
+
+## RECENT CHOICES (cross-scene history; for tone — the PRIOR BEAT CHOICE block above is the load-bearing one)
 ${formatRecentChoices(input.recentChoices)}
 
 Current stats — hype ${input.currentStats.hype}, integrity ${input.currentStats.integrity}.
 
-## YOUR JOB FOR THIS SCENE
+## YOUR JOB FOR THIS BEAT
 ${
-  isFirstScene
-    ? `OPEN the episode. Invent a setting that fits the episode's theme. Pick a cast subset (1–2 names) from the EPISODE CAST ROSTER. Render a single dialogue exchange + 2–3 choices. End on a hook the next scene will react to.`
-    : `CONTINUE the episode. The PRIOR CHOICE above is past-tense action — invent a setting + cast subset that's the IMMEDIATE consequence. Render dialogue + 2–3 choices. Pick people from the cast roster who fit this consequence (the person the player just called, the person who walked in, etc.).`
+  isFirstBeat
+    ? `OPEN scene ${sceneIndexInEpisode + 1} of the episode. The player just walked into the setting above. Establish the moment in motion (a place, an action, in-progress dialogue). Use ONLY the cast names listed in this scene's cast. End on a choice the next beat will react to.
+
+This is the FIRST beat of this scene; isLastBeatOfScene is almost certainly false unless this is a single-beat transition scene.`
+    : `CONTINUE scene ${sceneIndexInEpisode + 1}. The PRIOR BEAT CHOICE above is past-tense action. Render the consequence in dialogue. Stay in the scene's setting (the cast may shift among the listed names — e.g. someone leaves and another enters from the cast list). End on a choice OR close the scene.
+
+This is beat ${beatIndex + 1} of the scene. Set isLastBeatOfScene = true if the scene's arc CLOSES on this beat — a clean exit, a phone call ends, a door closes, a quiet beat after a crucial line.`
 }
 
-You DECIDE when the episode arc resolves. Set "isLastSceneOfEpisode": true if THIS scene closes the arc (a peak moment, a clean exit). Otherwise false. Typical episodes have 3–6 scenes; this is scene ${sceneIndexInEpisode + 1} of the episode so far.
+EPISODE-END FLAG:
+- This scene is ${input.isFinalSceneOfEpisode ? 'the FINAL scene of the episode' : 'NOT the final scene of the episode'}.
+- ${input.isFinalSceneOfEpisode ? 'You MAY set isLastSceneOfEpisode = true on the beat that also closes this scene (i.e. when isLastBeatOfScene = true).' : 'You MUST set isLastSceneOfEpisode = false on this beat.'}
 
-## THIS SCENE
-Episode ${episode.episodeIndex}, scene ${sceneIndexInEpisode} (id=${input.sceneId}). Total scenes-played in this episode: ${totalScenesInEpisodeSoFar}.
+## THIS BEAT
+Episode ${episode.episodeIndex}, scene ${sceneIndexInEpisode}, beat ${beatIndex} (sceneId=${input.sceneId}).
 
 Output the JSON object now.`
 
   return {
     systemBlocks: [
-      { text: SCENE_SYSTEM_RULES, cache: false },
+      { text: BEAT_SYSTEM_RULES, cache: false },
       { text: cachedContext, cache: true },
     ],
     userBlocks: [{ text: liveBlock, cache: false }],
   }
 }
+
+// Back-compat: the old name is still imported by the route. Keep an
+// alias so the rewrite doesn't ripple.
+export const buildScenePromptParts = buildBeatPromptParts
+export type BuildScenePromptInput = BuildBeatPromptInput

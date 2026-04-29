@@ -86,13 +86,17 @@ while (true) {
           console.log('theme:', parsed.episode.theme)
           console.log('premise:', parsed.episode.premise)
           console.log('seedIds:', (parsed.episode.seedIds ?? []).join(', '))
-          console.log('cast:')
+          console.log('episode cast:')
           for (const c of parsed.episode.cast ?? []) {
             console.log(`  ${c.role}: ${c.name}${c.blurb ? ` — ${c.blurb}` : ''}`)
           }
-          console.log('arc bullets:')
-          for (const b of parsed.episode.arcBullets ?? []) {
-            console.log(`  · ${b}`)
+          console.log('scenes:')
+          for (const s of parsed.episode.scenes ?? []) {
+            console.log(`  ${s.index}. ${s.title} (role=${s.role})`)
+            console.log(`     setting: ${s.setting}`)
+            console.log(`     cast: ${(s.cast ?? []).map((c) => `${c.role}:${c.name}`).join(' | ')}`)
+            console.log(`     topic: ${s.topic}`)
+            console.log(`     image: ${(s.imagePrompt ?? '').slice(0, 100)}`)
           }
         } else {
           console.log(JSON.stringify(parsed, null, 2))

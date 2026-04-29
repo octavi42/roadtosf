@@ -39,66 +39,115 @@ export interface CastMember {
   blurb?: string
 }
 
+/** A Scene is a CONTAINER the player stays inside through many beats.
+ *  Image + setting + cast + nameplate are pre-fixed at episode-gen
+ *  time. Dialogue ACCUMULATES across beats as the player makes
+ *  choices; choices REPLACE on each beat. */
 export interface Scene {
   id: number
+  /** Pre-fixed at episode-gen time. */
   title: string
-  /** Primary role for this scene's image / portrait. */
+  /** Primary role of the scene (image + voice routing). Pre-fixed. */
   role: Role
   /** @deprecated mirror of `role`; kept for back-compat readers. */
   archetype?: Role
-  /** Concrete setting Haiku invented for this scene ("the YC kitchen
-   *  at 11pm Tuesday"). Drives both the dialogue framing and the
-   *  imagePrompt. */
+  /** Pre-fixed concrete time + place for THIS scene. */
   setting?: string | null
-  /** Subset of the episode's cast roster who actually appear in this
-   *  scene. Picked by Haiku per-scene based on the prior choice. */
+  /** Cast subset for THIS scene (from the episode's full roster). */
   cast?: CastMember[]
-  /** Haiku-emitted: true on the scene that closes the episode arc.
-   *  Triggers the next /api/generate-episode call client-side. */
-  isLastSceneOfEpisode?: boolean | null
+  /** Pre-fixed image prompt. Image-gen fires once per scene from this. */
   imagePrompt: string
   imageUrl?: string
+  /** Accumulating dialogue. Beat 1's lines, then beat 2's, then beat
+   *  3's — all in one array as the player makes choices and beats
+   *  flow. */
+  dialogue: DialogueLine[]
+  /** ONLY the LATEST beat's choices. Replaced (not appended) when a
+   *  new beat arrives. */
+  choices: Choice[]
+  /** From the latest beat. */
+  timeoutSeconds: number
+  timeoutChoiceId: string
+  /** Indices into `dialogue` where each beat starts. beatStarts[0]=0;
+   *  beatStarts[k] = index where beat k's first line lives. Used by
+   *  the player progress to know which lines are "new" after a choice. */
+  beatStarts?: number[]
+  /** Set true once a beat with isLastBeatOfScene lands. UI uses this to
+   *  decide whether the next choice click should advance to the next
+   *  scene rather than fire another beat. */
+  sceneClosed?: boolean
+  /** Set true when the latest beat marked the episode's last scene's
+   *  last beat. Triggers next-episode-gen on choice click. */
+  isLastSceneOfEpisode?: boolean | null
+  // Optional: when present, the UI surfaces a "Share Moment" overlay at
+  // the start of the latest beat. Frequency is capped client-side
+  // (1 per episode).
+  shareMoment?: ShareMoment
+}
+
+/** One scene's pre-fixed plan in the episode skeleton. */
+export interface ScenePlan {
+  /** 0-indexed within the episode. */
+  index: number
+  /** Primary role for image + voice routing. */
+  role: Role
+  /** Concrete time + place. Stays stable for ALL beats of this scene. */
+  setting: string
+  /** Cast subset (from episode roster) appearing in this scene. */
+  cast: CastMember[]
+  /** Short topic / what this scene is about — the through-line for
+   *  the beats Haiku will generate inside this scene. */
+  topic: string
+  /** Pre-fixed image prompt — same image used across all beats of
+   *  this scene. */
+  imagePrompt: string
+  /** Pre-fixed nameplate / scene title. */
+  title: string
+}
+
+/** A single Beat = one dialogue exchange + one choice block. Returned
+ *  by /api/generate-scene per call. Beats accumulate inside a Scene
+ *  container until the LLM marks isLastBeatOfScene. */
+export interface Beat {
   dialogue: DialogueLine[]
   choices: Choice[]
   timeoutSeconds: number
   timeoutChoiceId: string
-  // Optional: when present, the UI surfaces a "Share Moment" overlay at the
-  // start of this scene. Frequency is capped client-side (1 per episode).
+  /** True when this beat closes the scene's arc. The next choice click
+   *  should advance to the next scene plan, not fire another beat. */
+  isLastBeatOfScene: boolean
+  /** True when this is the LAST scene's last beat — triggers next
+   *  episode-gen. */
+  isLastSceneOfEpisode?: boolean | null
   shareMoment?: ShareMoment
 }
 
 // ── EPISODE ARCHITECTURE ─────────────────────────────────────────────
-// Episodes are a LIGHTWEIGHT skeleton: theme + cast roster + a rough
-// arc. Scenes are NOT pre-planned — Haiku invents setting + dialogue +
-// choices + imagePrompt fresh for each scene at scene-gen time, reading
-// the episode skeleton + the player's prior choice. The LLM signals
-// when the episode arc closes via Scene.isLastSceneOfEpisode.
+// Episode-gen pre-plans 3-5 scenes (setting, cast, imagePrompt, topic
+// per scene). Images for all scenes are generated in parallel when
+// the episode plan lands. As the player plays, scene-gen fires per
+// choice, returning ONE BEAT (dialogue + choices) at a time. Beats
+// accumulate inside a Scene container; the player stays in the same
+// scene (same image, same setting) across multiple beats until the
+// LLM marks the beat as the scene's last.
 
-/** One episode = one /api/generate-episode call. Lightweight skeleton
- *  only — no per-scene plans. Scenes are generated on the fly. */
+/** One episode = one /api/generate-episode call. */
 export interface Episode {
   episodeIndex: number
-  /** Coherent theme spanning the whole episode: "hackathon weekend",
-   *  "demo day prep", "cofounder is leaving". */
   theme: string
-  /** 1–2 sentence through-line. */
   premise: string
-  /** Full speaker roster for the episode — every named character who
-   *  could plausibly appear in any scene. Scene-gen picks a subset
-   *  based on the prior choice; it MUST NOT invent new named
-   *  characters outside this list. */
+  /** Full speaker roster for the episode. Each ScenePlan picks a
+   *  subset for that scene's cast. */
   cast: CastMember[]
-  /** 3–5 short bullet points of *possible* beats / arc directions
-   *  the LLM may draw from. NOT scene-by-scene plans — these are
-   *  loose hints. Scene-gen invents the actual concrete moments. */
-  arcBullets: string[]
+  /** 3–5 pre-planned scene plans. Setting / cast subset / imagePrompt
+   *  / topic are committed at episode-gen time. */
+  scenes: ScenePlan[]
   storySoFar?: string | null
-  /** Ids of storylet seeds the planner drew on. Persisted across
-   *  episodes via StoryArc.firedSeedIds for cross-episode cooldown. */
+  /** Ids of storylet seeds the planner drew on; persisted via
+   *  StoryArc.firedSeedIds for cross-episode cooldown. */
   seedIds: string[]
-  /** Client-side: the global llmIndex at which this episode's first
-   *  scene lives in arc.scenes. Used to compute sceneIndexInEpisode
-   *  for any global llmIndex. */
+  /** Client-side: global llmIndex at which this episode's scene 0
+   *  lives in arc.scenes. */
   startLLMIndex?: number
 }
 
