@@ -594,8 +594,8 @@
     "achievement_hook": null
   },
   {
-    "id": "npc-dev-patel",
-    "display_name": "Dev Patel",
+    "id": "npc-devraj-mehta",
+    "display_name": "Devraj Mehta",
     "role": "cofounder",
     "vibe": "backend infra obsessive, reads source for fun, terminal open at every meeting",
     "regular_spots": ["sightglass-coffee", "yc-batch-house"],
