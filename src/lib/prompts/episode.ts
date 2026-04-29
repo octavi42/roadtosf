@@ -69,7 +69,8 @@ CAST ROSTER RULES:
 - Cast members carry through scenes: if "Maya" is the cofounder candidate in scene 1, she's still Maya in scene 3.
 
 CAST IDENTITY (LOAD-BEARING for voice + image consistency):
-- Every cast member MUST include "gender", "age", and "descriptives". Both at episode-level cast AND in each scene's cast subset (mirror exactly — same Maya = same gender/age/descriptives across all scenes).
+- The episode-level "cast" is the source of truth. Each member there MUST include "gender", "age", "descriptives", and "appearance".
+- Each scene's "cast" subset emits ONLY { role, name, blurb? } — the server mirrors gender/age/descriptives/appearance from the episode roster by matching name. Do NOT duplicate the identity fields in scene cast subsets; doing so is wasted output and slows generation.
 - gender: "male" | "female" | "neutral". Real public figures: use real-world gender (Peter Thiel = male, Sarah Tavel = female, Sam Altman = male, Cathie Wood = female). For invented names, pick to fit the role + name; aim for a balanced cast (do NOT make every VC male or every cofounder female).
 - age: "young" (≤30s) | "middle" (40s-50s) | "old" (60+). Peter Thiel = middle, Paul Graham = middle, Vinod Khosla = old, a typical YC batch cofounder = young.
 - descriptives: 3-5 short voice/personality adjectives that will steer ElevenLabs voice picking. Examples:
@@ -135,7 +136,7 @@ OUTPUT SHAPE:
       "index": 0..(N-1),
       "role": "vc"|"cofounder"|"reporter"|"hater"|"mentor",
       "setting": string (≤600 chars; concrete time + place),
-      "cast": [ { "role": ..., "name": <name from episode roster>, "blurb"?: ..., "gender": ..., "age": ..., "descriptives": [...], "appearance": <same as episode roster> } ],
+      "cast": [ { "role": ..., "name": <name from episode roster>, "blurb"?: string } ],   // ONLY role/name/blurb — identity fields mirror server-side
       "topic": string (≤400 chars; what happens here),
       "imagePrompt": string (≤220 chars; NO style words),
       "title": string (≤120 chars; short nameplate)

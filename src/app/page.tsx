@@ -227,7 +227,10 @@ function buildScene4ForExtraction(
   };
 }
 
-const EPISODE_GEN_TIMEOUT_MS = 45000;
+// 75s gives Sonnet headroom for the full episode plan + cast identity
+// fields. Was 45s, which started timing out after PR2/3 added per-cast
+// gender/age/descriptives/appearance to the episode-level output.
+const EPISODE_GEN_TIMEOUT_MS = 75000;
 
 async function postWithTimeout<T>(
   url: string,
