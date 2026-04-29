@@ -15,6 +15,9 @@ const castMemberSchema = z.object({
   descriptives: z.array(z.string().max(40)).max(8).default([]),
   // voiceId is server-attached post-parse, not LLM-supplied.
   voiceId: z.string().min(1).max(64).optional(),
+  // Short physical description piped into image-gen so the same
+  // character looks the same across all their scenes.
+  appearance: z.string().max(400).default(''),
 })
 
 const scenePlanSchema = z.object({

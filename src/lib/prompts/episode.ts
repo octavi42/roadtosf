@@ -78,6 +78,12 @@ CAST IDENTITY (LOAD-BEARING for voice + image consistency):
     a young hacker cofounder → ["fast","nervous","energetic"]
     a tired YC partner → ["warm","weathered","calm"]
   Use ONLY voice/delivery descriptors (deep, fast, calm, raspy, bright, dramatic, conversational). NOT bio descriptors (smart, founder, ex-Stripe).
+- appearance: ONE compact physical description (≤200 chars) — clothing, hair, build, signature features. The SAME character must have the SAME appearance string in every scene they appear in. This is what image-gen uses to keep them visually consistent. Examples:
+    Peter Thiel → "balding, lean, dark suit jacket, no tie, slight stoop, intense pale eyes"
+    Sam Altman → "shaved head, plain dark t-shirt, slight smile, narrow grey eyes"
+    Maya (invented young cofounder) → "Asian woman late 20s, dark hoodie over band tee, short ponytail, laptop covered in stickers"
+    Linda (invented older YC partner) → "white woman 60s, grey bob, glasses on a chain, cardigan, holding a hardback book"
+  Describe what a stranger would see — NOT personality. NEVER mention real-world identifying details that could ID a non-public person (full name + employer + face, etc.).
 
 SCENE PLAN RULES:
 - 3–5 scenes per episode. Each scene =
@@ -120,7 +126,8 @@ OUTPUT SHAPE:
       "blurb"?: string (≤300 chars),
       "gender": "male"|"female"|"neutral",
       "age": "young"|"middle"|"old",
-      "descriptives": [string, ...]  // 3-5 voice adjectives
+      "descriptives": [string, ...],  // 3-5 voice adjectives
+      "appearance": string (≤200 chars; physical description)
     }
   ],
   "scenes": [
@@ -128,7 +135,7 @@ OUTPUT SHAPE:
       "index": 0..(N-1),
       "role": "vc"|"cofounder"|"reporter"|"hater"|"mentor",
       "setting": string (≤600 chars; concrete time + place),
-      "cast": [ { "role": ..., "name": <name from episode roster>, "blurb"?: ..., "gender": ..., "age": ..., "descriptives": [...] } ],
+      "cast": [ { "role": ..., "name": <name from episode roster>, "blurb"?: ..., "gender": ..., "age": ..., "descriptives": [...], "appearance": <same as episode roster> } ],
       "topic": string (≤400 chars; what happens here),
       "imagePrompt": string (≤220 chars; NO style words),
       "title": string (≤120 chars; short nameplate)

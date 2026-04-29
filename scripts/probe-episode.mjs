@@ -91,7 +91,8 @@ while (true) {
             const ident = `[${c.gender ?? '?'}/${c.age ?? '?'}]`
             const desc = (c.descriptives ?? []).join(',')
             const voice = c.voiceId ? ` voice=${c.voiceId.slice(0, 6)}` : ' voice=MISSING'
-            console.log(`  ${c.role}: ${c.name} ${ident} ${desc}${voice}`)
+            const look = c.appearance ? `\n     look: ${c.appearance}` : '\n     look: MISSING'
+            console.log(`  ${c.role}: ${c.name} ${ident} ${desc}${voice}${look}`)
           }
           console.log('scenes:')
           for (const s of parsed.episode.scenes ?? []) {

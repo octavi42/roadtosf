@@ -885,6 +885,14 @@ export default function HomePage() {
     imageGenFiredRef.current.add(slot);
     imageQueueRef.current.inFlight = true;
 
+    // Pick the appearance of the scene's primary character — first
+    // cast member whose role matches plan.role, falling back to the
+    // first cast member in the scene. Empty string means the route
+    // falls back to the archetype's generic imageStyle.
+    const primaryCast =
+      plan.cast?.find((c) => c.role === plan.role) ?? plan.cast?.[0];
+    const appearance = primaryCast?.appearance;
+
     fetch("/api/generate-image", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -893,6 +901,7 @@ export default function HomePage() {
         scenePrompt: plan.imagePrompt,
         archetype: plan.role,
         quality: "low",
+        appearance,
       }),
     })
       .then((r) =>

@@ -9,7 +9,8 @@
       "blurb": "Ex-Stripe engineer, three coffees deep, has a deck about you on her laptop she made on the BART ride over. Wants to be your cofounder.",
       "gender": "female",
       "age": "young",
-      "descriptives": ["fast", "nervous", "warm", "clear"]
+      "descriptives": ["fast", "nervous", "warm", "clear"],
+      "appearance": "Asian woman late 20s, dark hoodie over band tee, short ponytail, sticker-covered laptop, intense focused eyes"
     },
     {
       "role": "hater",
@@ -17,7 +18,8 @@
       "blurb": "CEO of a competing startup with $4M and a year head start. Knows your name. Likes the espresso machine.",
       "gender": "male",
       "age": "young",
-      "descriptives": ["confident", "smug", "casual"]
+      "descriptives": ["confident", "smug", "casual"],
+      "appearance": "white man late 20s, slim-fit dark t-shirt, cropped beard, smug half-smile, holding a small espresso cup"
     },
     {
       "role": "mentor",
@@ -25,7 +27,8 @@
       "blurb": "Partner emeritus at YC. Has watched 200 startups fail. Closes her book and asks if you've eaten. The question is a test.",
       "gender": "female",
       "age": "old",
-      "descriptives": ["calm", "warm", "patient", "weathered"]
+      "descriptives": ["calm", "warm", "patient", "weathered"],
+      "appearance": "white woman 60s, grey bob, glasses on a beaded chain, soft cardigan, holding a hardback book"
     }
   ],
   "scenes": [

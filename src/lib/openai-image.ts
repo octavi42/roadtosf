@@ -30,6 +30,10 @@ export interface GenerateSceneImageOptions {
   archetype: Archetype;
   quality?: ImageQuality;
   format?: ImageFormat;
+  /** Cast member's physical description. When present, overrides the
+   *  archetype's generic imageStyle so the same character looks the
+   *  same across scenes. */
+  appearance?: string;
 }
 
 export interface GenerateHeroImageOptions {
@@ -67,6 +71,7 @@ export async function generateSceneImage(
     archetype,
     quality = PRESETS.defaultQuality,
     format = PRESETS.defaultFormat,
+    appearance,
   } = opts;
 
   const archetypeDef = ARCHETYPES[archetype];
@@ -78,9 +83,16 @@ export async function generateSceneImage(
     "image/png",
   );
 
+  // Cast appearance (when supplied) overrides the archetype's generic
+  // imageStyle. Falling back to imageStyle keeps existing call sites
+  // (and any cast member without an appearance string) working.
+  const characterDescriptor = appearance && appearance.trim().length > 0
+    ? appearance.trim()
+    : archetypeDef.imageStyle;
+
   const fullPrompt = [
     PRESETS.stylePrefix,
-    `Character: ${archetypeDef.roleLabel} (${archetypeDef.title}). ${archetypeDef.imageStyle}.`,
+    `Character: ${archetypeDef.roleLabel} (${archetypeDef.title}). ${characterDescriptor}.`,
     `Scene: ${scenePrompt}`,
     "Match the art style of the reference image exactly.",
   ].join(" ");
