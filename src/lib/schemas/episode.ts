@@ -11,11 +11,15 @@ const castMemberSchema = z.object({
 const scenePlanSchema = z.object({
   index: z.number().int().min(0).max(20),
   role: z.enum(ROLE_VALUES),
-  setting: z.string().min(8).max(600),
+  // Caps are generous on purpose — Sonnet routinely overruns narrower
+  // limits with player-specific texture, and a single overrun forces
+  // the whole episode to fall back. Same lesson as the prior schema
+  // bumps (premise 280→1200, beat 400→800).
+  setting: z.string().min(8).max(800),
   cast: z.array(castMemberSchema).min(1).max(6),
-  topic: z.string().min(8).max(400),
-  imagePrompt: z.string().min(10).max(600),
-  title: z.string().min(1).max(120),
+  topic: z.string().min(8).max(800),
+  imagePrompt: z.string().min(10).max(800),
+  title: z.string().min(1).max(160),
 })
 
 /**
