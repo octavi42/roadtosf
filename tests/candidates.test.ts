@@ -7,6 +7,7 @@ import {
   pickCandidateStories,
   scoreEvent,
   scoreStory,
+  type ScoredPerson,
 } from '@/lib/lore/candidates'
 import type { SfEvent, SfPerson, SfStory } from '@/lib/lore/lore-db'
 
@@ -266,6 +267,102 @@ describe('stat-bias rules', () => {
     })
     const samCount = out.filter((s) => s.person.id === 'sam-altman').length
     expect(samCount).toBe(1)
+  })
+})
+
+// ── Role-relevance gate (reporters) ─────────────────────────────────
+
+describe('role-relevance gate — reporter wildcards', () => {
+  // Build a corpus where reporters can ONLY enter via the wildcard
+  // path: the candidate event has no attendees, so anyone in the
+  // result has been pulled in by the wildcard sampler.
+  const reporterHeavy: SfPerson[] = [
+    makePerson({
+      id: 'priya-anand',
+      displayName: 'Priya Anand',
+      role: 'reporter',
+      tags: ['ai', 'startups'],
+      regularSpots: [],
+    }),
+    makePerson({
+      id: 'casey-newton',
+      displayName: 'Casey Newton',
+      role: 'reporter',
+      tags: ['press', 'ai'],
+      regularSpots: [],
+    }),
+    makePerson({
+      id: 'paul-graham',
+      displayName: 'Paul Graham',
+      role: 'mentor',
+      tags: ['mentor', 'yc'],
+      achievementHook: null,
+      regularSpots: [],
+    }),
+  ]
+
+  function pickWith(flavorTags: string[]): ScoredPerson[] {
+    const events = [makeEvent({ id: 'e1', knownAttendees: [], tags: ['ai'] })]
+    const candidateEvents = pickCandidateEvents(
+      events,
+      {
+        flavorTags,
+        stats: { hype: 0, integrity: 0 },
+        alreadyEncountered: {},
+        seed: 'pt',
+        now: REFERENCE_NOW,
+      },
+      REFERENCE_NOW.getTime(),
+    )
+    return pickCandidatePeople(reporterHeavy, candidateEvents, {
+      flavorTags,
+      stats: { hype: 0, integrity: 0 },
+      alreadyEncountered: {},
+      seed: 'pt',
+      now: REFERENCE_NOW,
+    })
+  }
+
+  it('drops reporter wildcards when flavor lacks press tags', () => {
+    const out = pickWith(['ai', 'fundraising'])
+    expect(out.find((s) => s.person.role === 'reporter')).toBeUndefined()
+    // Non-gated roles still flow through.
+    expect(out.find((s) => s.person.id === 'paul-graham')).toBeDefined()
+  })
+
+  it('admits reporter wildcards when flavor includes a press tag', () => {
+    const out = pickWith(['press', 'ai'])
+    // At least one reporter must come through; the seed determines which.
+    expect(out.find((s) => s.person.role === 'reporter')).toBeDefined()
+  })
+
+  it('reporter still appears as event attendee even with non-press flavor', () => {
+    const events = [
+      makeEvent({
+        id: 'e1',
+        knownAttendees: ['priya-anand'],
+        tags: ['ai'],
+      }),
+    ]
+    const candidateEvents = pickCandidateEvents(
+      events,
+      {
+        flavorTags: ['ai', 'fundraising'],
+        stats: { hype: 0, integrity: 0 },
+        alreadyEncountered: {},
+        seed: 'pt',
+        now: REFERENCE_NOW,
+      },
+      REFERENCE_NOW.getTime(),
+    )
+    const out = pickCandidatePeople(reporterHeavy, candidateEvents, {
+      flavorTags: ['ai', 'fundraising'],
+      stats: { hype: 0, integrity: 0 },
+      alreadyEncountered: {},
+      seed: 'pt',
+      now: REFERENCE_NOW,
+    })
+    expect(out.find((s) => s.person.id === 'priya-anand')).toBeDefined()
   })
 })
 
