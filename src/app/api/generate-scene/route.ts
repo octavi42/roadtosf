@@ -407,10 +407,17 @@ export async function POST(request: Request) {
         })
 
         const parsed = parseFromRaw(raw, primaryRole, allowedRoles)
+        // Hard-cap scene length at beat 4 (= max 5 beats per scene).
+        // Haiku regularly drags scenes past 6 beats despite the prompt
+        // asking for 2-3; this is the structural guarantee that scenes
+        // don't run forever.
+        const SCENE_BEAT_HARD_CAP = 4
+        const forcedClose = beatIndex >= SCENE_BEAT_HARD_CAP
         // Force isLastSceneOfEpisode = false on non-final scenes (LLM
         // ignores the rule sometimes).
         const beat: Beat = {
           ...parsed,
+          isLastBeatOfScene: forcedClose ? true : !!parsed.isLastBeatOfScene,
           isLastSceneOfEpisode: isFinalSceneOfEpisode
             ? !!parsed.isLastSceneOfEpisode
             : false,

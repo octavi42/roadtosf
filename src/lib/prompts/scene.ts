@@ -76,11 +76,16 @@ OPENING vs CONTINUATION:
 - Beat 0 (the scene's opener): establish the setting in motion. Drop the player into the room. End on a choice that the next beat will react to.
 - Beat 1+: continue the scene. The setting and cast remain. Pick up where the prior beat ended; render the consequence of the player's choice.
 
-WHEN TO END A SCENE (isLastBeatOfScene):
-- Set TRUE on the beat where the scene's arc CLOSES. Typical scenes have 2–4 beats. Some go longer if the conversation has more to give.
-- Examples of natural scene-ending moments: a door closes, a phone call ends, a character walks away, the player makes a clean exit, a moment of silence after a crucial line.
-- Do NOT set TRUE arbitrarily — the scene should feel finished, not cut short.
-- Scene 0 of an episode usually has 2–4 beats. Later scenes may be shorter (1–2 beats) if they're transition moments.
+WHEN TO END A SCENE (isLastBeatOfScene) — KEEP SCENES SHORT:
+- Default scene length: 2–3 beats. THREE beats is the typical cap. Do not let scenes drag into 5+ beats.
+- Beat 0 (opener): isLastBeatOfScene = false. (Always — the scene just started.)
+- Beat 1: isLastBeatOfScene = false unless the scene is a clean one-exchange transition.
+- Beat 2: STRONG candidate for isLastBeatOfScene = true. Most scenes close here. Look for any reason to wrap: a clean line, a beat of silence, a decision made, a door closing.
+- Beat 3: Default to isLastBeatOfScene = true. By beat 3 the scene has had its full arc. Only continue past 3 if the conversation is genuinely escalating into something new (not just two characters re-litigating the same point).
+- Beat 4 is a HARD CAP. The server force-closes the scene at beat 4 regardless of what you set; scenes that reach beat 4 should ALWAYS set isLastBeatOfScene = true.
+- Natural scene-ending moments: a door closes, a phone call ends, a character walks away, the player makes a decision, a beat of silence after a crucial line, the player physically leaves the room/building.
+- Scenes can also be just 1–2 beats if they're brief transitions (a quick chance encounter, a single decisive moment).
+- Bias toward CLOSING the scene rather than keeping it open. The episode has 3–5 scenes total; a scene running 6+ beats means the player loses the rhythm of moving through the episode.
 
 WHEN TO END THE EPISODE (isLastSceneOfEpisode):
 - This flag is RESERVED for the LAST scene of the episode (signaled in the prompt below).
