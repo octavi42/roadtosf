@@ -30,6 +30,9 @@ export interface ShareMoment {
   blurb: string
 }
 
+export type CastGender = 'male' | 'female' | 'neutral'
+export type CastAge = 'young' | 'middle' | 'old'
+
 export interface CastMember {
   role: Role
   /** Per-scene LLM-assigned name. May be a real public figure (Peter
@@ -37,6 +40,14 @@ export interface CastMember {
    *  context-appropriate name the planner invented. */
   name: string
   blurb?: string
+  /** Voice/identity fields. Populated by the LLM at episode-gen time
+   *  (gender/age/descriptives) and by the server post-parse (voiceId,
+   *  resolved from the ElevenLabs library). voiceId is the load-bearing
+   *  field for runtime TTS routing. */
+  gender?: CastGender
+  age?: CastAge
+  descriptives?: string[]
+  voiceId?: string
 }
 
 /** A Scene is a CONTAINER the player stays inside through many beats.

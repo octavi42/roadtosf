@@ -1,5 +1,5 @@
 import { ARCHETYPES } from "@/lib/archetypes";
-import type { Archetype } from "@/lib/types";
+import type { Archetype, CastMember } from "@/lib/types";
 
 // Narrator gets its own voice so it doesn't collide with the VC archetype's
 // default. Warwick — deep narrator-leaning male.
@@ -57,4 +57,28 @@ export function voiceIdForSpeaker(
   }
 
   return null;
+}
+
+/**
+ * Cast-aware voice lookup. The cast member resolved by role carries a
+ * pre-assigned voiceId (see assignVoicesToEpisode). Falls back to the
+ * role-default when the cast is missing, the role isn't in the cast,
+ * or the cast member lacks a voiceId — preserving the prior behavior.
+ *
+ * Returns null when the speaker is unrecognized (e.g. a typo'd role).
+ */
+export function voiceIdForCastMember(
+  speaker: string | undefined | null,
+  cast: ReadonlyArray<CastMember> | undefined,
+): string | null {
+  if (!cast || cast.length === 0) return voiceIdForSpeaker(speaker);
+  if (!speaker) return null;
+  const lower = speaker.trim().toLowerCase();
+  if (!ARCHETYPE_KEYS.has(lower as Archetype)) {
+    // player / narrator / unrecognized — defer to the existing rules.
+    return voiceIdForSpeaker(speaker);
+  }
+  const match = cast.find((c) => c.role === lower);
+  if (match?.voiceId) return match.voiceId;
+  return voiceIdForSpeaker(speaker);
 }

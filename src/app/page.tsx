@@ -19,7 +19,11 @@ import {
   POST_QA_SCENE_INDEX,
 } from "@/lib/session";
 import { ARCHETYPES } from "@/lib/archetypes";
-import { voiceIdForSpeaker, NARRATOR_VOICE_ID } from "@/lib/voices/speaker";
+import {
+  voiceIdForSpeaker,
+  voiceIdForCastMember,
+  NARRATOR_VOICE_ID,
+} from "@/lib/voices/speaker";
 import type {
   EndingKey,
   Episode,
@@ -141,7 +145,7 @@ function adaptLLMScene(scene: LLMScene): UnifiedScene {
     dialogue: scene.dialogue.map((d) => ({
       speaker: formatRoleSpeaker(d.speaker, scene.cast),
       text: d.text,
-      voiceId: voiceIdForSpeaker(d.speaker),
+      voiceId: voiceIdForCastMember(d.speaker, scene.cast),
     })),
     choices: scene.choices.map((c) => ({
       id: c.id,

@@ -19,6 +19,7 @@ import type {
   TeamCondition,
 } from '@/lib/storylets/types'
 import fallbackEpisode from '@/lib/fallback/episode.json'
+import { assignVoicesToEpisode } from '@/lib/voices/cast-voice'
 import { readAnonId } from '@/lib/anon-id'
 import { readSessionEmail } from '@/lib/auth'
 import {
@@ -332,7 +333,8 @@ export async function POST(request: Request) {
           ...fallbackEpisode,
           episodeIndex,
         })
-        const ep: Episode = { ...parsed, seedIds: parsed.seedIds }
+        const withVoices = assignVoicesToEpisode(parsed)
+        const ep: Episode = { ...withVoices, seedIds: withVoices.seedIds }
         send('done', {
           episode: ep,
           source: 'fallback' as const,
@@ -360,9 +362,10 @@ export async function POST(request: Request) {
         })
 
         const plan = parseFromRaw(raw, episodeIndex)
+        const withVoices = assignVoicesToEpisode(plan)
         const ep: Episode = {
-          ...plan,
-          seedIds: validateSeedIds(plan.seedIds ?? []),
+          ...withVoices,
+          seedIds: validateSeedIds(withVoices.seedIds ?? []),
         }
         send('done', {
           episode: ep,
