@@ -503,8 +503,36 @@ export const useSessionStore = create<SessionState>()(
           const lastBeatStart = beatStarts[beatStarts.length - 1] ?? 0;
           const dialogueBefore = prior.dialogue.slice(0, lastBeatStart);
           const dialogue = [...dialogueBefore, ...beat.dialogue];
+          // Pivot overrides: on beat 0 of a non-zero scene index, the
+          // LLM may emit setting/cast/title/role to override the plan.
+          // Apply them to the Scene record so the dev panel + UI
+          // reflect the actual scene the player is in.
+          const beatAny = beat as unknown as {
+            setting?: string | null;
+            cast?: typeof prior.cast;
+            role?: typeof prior.role;
+            title?: string | null;
+          };
+          const overriddenSetting =
+            typeof beatAny.setting === "string" && beatAny.setting.length > 0
+              ? beatAny.setting
+              : prior.setting;
+          const overriddenCast =
+            Array.isArray(beatAny.cast) && beatAny.cast.length > 0
+              ? beatAny.cast
+              : prior.cast;
+          const overriddenRole = beatAny.role ?? prior.role;
+          const overriddenTitle =
+            typeof beatAny.title === "string" && beatAny.title.length > 0
+              ? beatAny.title
+              : prior.title;
           scenes[llmIndex] = {
             ...prior,
+            setting: overriddenSetting,
+            cast: overriddenCast,
+            role: overriddenRole,
+            archetype: overriddenRole,
+            title: overriddenTitle,
             dialogue,
             choices: beat.choices,
             timeoutSeconds: beat.timeoutSeconds,

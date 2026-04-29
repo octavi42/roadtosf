@@ -181,6 +181,7 @@ export function buildBeatPromptParts(input: BuildBeatPromptInput) {
     )
   }
   const role = ROLES[plan.role]
+  const isPivotPoint = beatIndex === 0 && sceneIndexInEpisode > 0
 
   const cachedContext = `## ROLE GLOSSARY (voice/personality flavor only — names come from the cast)
 ${(['vc', 'cofounder', 'reporter', 'hater', 'mentor'] as Role[])
@@ -216,7 +217,26 @@ ${plan.role}: ${role.roleLabel} — ${role.title}. ${role.personality}`
   const lastChoiceBlock = formatPriorBeatChoice(input.priorBeatChoice)
   const isFirstBeat = beatIndex === 0
 
-  const liveBlock = `${input.tone ? `${input.tone.oneLiner}\n\n` : ''}${lastChoiceBlock ? `${lastChoiceBlock}\n\n` : ''}## SCENE PLAN (PRE-FIXED — render dialogue THAT FITS, do not change setting or cast)
+  const pivotBlock = isPivotPoint
+    ? `## PIVOT AUTHORITY — READ BEFORE RENDERING
+The episode planner committed to this scene's setting + cast BEFORE the player played the prior scene. Read the PRIOR BEAT CHOICE above carefully. It's the player's last action from the PRIOR SCENE, not from this scene.
+
+You have THREE options:
+A) Render the planned scene as-is (setting + cast above). USE THIS when the planned scene still fits naturally with where the player ended up — e.g. they took a meeting, walked toward the planned cast member, didn't reject them.
+B) Render the planned scene's SETTING but with a DIFFERENT cast member from the EPISODE ROSTER below. USE THIS when the planned cast member is no longer narratively present (the player walked away from them, ended that thread) but the location still makes sense.
+C) PIVOT FULLY — invent a NEW setting + pick a different cast member from the EPISODE ROSTER. USE THIS when the planned scene is incoherent given the prior choice. Examples: planned scene is "Two Cars, One Lot" with Lena, but the player just told Lena to leave / drove past / ended the relationship. PIVOT: the player is now driving alone, or at a diner counter alone, or has called someone else from the roster.
+
+Whichever you pick, output your CHOSEN setting + cast in the JSON. Stay inside the EPISODE THEME ("${episode.theme}") — the pivot keeps the narrative line, just shifts which beat is in front of the player.
+
+Episode roster (the closed set you may pick cast from when pivoting; do NOT invent new named characters outside this list):
+${episode.cast.map((c) => `- ${c.role}: ${c.name}${c.blurb ? ` — ${c.blurb}` : ''}`).join('\n')}
+
+The "role" output field should reflect the role of the cast member you pick. The "title" field can stay close to the planned title or shift to fit your pivot.
+
+`
+    : ''
+
+  const liveBlock = `${input.tone ? `${input.tone.oneLiner}\n\n` : ''}${lastChoiceBlock ? `${lastChoiceBlock}\n\n` : ''}${pivotBlock}## SCENE PLAN (${isPivotPoint ? 'STRONG DEFAULT — see PIVOT AUTHORITY above' : 'PRE-FIXED — render dialogue that fits, do not change setting or cast'})
 ${formatScenePlan(plan)}
 
 ## PRIOR BEATS DIALOGUE (this scene only; previous beats the player has already played through)
@@ -230,7 +250,7 @@ Current stats — hype ${input.currentStats.hype}, integrity ${input.currentStat
 ## YOUR JOB FOR THIS BEAT
 ${
   isFirstBeat
-    ? `OPEN scene ${sceneIndexInEpisode + 1} of the episode. The player just walked into the setting above. Establish the moment in motion (a place, an action, in-progress dialogue). Use ONLY the cast names listed in this scene's cast. End on a choice the next beat will react to.
+    ? `OPEN scene ${sceneIndexInEpisode + 1} of the episode. ${isPivotPoint ? 'Use the PIVOT AUTHORITY above to decide whether to render the planned scene or pivot.' : 'Establish the moment in motion (a place, an action, in-progress dialogue). Use ONLY the cast names listed in this scene\'s cast.'} End on a choice the next beat will react to.
 
 This is the FIRST beat of this scene; isLastBeatOfScene is almost certainly false unless this is a single-beat transition scene.`
     : `CONTINUE scene ${sceneIndexInEpisode + 1}. The PRIOR BEAT CHOICE above is past-tense action. Render the consequence in dialogue. Stay in the scene's setting (the cast may shift among the listed names — e.g. someone leaves and another enters from the cast list). End on a choice OR close the scene.

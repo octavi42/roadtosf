@@ -801,25 +801,46 @@ export default function HomePage() {
 
   // Fire beat 0 of scene 0 the moment the episode plan lands. Subsequent
   // beats fire from handleChoice (player clicks → next beat).
+  // For beat 0 of scenes after scene 0, the prior scene's LAST choice
+  // is passed as priorBeatChoice so scene-gen can decide whether to
+  // render the planned scene as-is OR pivot to follow what the player
+  // just did.
   useEffect(() => {
     if (phase !== "scene" && phase !== "generating-episode") return;
     const ep = arc?.currentEpisode;
     if (!ep || !Array.isArray(ep.scenes) || ep.scenes.length === 0) return;
     const startLLM = ep.startLLMIndex ?? 0;
+
+    const lastHistory = history[history.length - 1];
+    const carryOverChoice = lastHistory
+      ? {
+          sceneId: lastHistory.sceneId,
+          choiceLabel: lastHistory.choiceLabel,
+          hypeDelta: lastHistory.hypeDelta,
+          integrityDelta: lastHistory.integrityDelta,
+        }
+      : undefined;
+
     const sceneZero = arc?.scenes[startLLM];
     if (sceneZero && sceneZero.dialogue.length === 0) {
-      fireBeat(0, 0, undefined);
+      // Scene 0 of the episode: carryOverChoice is the prior episode's
+      // last choice (or an authored-intro choice for episode 0). Useful
+      // context for the opening beat to acknowledge the carry-over.
+      fireBeat(0, 0, carryOverChoice);
     }
     if (phase === "scene" && sceneIndex >= AUTHORED_SCENE_COUNT) {
       const localIndex = sceneIndex - AUTHORED_SCENE_COUNT - startLLM;
       if (localIndex >= 0 && localIndex < ep.scenes.length) {
         const slot = arc?.scenes[startLLM + localIndex];
         if (slot && slot.dialogue.length === 0) {
-          fireBeat(localIndex, 0, undefined);
+          // Beat 0 of any scene the player has just walked into. Pass
+          // the prior scene's last choice (= last entry in history) so
+          // scene-gen can pivot the planned scene if needed.
+          fireBeat(localIndex, 0, carryOverChoice);
         }
       }
     }
-  }, [phase, sceneIndex, arc, fireBeat]);
+  }, [phase, sceneIndex, arc, history, fireBeat]);
 
   // Image-gen: fire ALL scenes' images in parallel as soon as the
   // episode plan lands. By the time the player walks through scene
