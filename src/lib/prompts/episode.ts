@@ -64,9 +64,14 @@ CHOICE-RESPONSIVENESS (LOAD-BEARING):
 CAST ROSTER RULES:
 - 2–8 named characters at episode level. Each scene's "cast" field is a SUBSET of these names — never names not in the episode roster.
 - ASSIGN CONCRETE NAMES. NO placeholder names: do NOT use Sandra, Chad, Victor, Brock, Stranger.
-- Real public figures verbatim ONLY when prior choice / seed / rolled cameo named them (Peter Thiel, Sam Altman, Paul Graham, Garry Tan).
-- Otherwise invent context-appropriate names.
 - Cast members carry through scenes: if "Maya" is the cofounder candidate in scene 1, she's still Maya in scene 3.
+
+FAMOUS-FIGURE BUDGET (LOAD-BEARING — most-broken rule, do NOT relax):
+- AT MOST 1 cast member per episode may be a real, recognizable public figure (Sam Altman, Peter Thiel, Patrick Collison, Vinod Khosla, Marc Andreessen, Reid Hoffman, Garry Tan, Eric Newcomer, etc.).
+- If a "ROLLED CAMEOS" block appears below, that is your ONE allowed real-figure slot for this episode. Pick AT MOST ONE name from it. The other rolled cameos are reserved for future episodes — do not use them this episode.
+- ALL OTHER cast members MUST be invented SF personas: plausible first/last names like Maya Chen, Dev Iyer, Sasha Park, Tomas Novak, Annie Zhao, Rohan Mehta, Ella Rodriguez. Do NOT invent additional real figures from your training data — even if a player's flavor tags mention "Sequoia" or "a16z", make up an associate name, do not name Roelof Botha or Marc Andreessen.
+- Why this matters: meeting Patrick Collison + Vinod Khosla + Eric Newcomer in one episode breaks the satire and dilutes the personalization payoff. Famous cameos hit harder when they're rare. Spread them across episodes; populate this episode's cast with believable randos.
+- News items in the SF TECH NEWS section may be referenced via company name (Stripe, OpenAI, Anthropic) without counting against the budget. Naming a specific person from a news item IS a famous-figure mention and counts.
 
 CAST IDENTITY (LOAD-BEARING for voice + image consistency):
 - The episode-level "cast" is the source of truth. Each member there MUST include "gender", "age", "descriptives", and "appearance".
@@ -278,8 +283,8 @@ ${formatSiliconManiaItems(input.siliconManiaItems)}
 }${
   input.rolledCameos && input.rolledCameos.length > 0
     ? `
-## ROLLED CAMEOS (this player's fate)
-SF figures the city has decided to put in this player's path. Place AT LEAST ONE by name in the episode's cast.
+## ROLLED CAMEOS (this player's fate — pool of ${input.rolledCameos.length}; use AT MOST ONE this episode)
+SF figures the city has reserved for this run. Pick AT MOST ONE to cast in this episode by name. The unused ones are for future episodes — do NOT cram multiple into a single episode (see FAMOUS-FIGURE BUDGET above). It is also OK to use ZERO this episode and lean entirely on invented SF personas.
 <cameos>
 ${formatRolledCameos(input.rolledCameos)}
 </cameos>
