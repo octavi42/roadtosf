@@ -112,6 +112,19 @@ export default function DialogueSubtitle({
     setAudioEnded(true);
   };
 
+  // `autoPlay` on <audio> is silently blocked on first page load until the
+  // user has interacted with the page — no onError, no onPlaying, the
+  // typewriter would freeze forever. Explicitly call play() so we can catch
+  // the rejection and fall back to fixed-cadence reveal.
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el || !audioUrl) return;
+    const p = el.play();
+    if (p && typeof p.catch === "function") {
+      p.catch(() => setAudioEnded(true));
+    }
+  }, [audioUrl]);
+
   const handleTransitionEnd = () => {
     if (animPhase === "out") {
       setAnimPhase("done");
