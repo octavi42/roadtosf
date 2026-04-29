@@ -28,6 +28,58 @@ const SHOTS = [
     textRule:
       "Allow at most ONE small stylized graffiti tag or poster word on the brick wall. All other text is drawn as abstract squiggles only.",
   },
+  {
+    id: "02-clipboard-stranger",
+    title:
+      "the player's first sidewalk encounter — a clipboard-toting hustler has appeared on the corner, ninety seconds after being dropped off",
+    imageStyle:
+      "A tight street-corner composition in the Mission, mid-afternoon. A SoMa-style brick storefront on the left with a pinned-up flyer wall, a hand-painted bodega awning across the street in the deep midground, scuffed asphalt and a bent parking sign in the foreground. Two anonymous figures in mid-conversation at the corner — both seen from the back / over-shoulder, one holding a clipboard, the other carrying a backpack — drawn as flat silhouettes occupying maybe a fifth of the frame, off-center to the right. A dirty white work van and a Lyft sticker on a parked sedan visible behind them. Crumpled newspaper and a pair of city pigeons in the gutter for satirical detail.",
+    composition:
+      "Slight low angle from the curb, street vanishing diagonally to the right, the two figures positioned at the intersection of thirds so the city street still dominates the frame.",
+    lighting:
+      "Late-afternoon overcast SF haze — cool desaturated grey-blue base, with one warm shaft of sun cutting between buildings to land on the brick wall. Flat color zones, hard-edged cel shadows, no gradients.",
+    textRule:
+      "Allow at most ONE legible word on the brick flyer wall (e.g. 'HIRING' or 'FOUNDERS'). All other text — flyers, signage, sticker — drawn as abstract squiggles only.",
+  },
+  {
+    id: "03-recognized-founder",
+    title:
+      "the player spots a Twitter-famous founder a half-block ahead on the sidewalk, taking a phone call too loudly — recognition without contact",
+    imageStyle:
+      "A long-lens telephoto-feel sidewalk composition pushing down a Hayes Valley block. In the deep midground a single anonymous figure in an Allbirds-and-soft-hoodie silhouette stands at the curb with a phone pressed to his ear, head tilted, drawn small and clearly the focal point but with no face visible (turned three-quarters away). A sliver of a Tesla parked behind him. Closer to camera, the back of the player's shoulder and a corner of a backpack strap intrude on the bottom-right of the frame as foreground bokeh shape. Boutique storefronts line the right side — flat-painted facades with awnings, a planter box, a leashed dog tied outside one shop. Power lines criss-crossing the sky.",
+    composition:
+      "Compressed telephoto perspective, sidewalk receding into a stack of overlapping color shapes, the famous founder placed dead-center but small enough that the architecture overwhelms him. Foreground player-shoulder shape on the bottom-right adds POV.",
+    lighting:
+      "Mid-afternoon high-contrast SF light — a sharp diagonal of sun across the upper-left buildings, a cool blue-grey shadow falling over the sidewalk where the founder stands. Flat color, hard-edged cel shadows, no glow.",
+    textRule:
+      "Allow at most ONE legible word on a small storefront sign (e.g. 'COFFEE' or 'TARTINE'). All other shop signs drawn as abstract squiggles only.",
+  },
+  {
+    id: "04-cafe-interview",
+    title:
+      "the player sits at a window seat in a SF third-wave cafe — the next table over is two laptops, two espressos, and a founder being interviewed by a journalist",
+    imageStyle:
+      "A cafe interior shot from a corner window seat. Foreground left: the back of an open laptop and a half-drunk pour-over on a reclaimed-wood table — the player's own table, anchoring the POV. Across a narrow aisle, the next table is the focal subject — two anonymous figures hunched over MacBooks across from each other, one gesturing big with both hands ('the thing with their hands'), the other in horn-rimmed glasses leaning forward with a phone recording between them. Both drawn from a three-quarter angle, faces turned away or partially obscured. Espresso cups, an open notebook, a Stripe sticker on one laptop lid. Through the window behind them, a stylized Mission Street scene — a bus stop, a passing cyclist, a stretch of overhead wires — flattened into background color shapes.",
+    composition:
+      "Eye-level interior frame, foreground laptop occupying lower-left third, the interview table dominant in the center, window light behind it. Strong horizontal layering — table, table, window, street.",
+    lighting:
+      "Warm interior tungsten on the foreground tables, contrasted against cooler daylight bleeding through the window. Cel-shaded — flat warm browns and amber on the wood, cool blue-grey wash through the glass. No gradients, no haze, no lens blur.",
+    textRule:
+      "Allow at most ONE legible word on a chalkboard menu in the deep background (e.g. 'POUR OVER'). Stickers, notebook pages, and street signs all drawn as abstract squiggles only.",
+  },
+  {
+    id: "05-phone-lights-up",
+    title:
+      "the player walks alone and the phone in their hand lights up with three messages and a Hacker News link — a competitor just shipped",
+    imageStyle:
+      "A close-up over-the-shoulder POV of the player's own hand holding an iPhone mid-stride on an SF sidewalk. The phone screen is the visual anchor — clearly readable as a phone but with text rendered as stylized abstract squiggle-lines, three notification banners stacked at the top, an orange Hacker News-style logo recognizable in one banner. The screen glow casts a sharp cool light onto the player's thumb and the inside of their jacket sleeve. Behind the phone, the sidewalk extends away — slightly out-of-focus painted shapes of pavement, a fire hydrant, a tilted parked Vespa, a corner storefront. A second pedestrian's silhouette walking the opposite direction in the deep midground.",
+    composition:
+      "Tight foreground subject — the phone fills the lower-right quadrant — with the SF street stretching to a vanishing point in the upper-left. Shallow staging through scale, not blur. The hand and phone are the only sharply detailed element.",
+    lighting:
+      "Late-afternoon cool overcast on the street, contrasted by the bright cold blue-white glow of the phone screen up-lighting the hand. Flat-shaded cel style — clear hard light edge on the phone, soft cool ambient everywhere else. No bloom, no lens flare.",
+    textRule:
+      "Phone screen text is abstract squiggle lines only — no readable copy. Allow at most ONE legible word on a distant storefront sign (e.g. 'BAR'). All other signage as squiggles.",
+  },
 ];
 
 function buildPrompt(shot) {
@@ -87,7 +139,8 @@ async function main() {
   };
 
   const filter = process.env.SHOT;
-  const targets = filter ? SHOTS.filter((s) => s.id.includes(filter)) : SHOTS;
+  const tokens = filter ? filter.split(",").map((t) => t.trim()).filter(Boolean) : null;
+  const targets = tokens ? SHOTS.filter((s) => tokens.some((t) => s.id.includes(t))) : SHOTS;
   if (filter && targets.length === 0) {
     throw new Error(
       `SHOT="${filter}" matched no shots. Available: ${SHOTS.map((s) => s.id).join(", ")}`,
