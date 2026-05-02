@@ -37,6 +37,11 @@ export interface GrantOpts {
 
 const CREDIT_REASON_DEV = 'dev_grant'
 
+// One-time grant on first playthrough creation per anon cookie. Sized to
+// cover a full run with buffer; matches the Normal pack so judges and
+// first-time visitors get the complete experience before the paywall.
+export const FREE_PLAYTHROUGH_CREDITS = 6
+
 function normalizeEmail(email: string | null): string | null {
   if (!email) return null
   const trimmed = email.trim().toLowerCase()
@@ -302,4 +307,5 @@ export const REASONS = {
   GROUP_DEBIT: 'group_debit',
   EPISODE_DEBIT: 'episode_debit',
   DEV_GRANT: CREDIT_REASON_DEV,
+  FREE_PLAYTHROUGH: 'free_playthrough',
 } as const
