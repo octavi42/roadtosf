@@ -892,10 +892,25 @@ export default function HomePage() {
           // the prior scene's last choice (= last entry in history) so
           // scene-gen can pivot the planned scene if needed.
           fireBeat(localIndex, 0, carryOverChoice);
+        } else if (slot && choiceMade !== null) {
+          // Offline-recovery: the player picked a choice but the next
+          // beat's streamScene never landed (network dropped). On
+          // refresh, sessionStorage rehydrates with choiceMade set and
+          // beatStarts already extended (it ran sync pre-network), but
+          // dialogue.length still sits at the in-flight beat's start.
+          // Without this branch, ChoicePanel stays disabled forever.
+          const beatStarts = slot.beatStarts ?? [0];
+          const lastBeatStart = beatStarts[beatStarts.length - 1] ?? 0;
+          if (
+            beatStarts.length > 1 &&
+            slot.dialogue.length === lastBeatStart
+          ) {
+            fireBeat(localIndex, beatStarts.length - 1, carryOverChoice);
+          }
         }
       }
     }
-  }, [phase, sceneIndex, arc, history, fireBeat]);
+  }, [phase, sceneIndex, arc, history, choiceMade, fireBeat]);
 
   // Image-gen: SEQUENTIAL. Image 1 generates first, lands on
   // arc.scenes[startLLM]; then image 2 starts, lands on
