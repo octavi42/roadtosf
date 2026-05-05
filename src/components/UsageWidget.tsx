@@ -14,7 +14,7 @@ export default function UsageWidget() {
   // has a server-confirmed balance > 0 (e.g., a returning user who just
   // logged in via LoginModal, where `paid` was never flipped client-side
   // because no fresh Stripe verify ran). Pre-payment trial — anon, no
-  // balance — keeps the widget hidden so it doesn't read "0 Credits"
+  // balance — keeps the widget hidden so it doesn't read "0 Scenes"
   // during the free authored prologue.
   const empty = creditsRemaining <= 0;
   if (empty && !paid) return null;
@@ -31,12 +31,12 @@ export default function UsageWidget() {
           color: empty ? "var(--color-fog)" : "var(--color-ink)",
           transform: "rotate(-0.4deg)",
         }}
-        title="1 credit = 1 generated group of scenes"
+        title="Scenes you can still play. Refills with each pack."
       >
         <span
           className="text-[9px] font-bold tracking-[0.24em] uppercase opacity-70"
         >
-          Credits
+          Scenes
         </span>
         <span className="text-base font-bold leading-none tabular-nums">
           {creditsRemaining}

@@ -22,11 +22,7 @@ import fallbackEpisode from '@/lib/fallback/episode.json'
 import { assignVoicesToEpisode } from '@/lib/voices/cast-voice'
 import { readAnonId } from '@/lib/anon-id'
 import { readSessionEmail } from '@/lib/auth'
-import {
-  debitCredit,
-  InsufficientCreditsError,
-  REASONS,
-} from '@/lib/credits'
+import { EPISODE_FLOOR, getBalance } from '@/lib/credits'
 import type { CastMember, Episode, Role } from '@/lib/types'
 
 type Body = {
@@ -267,36 +263,30 @@ export async function POST(request: Request) {
   const playthroughId =
     typeof body.playthroughId === 'string' ? body.playthroughId : null
 
-  // Credit gate: 1 credit per episode (covers all 3-5 scenes' dialogue
-  // + image gen). Debit BEFORE the LLM call so a busted balance never
-  // spends Anthropic tokens.
-  let creditsRemaining: number | null = null
+  // Credit gate: balance-floor check ONLY at episode start. Per-scene
+  // debits happen in /api/generate-scene; the floor (EPISODE_FLOOR =
+  // worst-case scenes per episode) guarantees we never start an
+  // episode we can't finish, so the paywall only fires between
+  // episodes — never mid-narrative.
   const [anonId, email] = await Promise.all([readAnonId(), readSessionEmail()])
+  let creditsRemaining: number
   try {
-    const debited = await debitCredit(
-      { anonId, email },
-      {
-        reason: REASONS.EPISODE_DEBIT,
-        playthroughId,
-        episodeIndex,
-      },
-    )
-    creditsRemaining = debited.remaining
+    creditsRemaining = await getBalance({ anonId, email })
   } catch (err) {
-    if (err instanceof InsufficientCreditsError) {
-      return NextResponse.json(
-        {
-          error: 'insufficient_credits',
-          paywall: true,
-          creditsRemaining: err.balance,
-        },
-        { status: 402 },
-      )
-    }
-    console.error('generate-episode: debit failed', err)
+    console.error('generate-episode: balance read failed', err)
     return NextResponse.json(
-      { error: 'credit debit failed' },
+      { error: 'credit check failed' },
       { status: 500 },
+    )
+  }
+  if (creditsRemaining < EPISODE_FLOOR) {
+    return NextResponse.json(
+      {
+        error: 'insufficient_credits',
+        paywall: true,
+        creditsRemaining,
+      },
+      { status: 402 },
     )
   }
 
